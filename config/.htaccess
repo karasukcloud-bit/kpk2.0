@@ -1,0 +1,4 @@
+# Запрет доступа к конфигурации и служебным файлам
+<IfModule mod_authz_core.c>
+    Require all denied
+</IfModule>

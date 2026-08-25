@@ -1,0 +1,281 @@
+<?php
+
+declare(strict_types=1);
+
+require_once __DIR__ . '/db.php';
+
+function get_organization(): array
+{
+    $stmt = db()->query('SELECT * FROM organization WHERE id = 1 LIMIT 1');
+    $row = $stmt->fetch();
+
+    if ($row) {
+        return $row;
+    }
+
+    return [
+        'id'              => 1,
+        'name'            => '',
+        'address'         => '',
+        'phone'           => '',
+        'email'           => '',
+        'additional_info' => '',
+    ];
+}
+
+function save_organization(array $data): array
+{
+    $name = trim($data['name'] ?? '');
+    $address = trim($data['address'] ?? '');
+    $phone = trim($data['phone'] ?? '');
+    $email = trim($data['email'] ?? '');
+    $additionalInfo = trim($data['additional_info'] ?? '');
+
+    if ($name === '') {
+        return ['success' => false, 'error' => 'Укажите название образовательной организации.'];
+    }
+
+    if ($email !== '' && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return ['success' => false, 'error' => 'Некорректный email организации.'];
+    }
+
+    $stmt = db()->prepare(
+        'INSERT INTO organization (id, name, address, phone, email, additional_info)
+         VALUES (1, ?, ?, ?, ?, ?)
+         ON DUPLICATE KEY UPDATE
+            name = VALUES(name),
+            address = VALUES(address),
+            phone = VALUES(phone),
+            email = VALUES(email),
+            additional_info = VALUES(additional_info)'
+    );
+    $stmt->execute([$name, $address, $phone, $email, $additionalInfo]);
+
+    return ['success' => true];
+}
+
+function get_all_specialties(): array
+{
+    $stmt = db()->query(
+        'SELECT id, name, code, created_at FROM specialties ORDER BY name ASC'
+    );
+
+    return $stmt->fetchAll();
+}
+
+function get_specialty_by_id(int $id): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM specialties WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function create_specialty(string $name, string $code): array
+{
+    $name = trim($name);
+    $code = trim($code);
+
+    if ($name === '') {
+        return ['success' => false, 'error' => 'Укажите название специальности.'];
+    }
+
+    if ($code === '') {
+        return ['success' => false, 'error' => 'Укажите код специальности.'];
+    }
+
+    if (find_specialty_by_code($code)) {
+        return ['success' => false, 'error' => 'Специальность с таким кодом уже существует.'];
+    }
+
+    $stmt = db()->prepare('INSERT INTO specialties (name, code) VALUES (?, ?)');
+    $stmt->execute([$name, $code]);
+
+    return ['success' => true, 'id' => (int) db()->lastInsertId()];
+}
+
+function update_specialty(int $id, string $name, string $code): array
+{
+    $specialty = get_specialty_by_id($id);
+    if ($specialty === null) {
+        return ['success' => false, 'error' => 'Специальность не найдена.'];
+    }
+
+    $name = trim($name);
+    $code = trim($code);
+
+    if ($name === '') {
+        return ['success' => false, 'error' => 'Укажите название специальности.'];
+    }
+
+    if ($code === '') {
+        return ['success' => false, 'error' => 'Укажите код специальности.'];
+    }
+
+    $existing = find_specialty_by_code($code);
+    if ($existing !== null && (int) $existing['id'] !== $id) {
+        return ['success' => false, 'error' => 'Специальность с таким кодом уже существует.'];
+    }
+
+    $stmt = db()->prepare('UPDATE specialties SET name = ?, code = ? WHERE id = ?');
+    $stmt->execute([$name, $code, $id]);
+
+    return ['success' => true];
+}
+
+function delete_specialty(int $id): array
+{
+    $specialty = get_specialty_by_id($id);
+    if ($specialty === null) {
+        return ['success' => false, 'error' => 'Специальность не найдена.'];
+    }
+
+    $stmt = db()->prepare('SELECT COUNT(*) FROM study_groups WHERE specialty_id = ?');
+    $stmt->execute([$id]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return ['success' => false, 'error' => 'Нельзя удалить специальность: к ней привязаны группы.'];
+    }
+
+    $stmt = db()->prepare('DELETE FROM specialties WHERE id = ?');
+    $stmt->execute([$id]);
+
+    return ['success' => true];
+}
+
+function find_specialty_by_code(string $code): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM specialties WHERE code = ? LIMIT 1');
+    $stmt->execute([trim($code)]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function get_all_groups(): array
+{
+    $stmt = db()->query(
+        'SELECT g.id, g.number, g.specialty_id, g.curator_id, g.created_at,
+                s.name AS specialty_name, s.code AS specialty_code,
+                u.full_name AS curator_name
+         FROM study_groups g
+         INNER JOIN specialties s ON s.id = g.specialty_id
+         LEFT JOIN users u ON u.id = g.curator_id
+         ORDER BY g.number ASC'
+    );
+
+    return $stmt->fetchAll();
+}
+
+function get_group_by_id(int $id): ?array
+{
+    $stmt = db()->prepare(
+        'SELECT g.*, s.name AS specialty_name, s.code AS specialty_code,
+                u.full_name AS curator_name
+         FROM study_groups g
+         INNER JOIN specialties s ON s.id = g.specialty_id
+         LEFT JOIN users u ON u.id = g.curator_id
+         WHERE g.id = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function create_group(string $number, int $specialtyId, ?int $curatorId = null): array
+{
+    $number = trim($number);
+
+    if ($number === '') {
+        return ['success' => false, 'error' => 'Укажите номер группы.'];
+    }
+
+    if (get_specialty_by_id($specialtyId) === null) {
+        return ['success' => false, 'error' => 'Выберите специальность из списка.'];
+    }
+
+    if (find_group_by_number($number)) {
+        return ['success' => false, 'error' => 'Группа с таким номером уже существует.'];
+    }
+
+    $stmt = db()->prepare(
+        'INSERT INTO study_groups (number, specialty_id, curator_id) VALUES (?, ?, ?)'
+    );
+    $stmt->execute([$number, $specialtyId, $curatorId ?: null]);
+
+    return ['success' => true, 'id' => (int) db()->lastInsertId()];
+}
+
+function update_group(int $id, string $number, int $specialtyId, ?int $curatorId = null): array
+{
+    $group = get_group_by_id($id);
+    if ($group === null) {
+        return ['success' => false, 'error' => 'Группа не найдена.'];
+    }
+
+    $number = trim($number);
+
+    if ($number === '') {
+        return ['success' => false, 'error' => 'Укажите номер группы.'];
+    }
+
+    if (get_specialty_by_id($specialtyId) === null) {
+        return ['success' => false, 'error' => 'Выберите специальность из списка.'];
+    }
+
+    $existing = find_group_by_number($number);
+    if ($existing !== null && (int) $existing['id'] !== $id) {
+        return ['success' => false, 'error' => 'Группа с таким номером уже существует.'];
+    }
+
+    $stmt = db()->prepare(
+        'UPDATE study_groups SET number = ?, specialty_id = ?, curator_id = ? WHERE id = ?'
+    );
+    $stmt->execute([$number, $specialtyId, $curatorId ?: null, $id]);
+
+    return ['success' => true];
+}
+
+function delete_group(int $id): array
+{
+    if (get_group_by_id($id) === null) {
+        return ['success' => false, 'error' => 'Группа не найдена.'];
+    }
+
+    $stmt = db()->prepare('SELECT COUNT(*) FROM students WHERE group_id = ?');
+    $stmt->execute([$id]);
+    if ((int) $stmt->fetchColumn() > 0) {
+        return ['success' => false, 'error' => 'Нельзя удалить группу: в ней есть студенты.'];
+    }
+
+    $stmt = db()->prepare('DELETE FROM study_groups WHERE id = ?');
+    $stmt->execute([$id]);
+
+    return ['success' => true];
+}
+
+function find_group_by_number(string $number): ?array
+{
+    $stmt = db()->prepare('SELECT * FROM study_groups WHERE number = ? LIMIT 1');
+    $stmt->execute([trim($number)]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function render_specialty_options(array $specialties, int $selectedId = 0): string
+{
+    $html = '<option value="">— Выберите специальность —</option>';
+
+    foreach ($specialties as $specialty) {
+        $id = (int) $specialty['id'];
+        $selected = $id === $selectedId ? ' selected' : '';
+        $label = $specialty['name'] . ' (' . $specialty['code'] . ')';
+        $html .= '<option value="' . $id . '"' . $selected . '>'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</option>';
+    }
+
+    return $html;
+}
