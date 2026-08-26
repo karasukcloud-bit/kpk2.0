@@ -12,8 +12,13 @@
         <?php if (!empty($showHeader)): ?>
         <header class="header">
             <div class="header__brand">
-                <span class="header__logo">КПК</span>
-                <span class="header__title">Контроль успеваемости</span>
+                <span class="header__logo" aria-hidden="true">
+                    <svg class="header__logo-icon" viewBox="0 0 24 24">
+                        <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3z" fill="currentColor"/>
+                        <path d="M5 13.18v4.32L12 21l7-3.5v-4.32L12 17l-7-3.82z" fill="currentColor"/>
+                    </svg>
+                </span>
+                <span class="header__title">Электронный колледж</span>
             </div>
             <?php if (is_logged_in()): ?>
             <?php
