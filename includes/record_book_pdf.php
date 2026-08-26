@@ -227,11 +227,9 @@ function record_book_pdf_render_html(array $document): string
     $org = $document['organization'] ?? [];
     $orgName = trim((string) ($org['name'] ?? ''));
     $fullName = (string) ($student['full_name'] ?? '');
-    $groupNumber = (string) ($group['number'] ?? ($student['group_number'] ?? '—'));
     $specialtyCode = (string) ($group['specialty_code'] ?? '');
     $specialtyName = (string) ($group['specialty_name'] ?? '');
     $specialty = trim($specialtyCode . ($specialtyCode !== '' && $specialtyName !== '' ? ' — ' : '') . $specialtyName);
-    $birth = format_student_birth_date($student['birth_date'] ?? null);
 
     $html = '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8">'
         . record_book_pdf_styles()
@@ -249,8 +247,7 @@ function record_book_pdf_render_html(array $document): string
     $html .= '<table class="rb-student">';
     $html .= '<tr><td class="rb-student__label">Фамилия, имя, отчество</td><td>' . e($fullName) . '</td></tr>';
     $html .= '<tr><td class="rb-student__label">Специальность / профессия</td><td>' . record_book_pdf_dash($specialty) . '</td></tr>';
-    $html .= '<tr><td class="rb-student__label">Учебная группа</td><td>' . e($groupNumber) . '</td></tr>';
-    $html .= '<tr><td class="rb-student__label">Дата рождения</td><td>' . e($birth) . '</td></tr>';
+    $html .= '<tr><td class="rb-student__label">Форма обучения</td><td>Очная</td></tr>';
     $html .= '</table>';
 
     $periods = $document['periods'] ?? [];
