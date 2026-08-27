@@ -18,7 +18,7 @@ $groupId = (int) $group['id'];
 ?>
 <?php if ($attendanceShowIntro): ?>
 <div class="attendance-journal-intro">
-<p>
+<p class="attendance-journal-meta">
     Группа <strong><?= e($group['number']) ?></strong>
     · учебный год <?= e($year) ?>
     · <?= e(format_attendance_month($month)) ?>
@@ -49,7 +49,7 @@ $groupId = (int) $group['id'];
                     <th class="attendance-table__date-col">Дата</th>
                     <?php foreach ($students as $student): ?>
                     <th class="attendance-table__student-col">
-                        <span class="attendance-student-title"><?= e($student['full_name']) ?></span>
+                        <span class="attendance-student-title"><?= e(person_last_first_name((string) $student['full_name'])) ?></span>
                     </th>
                     <?php endforeach; ?>
                     <?php if (!$attendanceReadOnly): ?>
@@ -77,7 +77,10 @@ $groupId = (int) $group['id'];
                                 <?= (int) $entry['excused_lessons'] ?> / <?= (int) $entry['unexcused_lessons'] ?>
                             </span>
                             <?php if ($entry['excused_lessons'] > 0 && $entry['reason_name'] !== ''): ?>
-                            <span class="attendance-cell__reason text-muted"><?= e($entry['reason_name']) ?></span>
+                            <span
+                                class="attendance-cell__reason text-muted"
+                                title="<?= e($entry['reason_name']) ?>"
+                            ><?= e(format_attendance_reason_short($entry['reason_name'])) ?></span>
                             <?php endif; ?>
                         <?php endif; ?>
                     </td>
@@ -137,9 +140,44 @@ $groupId = (int) $group['id'];
         </table>
     </div>
     <p class="text-muted attendance-legend">
-        В ячейке: уважительные / неуважительные пропуски (уроки). Под числами — причина уважительного пропуска.
+        В ячейке: уважительные / неуважительные пропуски (уроки). Под числами — сокращение причины уважительного пропуска (наведите курсор, чтобы увидеть полное название).
         Внизу — сумма пропусков за выбранный месяц.
     </p>
+
+    <?php
+    $unexcusedStudents = [];
+    foreach ($students as $student) {
+        $studentId = (int) $student['id'];
+        $unexcused = (int) ($monthTotals[$studentId]['unexcused_lessons'] ?? 0);
+        if ($unexcused <= 0) {
+            continue;
+        }
+        $unexcusedStudents[] = [
+            'name' => person_last_first_name((string) $student['full_name']),
+            'count' => $unexcused,
+        ];
+    }
+    usort(
+        $unexcusedStudents,
+        static fn (array $a, array $b): int => $b['count'] <=> $a['count'] ?: strcmp($a['name'], $b['name'])
+    );
+    ?>
+    <section class="attendance-unexcused-list">
+        <h3>Неуважительные пропуски за <?= e(format_attendance_month($month)) ?></h3>
+        <?php if ($unexcusedStudents === []): ?>
+            <p class="text-muted">Студентов с неуважительными пропусками в этом месяце нет.</p>
+        <?php else: ?>
+            <ul class="attendance-unexcused-list__items">
+                <?php foreach ($unexcusedStudents as $row): ?>
+                <li>
+                    <span class="attendance-unexcused-list__name"><?= e($row['name']) ?></span>
+                    <span class="attendance-unexcused-list__sep">—</span>
+                    <span class="attendance-unexcused-list__count"><?= (int) $row['count'] ?></span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+        <?php endif; ?>
+    </section>
 
     <?php if ($monthSummary !== null): ?>
     <section class="attendance-summary">

@@ -73,7 +73,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $group !== null) {
 
         if ($result['success']) {
             if ($action === 'save_day') {
-                $successMessage = 'Запись о пропусках сохранена.';
+                $hasAbsences = false;
+                foreach ((array) ($_POST['entries'] ?? []) as $entry) {
+                    if ((int) ($entry['excused_lessons'] ?? 0) > 0 || (int) ($entry['unexcused_lessons'] ?? 0) > 0) {
+                        $hasAbsences = true;
+                        break;
+                    }
+                }
+                $successMessage = $hasAbsences
+                    ? 'Запись о пропусках сохранена.'
+                    : 'Дата сохранена. Пропусков нет — все студенты присутствовали.';
             } elseif ($action === 'delete_day') {
                 $successMessage = 'Запись удалена.';
             } else {
@@ -184,7 +193,7 @@ require __DIR__ . '/../includes/header.php';
         <?php elseif (empty($students)): ?>
             <p class="text-muted">В группе пока нет студентов.</p>
         <?php else: ?>
-            <p>
+            <p class="attendance-journal-meta">
                 Группа <strong><?= e($group['number']) ?></strong>
                 · учебный год <?= e($year) ?>
                 · <?= e(format_attendance_month($month)) ?>
@@ -204,7 +213,7 @@ require __DIR__ . '/../includes/header.php';
                 class="attendance-form<?= $showForm ? '' : ' attendance-form--hidden' ?>"
                 data-attendance-form
             >
-                <h2><?= $editDayId > 0 ? 'Изменить пропуски' : 'Добавить пропуски за дату' ?></h2>
+                <h2><?= $editDayId > 0 ? 'Изменить дату' : 'Добавить дату' ?></h2>
                 <form method="post" class="form">
                     <?= csrf_field() ?>
                     <input type="hidden" name="action" value="save_day">
@@ -243,7 +252,7 @@ require __DIR__ . '/../includes/header.php';
                                 $entry = $editEntries[$studentId] ?? null;
                                 ?>
                                 <tr>
-                                    <td><?= e($student['full_name']) ?></td>
+                                    <td><?= e(person_last_first_name((string) $student['full_name'])) ?></td>
                                     <td>
                                         <select name="entries[<?= $studentId ?>][reason_id]">
                                             <?= render_attendance_reason_options(
@@ -280,15 +289,18 @@ require __DIR__ . '/../includes/header.php';
 
                     <p class="text-muted attendance-form__hint">
                         Укажите количество пропущенных уроков. Для уважительных пропусков выберите причину.
-                        Строки с нулями не сохраняются. Дата должна относиться к выбранному месяцу.
+                        Можно сохранить дату без пропусков — если отсутствующих не было.
+                        Дата должна относиться к выбранному месяцу.
                     </p>
 
                     <div class="form__actions">
                         <button type="submit" class="btn btn--primary">
                             <?= $editDayId > 0 ? 'Сохранить' : 'Добавить' ?>
                         </button>
-                        <?php if ($showForm): ?>
+                        <?php if ($editDayId > 0): ?>
                         <a href="<?= e($attendanceUrl($groupId, $month)) ?>" class="btn btn--ghost">Отмена</a>
+                        <?php else: ?>
+                        <button type="button" class="btn btn--ghost" data-attendance-cancel>Отмена</button>
                         <?php endif; ?>
                     </div>
                 </form>

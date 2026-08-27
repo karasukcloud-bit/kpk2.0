@@ -13,12 +13,14 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
     $nameParts = split_person_full_name((string) ($data['full_name'] ?? ''));
 }
 ?>
+<div class="student-fields">
 <div class="form__group">
     <label for="last_name">Фамилия</label>
     <input
         type="text"
         id="last_name"
         name="last_name"
+        class="form-input--name"
         required
         value="<?= e($nameParts['last_name']) ?>"
         placeholder="Иванов"
@@ -33,6 +35,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
             type="text"
             id="first_name"
             name="first_name"
+            class="form-input--name"
             required
             value="<?= e($nameParts['first_name']) ?>"
             placeholder="Иван"
@@ -45,6 +48,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
             type="text"
             id="middle_name"
             name="middle_name"
+            class="form-input--name"
             value="<?= e($nameParts['middle_name']) ?>"
             placeholder="Иванович"
             autocomplete="additional-name"
@@ -55,6 +59,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 <div class="form__group">
     <label for="phone">Телефон студента</label>
     <input type="text" id="phone" name="phone"
+           class="form-input--phone"
            value="<?= e($data['phone'] ?? '') ?>"
            placeholder="+7 (___) ___-__-__">
 </div>
@@ -65,6 +70,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
         type="text"
         id="snils"
         name="snils"
+        class="form-input--snils"
         value="<?= e((string) ($data['snils'] ?? '')) ?>"
         placeholder="___-___-___ __"
         maxlength="14"
@@ -81,12 +87,13 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
             type="date"
             id="birth_date"
             name="birth_date"
+            class="form-input--date"
             value="<?= e((string) ($data['birth_date'] ?? '')) ?>"
         >
     </div>
     <div class="form__group">
         <label for="gender">Пол</label>
-        <select id="gender" name="gender">
+        <select id="gender" name="gender" class="form-input--select-sm">
             <option value="">— Не указан —</option>
             <option value="male"<?= (($data['gender'] ?? '') === 'male') ? ' selected' : '' ?>>Мужской</option>
             <option value="female"<?= (($data['gender'] ?? '') === 'female') ? ' selected' : '' ?>>Женский</option>
@@ -96,39 +103,69 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 
 <div class="form__row">
     <div class="form__group">
+        <label for="family_type">Состав семьи</label>
+        <select id="family_type" name="family_type" class="form-input--select-md" data-family-type>
+            <option value="">— Не указан —</option>
+            <option value="complete"<?= (($data['family_type'] ?? '') === 'complete') ? ' selected' : '' ?>>Полная семья</option>
+            <option value="no_father"<?= (($data['family_type'] ?? '') === 'no_father') ? ' selected' : '' ?>>Неполная (без отца)</option>
+            <option value="no_mother"<?= (($data['family_type'] ?? '') === 'no_mother') ? ' selected' : '' ?>>Неполная (без матери)</option>
+        </select>
+    </div>
+    <div class="form__group">
+        <label for="siblings_under_18">Братьев/сестёр младше 18 лет</label>
+        <input
+            type="number"
+            id="siblings_under_18"
+            name="siblings_under_18"
+            class="form-input--short"
+            min="0"
+            max="20"
+            value="<?= e((string) (int) ($data['siblings_under_18'] ?? 0)) ?>"
+        >
+    </div>
+</div>
+
+<div class="form__row" data-parent-field="mother">
+    <div class="form__group">
         <label for="mother_name">ФИО мамы</label>
         <input type="text" id="mother_name" name="mother_name"
+               class="form-input--fio"
                value="<?= e($data['mother_name'] ?? '') ?>">
     </div>
     <div class="form__group">
         <label for="mother_phone">Телефон мамы</label>
         <input type="text" id="mother_phone" name="mother_phone"
+               class="form-input--phone"
                value="<?= e($data['mother_phone'] ?? '') ?>">
     </div>
 </div>
 
-<div class="form__group">
+<div class="form__group" data-parent-field="mother">
     <label for="mother_workplace">Место работы мамы</label>
     <input type="text" id="mother_workplace" name="mother_workplace"
+           class="form-input--wide"
            value="<?= e($data['mother_workplace'] ?? '') ?>">
 </div>
 
-<div class="form__row">
+<div class="form__row" data-parent-field="father">
     <div class="form__group">
         <label for="father_name">ФИО папы</label>
         <input type="text" id="father_name" name="father_name"
+               class="form-input--fio"
                value="<?= e($data['father_name'] ?? '') ?>">
     </div>
     <div class="form__group">
         <label for="father_phone">Телефон папы</label>
         <input type="text" id="father_phone" name="father_phone"
+               class="form-input--phone"
                value="<?= e($data['father_phone'] ?? '') ?>">
     </div>
 </div>
 
-<div class="form__group">
+<div class="form__group" data-parent-field="father">
     <label for="father_workplace">Место работы папы</label>
     <input type="text" id="father_workplace" name="father_workplace"
+           class="form-input--wide"
            value="<?= e($data['father_workplace'] ?? '') ?>">
 </div>
 
@@ -141,6 +178,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
                 type="text"
                 id="address_region"
                 name="address_region"
+                class="form-input--address"
                 value="<?= e($data['address_region'] ?? '') ?>"
                 data-student-address-part
                 placeholder="Брянская область"
@@ -152,6 +190,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
                 type="text"
                 id="address_district"
                 name="address_district"
+                class="form-input--address"
                 value="<?= e($data['address_district'] ?? '') ?>"
                 data-student-address-part
                 placeholder="Клинцовский район"
@@ -165,6 +204,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
                 type="text"
                 id="address_locality"
                 name="address_locality"
+                class="form-input--address"
                 value="<?= e($data['address_locality'] ?? '') ?>"
                 data-student-address-part
                 placeholder="г. Клинцы"
@@ -176,6 +216,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
                 type="text"
                 id="address_street"
                 name="address_street"
+                class="form-input--address"
                 value="<?= e($data['address_street'] ?? '') ?>"
                 data-student-address-part
                 placeholder="ул. Ленина"
@@ -187,6 +228,7 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
                 type="text"
                 id="address_house"
                 name="address_house"
+                class="form-input--house"
                 value="<?= e($data['address_house'] ?? '') ?>"
                 data-student-address-part
                 placeholder="12"
@@ -200,29 +242,6 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
            data-student-address-registered>
 </div>
 
-<div class="form__row">
-    <div class="form__group">
-        <label for="family_type">Состав семьи</label>
-        <select id="family_type" name="family_type">
-            <option value="">— Не указан —</option>
-            <option value="complete"<?= (($data['family_type'] ?? '') === 'complete') ? ' selected' : '' ?>>Полная семья</option>
-            <option value="no_father"<?= (($data['family_type'] ?? '') === 'no_father') ? ' selected' : '' ?>>Неполная (без отца)</option>
-            <option value="no_mother"<?= (($data['family_type'] ?? '') === 'no_mother') ? ' selected' : '' ?>>Неполная (без матери)</option>
-        </select>
-    </div>
-    <div class="form__group">
-        <label for="siblings_under_18">Братьев/сестёр младше 18 лет</label>
-        <input
-            type="number"
-            id="siblings_under_18"
-            name="siblings_under_18"
-            min="0"
-            max="20"
-            value="<?= e((string) (int) ($data['siblings_under_18'] ?? 0)) ?>"
-        >
-    </div>
-</div>
-
 <?php
 $dormitoryAddress = function_exists('student_dormitory_address')
     ? student_dormitory_address()
@@ -234,6 +253,7 @@ $dormitoryAddress = function_exists('student_dormitory_address')
         <select
             id="residence_type"
             name="residence_type"
+            class="form-input--select-md"
             data-student-residence
             data-dormitory-address="<?= e($dormitoryAddress) ?>"
         >
@@ -265,6 +285,7 @@ $dormitoryAddress = function_exists('student_dormitory_address')
 <div class="form__group">
     <label for="address_actual">Фактический адрес</label>
     <input type="text" id="address_actual" name="address_actual"
+           class="form-input--wide"
            value="<?= e($data['address_actual'] ?? '') ?>"
            data-student-address-actual
            placeholder="Заполняется автоматически при выборе места проживания">
@@ -272,4 +293,5 @@ $dormitoryAddress = function_exists('student_dormitory_address')
         При выборе «с родителями» подставляется адрес по прописке,
         при «общежитие» — адрес организации. Можно изменить вручную.
     </p>
+</div>
 </div>

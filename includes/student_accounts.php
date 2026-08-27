@@ -41,25 +41,43 @@ function generate_student_password(int $length = 8): string
     return generate_user_password($length);
 }
 
-function generate_student_login(string $lastName, string $firstName): string
+function generate_student_login(string $lastName, string $firstName, string $middleName = ''): string
 {
-    $base = transliterate_to_login($lastName);
-    $first = transliterate_to_login($firstName);
-    if ($first !== '') {
-        $base .= '.' . $first;
+    $chunks = [];
+    foreach ([$lastName, $firstName, $middleName] as $part) {
+        $part = trim($part);
+        if ($part === '') {
+            continue;
+        }
+        $chunks[] = transliterate_to_login($part);
     }
+
+    $base = $chunks !== [] ? implode('.', $chunks) : 'student';
     if (mb_strlen($base) > 40) {
-        $base = mb_substr($base, 0, 40);
+        $base = rtrim(mb_substr($base, 0, 40), '.');
     }
 
     $login = $base;
-    $n = 1;
-    while (find_user_by_email($login . '@student.local') !== null) {
+    $n = 0;
+    while (is_student_login_taken($login)) {
         $n++;
         $login = $base . $n;
+        if ($n > 9999) {
+            $login = $base . '.' . bin2hex(random_bytes(3));
+            break;
+        }
     }
 
-    return $login . '@student.local';
+    return mb_strtolower($login) . '@student.local';
+}
+
+function is_student_login_taken(string $loginLocal): bool
+{
+    $email = mb_strtolower(trim($loginLocal)) . '@student.local';
+    $stmt = db()->prepare('SELECT id FROM users WHERE email = ? LIMIT 1');
+    $stmt->execute([$email]);
+
+    return (bool) $stmt->fetch();
 }
 
 function get_student_by_user_id(int $userId): ?array
@@ -105,32 +123,52 @@ function create_student_user_account(int $studentId, string $fullName, string $p
     }
 
     $parts = split_person_full_name($fullName);
-    $login = generate_student_login($parts['last_name'], $parts['first_name']);
     $password = generate_student_password();
+    $passwordHash = password_hash($password, PASSWORD_DEFAULT);
 
     $pdo = db();
-    $pdo->beginTransaction();
+    $maxAttempts = 8;
+    $login = '';
+    $userId = 0;
 
-    try {
-        $stmt = $pdo->prepare(
-            'INSERT INTO users (email, password_hash, password_plain, full_name, phone, role, is_active)
-             VALUES (?, ?, ?, ?, ?, \'student\', 1)'
+    for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+        $login = generate_student_login(
+            $parts['last_name'],
+            $parts['first_name'],
+            $parts['middle_name']
         );
-        $stmt->execute([
-            $login,
-            password_hash($password, PASSWORD_DEFAULT),
-            $password,
-            $fullName,
-            $phone,
-        ]);
-        $userId = (int) $pdo->lastInsertId();
 
-        $pdo->prepare('UPDATE students SET user_id = ? WHERE id = ?')
-            ->execute([$userId, $studentId]);
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare(
+                'INSERT INTO users (email, password_hash, password_plain, full_name, phone, role, is_active)
+                 VALUES (?, ?, ?, ?, ?, \'student\', 1)'
+            );
+            $stmt->execute([
+                $login,
+                $passwordHash,
+                $password,
+                $fullName,
+                $phone,
+            ]);
+            $userId = (int) $pdo->lastInsertId();
 
-        $pdo->commit();
-    } catch (Throwable $e) {
-        $pdo->rollBack();
+            $pdo->prepare('UPDATE students SET user_id = ? WHERE id = ?')
+                ->execute([$userId, $studentId]);
+
+            $pdo->commit();
+            break;
+        } catch (Throwable $e) {
+            $pdo->rollBack();
+            $duplicate = $e instanceof PDOException
+                && (string) $e->getCode() === '23000';
+            if (!$duplicate || $attempt === $maxAttempts) {
+                return ['success' => false, 'error' => 'Не удалось создать учётную запись студента.'];
+            }
+        }
+    }
+
+    if ($userId <= 0) {
         return ['success' => false, 'error' => 'Не удалось создать учётную запись студента.'];
     }
 

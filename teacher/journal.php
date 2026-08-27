@@ -507,6 +507,7 @@ require __DIR__ . '/../includes/header.php';
                             ])) ?>"
                             class="journal-choice"
                         >
+                            <?= render_journal_choice_icon('journal') ?>
                             <strong><?= e($subject['subject_name']) ?></strong>
                             <span class="text-muted"><?= e(semester_label($subject['semester'])) ?></span>
                             <?php if (!empty($subject['teacher_name'])): ?>
@@ -528,6 +529,7 @@ require __DIR__ . '/../includes/header.php';
                         href="<?= e($journalUrl(['group_id' => (int) $group['group_id']])) ?>"
                         class="journal-choice"
                     >
+                        <?= render_journal_choice_icon('group') ?>
                         <strong><?= e($group['group_number']) ?></strong>
                         <span class="text-muted"><?= e($group['specialty_name']) ?></span>
                         <span class="journal-choice__meta"><?= count($group['subjects']) ?> предм.</span>

@@ -26,21 +26,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = update_own_profile($_POST, $_FILES);
             $showProfileEdit = true;
         } elseif ($action === 'change_password') {
-            $result = change_own_password(
-                (string) ($_POST['current_password'] ?? ''),
-                (string) ($_POST['new_password'] ?? ''),
-                (string) ($_POST['new_password_confirm'] ?? '')
-            );
+            $result = ['success' => false, 'error' => 'Смена пароля доступна только администратору.'];
             $showProfileEdit = true;
         } else {
             $result = ['success' => false, 'error' => 'Неизвестное действие.'];
         }
 
         if ($result['success']) {
-            flash_set(
-                'success',
-                $action === 'change_password' ? 'Пароль изменён.' : 'Профиль сохранён.'
-            );
+            flash_set('success', 'Профиль сохранён.');
             header('Location: cabinet.php');
             exit;
         }
@@ -263,30 +256,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save
                 <div class="form__actions">
                     <button type="submit" class="btn btn--primary">Сохранить</button>
                     <button type="button" class="btn btn--ghost" data-profile-edit-cancel>Отмена</button>
-                </div>
-            </form>
-
-            <h2 class="subsection-title">Смена пароля</h2>
-            <form method="post" class="form form--medium">
-                <?= csrf_field() ?>
-                <input type="hidden" name="action" value="change_password">
-
-                <div class="form__group">
-                    <label for="current_password">Текущий пароль</label>
-                    <input type="password" id="current_password" name="current_password" required autocomplete="current-password">
-                </div>
-                <div class="form__row">
-                    <div class="form__group">
-                        <label for="new_password">Новый пароль</label>
-                        <input type="password" id="new_password" name="new_password" required minlength="6" autocomplete="new-password">
-                    </div>
-                    <div class="form__group">
-                        <label for="new_password_confirm">Повтор пароля</label>
-                        <input type="password" id="new_password_confirm" name="new_password_confirm" required minlength="6" autocomplete="new-password">
-                    </div>
-                </div>
-                <div class="form__actions">
-                    <button type="submit" class="btn btn--primary">Изменить пароль</button>
                 </div>
             </form>
         </div>

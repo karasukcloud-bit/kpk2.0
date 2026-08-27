@@ -451,8 +451,9 @@ function student_payload_from_post(array $post): array
     $middleName = trim((string) ($post['middle_name'] ?? ''));
     $birthRaw = trim((string) ($post['birth_date'] ?? ''));
     $snilsRaw = trim((string) ($post['snils'] ?? ''));
+    $familyType = normalize_student_family_type($post['family_type'] ?? '');
 
-    return [
+    $data = [
         'last_name'          => $lastName,
         'first_name'         => $firstName,
         'middle_name'        => $middleName,
@@ -477,11 +478,23 @@ function student_payload_from_post(array $post): array
         'district'           => '',
         'is_low_income'      => !empty($post['is_low_income']),
         'without_parental_care' => !empty($post['without_parental_care']),
-        'family_type'        => trim((string) ($post['family_type'] ?? '')),
+        'family_type'        => $familyType ?? '',
         'siblings_under_18'  => normalize_student_siblings_under_18($post['siblings_under_18'] ?? 0),
         'residence_type'     => trim((string) ($post['residence_type'] ?? '')),
         'is_nonresident'     => !empty($post['is_nonresident']),
     ];
+
+    if ($familyType === 'no_father') {
+        $data['father_name'] = '';
+        $data['father_phone'] = '';
+        $data['father_workplace'] = '';
+    } elseif ($familyType === 'no_mother') {
+        $data['mother_name'] = '';
+        $data['mother_phone'] = '';
+        $data['mother_workplace'] = '';
+    }
+
+    return $data;
 }
 
 function validate_student_data(array $data): array

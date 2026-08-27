@@ -356,10 +356,6 @@ function save_attendance_day(int $groupId, string $date, string $academicYear, a
         ];
     }
 
-    if ($normalized === []) {
-        return ['success' => false, 'error' => 'Укажите пропуски хотя бы для одного студента.'];
-    }
-
     $pdo = db();
 
     if ($dayId !== null) {
@@ -445,6 +441,20 @@ function format_attendance_date(string $date): string
     }
 
     return date('d.m.Y', $timestamp);
+}
+
+function format_attendance_reason_short(string $name, int $length = 4): string
+{
+    $name = trim($name);
+    if ($name === '') {
+        return '';
+    }
+
+    if (mb_strlen($name, 'UTF-8') <= $length) {
+        return $name;
+    }
+
+    return mb_substr($name, 0, $length, 'UTF-8');
 }
 
 function render_attendance_reason_options(array $reasons, ?int $selectedId = null): string

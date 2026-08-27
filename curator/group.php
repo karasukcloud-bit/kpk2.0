@@ -106,8 +106,7 @@ require __DIR__ . '/../includes/header.php';
                                     <th>№</th>
                                     <th>ФИО</th>
                                     <th>Телефон</th>
-                                    <th>Телефон мамы</th>
-                                    <th>Телефон папы</th>
+                                    <th>Дата рождения</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -117,8 +116,7 @@ require __DIR__ . '/../includes/header.php';
                                     <td><?= $index + 1 ?></td>
                                     <td><?= e($student['full_name']) ?></td>
                                     <td><?= e($student['phone'] ?: '—') ?></td>
-                                    <td><?= e($student['mother_phone'] ?: '—') ?></td>
-                                    <td><?= e($student['father_phone'] ?: '—') ?></td>
+                                    <td><?= e(format_student_birth_date($student['birth_date'] ?? null)) ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>

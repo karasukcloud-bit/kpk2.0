@@ -540,3 +540,22 @@ function format_journal_date(string $date): string
 
     return date('d.m', $timestamp);
 }
+
+function render_journal_choice_icon(string $type = 'journal'): string
+{
+    if ($type === 'group') {
+        return '<span class="journal-choice__icon journal-choice__icon--group" aria-hidden="true">'
+            . '<svg viewBox="0 0 24 24" fill="none">'
+            . '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>'
+            . '<circle cx="9" cy="7" r="4" stroke="currentColor" stroke-width="1.75"/>'
+            . '<path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>'
+            . '</svg></span>';
+    }
+
+    return '<span class="journal-choice__icon journal-choice__icon--journal" aria-hidden="true">'
+        . '<svg viewBox="0 0 24 24" fill="none">'
+        . '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>'
+        . '<path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>'
+        . '<path d="M8 7h8M8 11h6" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"/>'
+        . '</svg></span>';
+}

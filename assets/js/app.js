@@ -321,12 +321,27 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const attendanceToggle = document.querySelector('[data-attendance-add-toggle]');
     const attendanceForm = document.querySelector('[data-attendance-form]');
+    const attendanceCancel = document.querySelector('[data-attendance-cancel]');
+
+    const hideAttendanceForm = () => {
+        if (!attendanceForm) {
+            return;
+        }
+        attendanceForm.classList.add('attendance-form--hidden');
+        if (attendanceToggle) {
+            attendanceToggle.textContent = 'Добавить дату';
+        }
+    };
 
     if (attendanceToggle && attendanceForm) {
         attendanceToggle.addEventListener('click', () => {
             const hidden = attendanceForm.classList.toggle('attendance-form--hidden');
             attendanceToggle.textContent = hidden ? 'Добавить дату' : 'Скрыть форму';
         });
+    }
+
+    if (attendanceCancel) {
+        attendanceCancel.addEventListener('click', hideAttendanceForm);
     }
 
     const initTableColHover = (table) => {
@@ -964,6 +979,22 @@ document.addEventListener('DOMContentLoaded', () => {
     const addressActual = document.querySelector('[data-student-address-actual]');
     const addressParts = document.querySelectorAll('[data-student-address-part]');
 
+    const familyTypeSelect = document.querySelector('[data-family-type]');
+    if (familyTypeSelect) {
+        const syncParentFields = () => {
+            const type = familyTypeSelect.value;
+            document.querySelectorAll('[data-parent-field]').forEach((block) => {
+                const parent = block.dataset.parentField;
+                const hide = (type === 'no_father' && parent === 'father')
+                    || (type === 'no_mother' && parent === 'mother');
+                block.hidden = hide;
+            });
+        };
+
+        familyTypeSelect.addEventListener('change', syncParentFields);
+        syncParentFields();
+    }
+
     const applySnilsMask = (value) => {
         const digits = String(value).replace(/\D/g, '').slice(0, 11);
         const part1 = digits.slice(0, 3);
@@ -1194,6 +1225,42 @@ document.addEventListener('DOMContentLoaded', () => {
 
         teachersSearch.addEventListener('input', filterTeachers);
     }
+
+    document.querySelectorAll('[data-table-search]').forEach((input) => {
+        const key = input.dataset.tableSearch;
+        const table = document.querySelector(`[data-table-search-target="${key}"]`);
+        if (!table) {
+            return;
+        }
+
+        const rows = Array.from(table.querySelectorAll('[data-search-row]'));
+        const emptyNode = document.querySelector(`[data-table-search-empty="${key}"]`);
+
+        const filterRows = () => {
+            const query = input.value.trim().toLowerCase();
+            let visible = 0;
+
+            rows.forEach((row) => {
+                const text = row.dataset.searchText || '';
+                const match = query === '' || text.indexOf(query) !== -1;
+                row.hidden = !match;
+                if (match) {
+                    visible += 1;
+                    const numCell = row.querySelector('[data-search-num]');
+                    if (numCell) {
+                        numCell.textContent = String(visible);
+                    }
+                }
+            });
+
+            if (emptyNode) {
+                emptyNode.hidden = visible > 0;
+            }
+            table.hidden = visible === 0;
+        };
+
+        input.addEventListener('input', filterRows);
+    });
 
     const curriculumEditModal = document.querySelector('[data-curriculum-edit-modal]');
     if (curriculumEditModal) {

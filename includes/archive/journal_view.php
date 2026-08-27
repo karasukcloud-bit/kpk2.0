@@ -7,6 +7,7 @@ $archivePanel = $archivePanel ?? 'admin';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../archive.php';
 require_once __DIR__ . '/../teachers.php';
+require_once __DIR__ . '/../journal.php';
 
 require_archive_manager();
 
@@ -104,6 +105,7 @@ require __DIR__ . '/../header.php';
                     href="archive_journal.php?id=<?= $archiveId ?>&group_id=<?= $groupId ?>&item_id=<?= (int) $item['id'] ?>"
                     class="journal-choice"
                 >
+                    <?= render_journal_choice_icon('journal') ?>
                     <strong><?= e($item['subject_name']) ?></strong>
                     <?php if (!empty($item['teacher_name'])): ?>
                     <span class="journal-choice__meta">Преп.: <?= e($item['teacher_name']) ?></span>

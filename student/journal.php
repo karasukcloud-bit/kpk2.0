@@ -84,6 +84,7 @@ require __DIR__ . '/../includes/header.php';
                     href="journal.php?item_id=<?= (int) $item['curriculum_item_id'] ?>"
                     class="journal-choice"
                 >
+                    <?= render_journal_choice_icon('journal') ?>
                     <strong><?= e($item['subject_name']) ?></strong>
                     <?php if (!empty($item['teacher_name'])): ?>
                     <span class="journal-choice__meta">Преп.: <?= e($item['teacher_name']) ?></span>

@@ -450,18 +450,33 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
         <?php if (empty($specialties)): ?>
             <p class="text-muted">Специальности пока не добавлены.</p>
         <?php else: ?>
+            <div class="form__group list-search">
+                <label for="specialties_search">Поиск</label>
+                <input
+                    type="search"
+                    id="specialties_search"
+                    placeholder="Название или код…"
+                    autocomplete="off"
+                    data-table-search="specialties"
+                >
+            </div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-table-search-target="specialties">
                     <thead>
                         <tr>
+                            <th>№</th>
                             <th>Название</th>
                             <th>Код</th>
                             <th class="table__actions-col">Действия</th>
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($specialties as $specialty): ?>
-                        <tr>
+                        <?php foreach ($specialties as $index => $specialty): ?>
+                        <tr
+                            data-search-row
+                            data-search-text="<?= e(mb_strtolower($specialty['name'] . ' ' . $specialty['code'])) ?>"
+                        >
+                            <td data-search-num><?= $index + 1 ?></td>
                             <td><?= e($specialty['name']) ?></td>
                             <td><code><?= e($specialty['code']) ?></code></td>
                             <td class="table__actions">
@@ -472,6 +487,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                     </tbody>
                 </table>
             </div>
+            <p class="text-muted list-search-empty" data-table-search-empty="specialties" hidden>Ничего не найдено по запросу.</p>
         <?php endif; ?>
 
         <h3 class="subsection-title">Добавить специальность</h3>
@@ -509,8 +525,18 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
         <?php elseif (empty($groups)): ?>
             <p class="text-muted">Группы пока не добавлены.</p>
         <?php else: ?>
+            <div class="form__group list-search">
+                <label for="groups_search">Поиск</label>
+                <input
+                    type="search"
+                    id="groups_search"
+                    placeholder="Номер, специальность, код или куратор…"
+                    autocomplete="off"
+                    data-table-search="groups"
+                >
+            </div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table" data-table-search-target="groups">
                     <thead>
                         <tr>
                             <th>№</th>
@@ -523,8 +549,16 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                     </thead>
                     <tbody>
                         <?php foreach ($groups as $index => $group): ?>
-                        <tr>
-                            <td><?= $index + 1 ?></td>
+                        <?php
+                        $groupSearchText = mb_strtolower(implode(' ', array_filter([
+                            $group['number'] ?? '',
+                            $group['specialty_name'] ?? '',
+                            $group['specialty_code'] ?? '',
+                            $group['curator_name'] ?? '',
+                        ])));
+                        ?>
+                        <tr data-search-row data-search-text="<?= e($groupSearchText) ?>">
+                            <td data-search-num><?= $index + 1 ?></td>
                             <td><strong><?= e($group['number']) ?></strong></td>
                             <td><?= e($group['specialty_name']) ?></td>
                             <td><code><?= e($group['specialty_code']) ?></code></td>
@@ -537,6 +571,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                     </tbody>
                 </table>
             </div>
+            <p class="text-muted list-search-empty" data-table-search-empty="groups" hidden>Ничего не найдено по запросу.</p>
         <?php endif; ?>
 
         <?php if (!empty($specialties)): ?>

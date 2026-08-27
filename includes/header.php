@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle ?? 'КПК — Успеваемость') ?></title>
     <?php $basePath = $basePath ?? ''; ?>
+    <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.png" type="image/png" sizes="32x32">
+    <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon-16.png" type="image/png" sizes="16x16">
+    <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css">
 </head>
 <body>
@@ -12,13 +15,16 @@
         <?php if (!empty($showHeader)): ?>
         <header class="header">
             <div class="header__brand">
-                <span class="header__logo" aria-hidden="true">
-                    <svg class="header__logo-icon" viewBox="0 0 24 24">
-                        <path d="M12 3L1 9l11 6 9-4.91V17h2V9L12 3z" fill="currentColor"/>
-                        <path d="M5 13.18v4.32L12 21l7-3.5v-4.32L12 17l-7-3.82z" fill="currentColor"/>
-                    </svg>
+                <span class="header__logo">
+                    <img
+                        class="header__logo-img"
+                        src="<?= e($basePath) ?>assets/img/logo-icon.svg"
+                        alt="СПО-ПРОГРЕСС"
+                        width="56"
+                        height="56"
+                    >
                 </span>
-                <span class="header__title">Электронный колледж</span>
+                <span class="header__title">СПО-ПРОГРЕСС</span>
             </div>
             <?php if (is_logged_in()): ?>
             <?php
