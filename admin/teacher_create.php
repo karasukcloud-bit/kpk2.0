@@ -118,8 +118,9 @@ require __DIR__ . '/../includes/header.php';
                     id="phone"
                     name="phone"
                     required
-                    value="<?= e($_POST['phone'] ?? '') ?>"
-                    placeholder="+7 (___) ___-__-__"
+                    data-phone-login
+                    value="<?= e(format_login_phone($_POST['phone'] ?? '')) ?>"
+                    placeholder="+7XXXXXXXXXX"
                 >
             </div>
 

@@ -984,6 +984,48 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
+    const normalizePhoneDigits = (value) => {
+        let digits = String(value).replace(/\D/g, '');
+        if (digits.length === 11 && digits[0] === '8') {
+            digits = '7' + digits.slice(1);
+        }
+        return digits;
+    };
+
+    const formatLoginPhone = (value) => {
+        let digits = normalizePhoneDigits(value);
+        if (digits.length === 10) {
+            digits = '7' + digits;
+        }
+        if (digits === '') {
+            return '';
+        }
+        return '+' + digits.slice(0, 11);
+    };
+
+    document.querySelectorAll('input[data-phone-login]').forEach((input) => {
+        const stripSpaces = () => {
+            input.value = input.value.replace(/\s+/g, '');
+        };
+
+        input.addEventListener('input', stripSpaces);
+
+        input.addEventListener('blur', () => {
+            input.value = formatLoginPhone(input.value);
+        });
+
+        const form = input.closest('form');
+        if (form) {
+            form.addEventListener('submit', () => {
+                input.value = formatLoginPhone(input.value);
+            });
+        }
+
+        if (input.value.trim() !== '') {
+            input.value = formatLoginPhone(input.value);
+        }
+    });
+
     const composeRegisteredAddress = () => {
         const region = document.getElementById('address_region');
         const district = document.getElementById('address_district');

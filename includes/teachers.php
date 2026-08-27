@@ -101,7 +101,7 @@ function update_teacher(
     $staffRoles = $rolesCheck['roles'];
 
     $fullName = trim($fullName);
-    $phone = trim($phone);
+    $phone = format_login_phone($phone);
 
     if (!is_valid_login_phone($phone)) {
         return ['success' => false, 'error' => 'Укажите корректный номер телефона (логин).'];

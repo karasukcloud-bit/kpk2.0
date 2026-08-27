@@ -81,7 +81,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             if ($result['success']) {
                 flash_set('success', 'Данные преподавателя обновлены.');
-                header('Location: teacher_edit.php?id=' . $id);
+                header('Location: teachers.php');
                 exit;
             }
 
@@ -183,8 +183,9 @@ $emailDisplay = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '
                     id="phone"
                     name="phone"
                     required
-                    value="<?= e($_POST['phone'] ?? ($teacher['phone'] ?? '')) ?>"
-                    placeholder="+7 (___) ___-__-__"
+                    data-phone-login
+                    value="<?= e(format_login_phone($_POST['phone'] ?? ($teacher['phone'] ?? ''))) ?>"
+                    placeholder="+7XXXXXXXXXX"
                 >
             </div>
 
@@ -238,7 +239,7 @@ $emailDisplay = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '
             <h3>Регистрационные данные преподавателя</h3>
             <dl class="profile-list">
                 <dt>Логин (телефон)</dt>
-                <dd><?= e(($teacher['phone'] ?? '') !== '' ? $teacher['phone'] : '—') ?></dd>
+                <dd><?= e(($teacher['phone'] ?? '') !== '' ? format_login_phone($teacher['phone']) : '—') ?></dd>
                 <dt>Пароль</dt>
                 <dd><?= e(($teacher['password_plain'] ?? '') !== '' ? $teacher['password_plain'] : '—') ?></dd>
             </dl>

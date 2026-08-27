@@ -427,6 +427,19 @@ function normalize_phone_digits(string $phone): string
     return $digits;
 }
 
+function format_login_phone(string $phone): string
+{
+    $digits = normalize_phone_digits($phone);
+    if ($digits === '') {
+        return '';
+    }
+    if (strlen($digits) === 10) {
+        $digits = '7' . $digits;
+    }
+
+    return '+' . $digits;
+}
+
 function is_valid_login_phone(string $phone): bool
 {
     $digits = normalize_phone_digits($phone);
@@ -524,7 +537,7 @@ function register_user(
     string $phone = ''
 ): array {
     $fullName = trim($fullName);
-    $phone = trim($phone);
+    $phone = format_login_phone($phone);
 
     if (!is_valid_login_phone($phone)) {
         return ['success' => false, 'error' => 'Укажите корректный номер телефона (логин).'];
