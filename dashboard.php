@@ -19,7 +19,7 @@ require __DIR__ . '/includes/header.php';
 
 <div class="dashboard">
     <section class="panel">
-        <h1>Добро пожаловать, <?= e($user['full_name']) ?>!</h1>
+        <h1>Добро пожаловать, <?= e(user_first_middle_name((string) ($user['full_name'] ?? ''))) ?>!</h1>
         <p class="text-muted">
             <?php if (is_admin()): ?>
             Вы вошли как <strong>Администратор</strong>.

@@ -12,6 +12,8 @@ require_once __DIR__ . '/practices.php';
 require_once __DIR__ . '/gia.php';
 require_once __DIR__ . '/glaz.php';
 require_once __DIR__ . '/notifications.php';
+require_once __DIR__ . '/gradebook.php';
+require_once __DIR__ . '/curriculum.php';
 
 function can_manage_expelled_students(): bool
 {
@@ -42,17 +44,217 @@ function get_expelled_student(int $id): ?array
     return $row ?: null;
 }
 
-function list_expelled_students(bool $includeRestored = true): array
-{
+function list_expelled_students(
+    bool $includeRestored = true,
+    ?string $academicYear = null,
+    ?string $semester = null
+): array {
     $sql = 'SELECT e.*, u.full_name AS expelled_by_name
             FROM expelled_students e
             LEFT JOIN users u ON u.id = e.expelled_by';
+    $where = [];
+    $params = [];
+
     if (!$includeRestored) {
-        $sql .= ' WHERE e.is_restored = 0';
+        $where[] = 'e.is_restored = 0';
     }
+
+    if ($academicYear !== null && $academicYear !== '') {
+        $where[] = 'e.expulsion_academic_year = ?';
+        $params[] = $academicYear;
+        if ($semester !== null && $semester !== '') {
+            $where[] = 'e.expulsion_semester = ?';
+            $params[] = $semester;
+        }
+    }
+
+    if ($where !== []) {
+        $sql .= ' WHERE ' . implode(' AND ', $where);
+    }
+
     $sql .= ' ORDER BY e.expulsion_date DESC, e.full_name ASC';
 
-    return db()->query($sql)->fetchAll();
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    return $stmt->fetchAll();
+}
+
+function expelled_period_from_date(string $date): array
+{
+    $ts = strtotime($date);
+    if ($ts === false) {
+        $period = get_active_gradebook_period();
+
+        return [
+            'academic_year' => $period['academic_year'],
+            'semester' => $period['semester'],
+        ];
+    }
+
+    $month = (int) date('n', $ts);
+    $year = (int) date('Y');
+
+    if ($month >= 9) {
+        return [
+            'academic_year' => $year . '-' . ($year + 1),
+            'semester' => '1',
+        ];
+    }
+
+    $startYear = $year - 1;
+    $semester = ($month >= 2 && $month <= 6) ? '2' : '1';
+
+    return [
+        'academic_year' => $startYear . '-' . $year,
+        'semester' => $semester,
+    ];
+}
+
+function parse_expelled_list_filter(array $query): array
+{
+    $year = trim((string) ($query['academic_year'] ?? ''));
+    $year = $year !== '' ? (normalize_academic_year($year) ?? '') : '';
+    $semester = normalize_gradebook_semester((string) ($query['semester'] ?? '1'));
+
+    return [
+        'academic_year' => $year,
+        'semester' => $semester,
+        'show_all_periods' => $year === '',
+    ];
+}
+
+function get_expelled_academic_year_filter_options(): array
+{
+    $years = [];
+
+    if (db()->query("SHOW TABLES LIKE 'expelled_students'")->fetch()
+        && db()->query("SHOW COLUMNS FROM expelled_students LIKE 'expulsion_academic_year'")->fetch()
+    ) {
+        $stmt = db()->query(
+            "SELECT DISTINCT expulsion_academic_year AS academic_year
+             FROM expelled_students
+             WHERE expulsion_academic_year IS NOT NULL AND expulsion_academic_year <> ''
+             ORDER BY academic_year DESC"
+        );
+        foreach ($stmt->fetchAll() as $row) {
+            $years[] = (string) $row['academic_year'];
+        }
+    }
+
+    foreach (get_academic_year_options() as $year) {
+        $years[] = $year;
+    }
+
+    $years = array_values(array_unique($years));
+    rsort($years, SORT_STRING);
+
+    return $years;
+}
+
+function expelled_period_label(array $row): string
+{
+    $year = trim((string) ($row['expulsion_academic_year'] ?? ''));
+    $semester = trim((string) ($row['expulsion_semester'] ?? ''));
+
+    if ($year === '') {
+        return '—';
+    }
+
+    return $year . ', ' . $semester . ' семестр';
+}
+
+function build_expelled_list_query(array $filter, bool $showRestored): string
+{
+    $params = [];
+
+    if (!$showRestored) {
+        $params['active_only'] = '1';
+    }
+
+    if (!$filter['show_all_periods']) {
+        $params['academic_year'] = $filter['academic_year'];
+        $params['semester'] = $filter['semester'];
+    }
+
+    return $params === [] ? '' : ('?' . http_build_query($params));
+}
+
+function purge_student_data_completely(int $studentId, ?PDO $pdo = null): void
+{
+    $pdo = $pdo ?? db();
+    $tables = [
+        'journal_grades',
+        'grade_entries',
+        'student_record_book',
+        'student_courseworks',
+        'student_practices',
+        'student_gia',
+        'attendance_records',
+    ];
+
+    foreach ($tables as $table) {
+        if ($pdo->query("SHOW TABLES LIKE " . $pdo->quote($table))->fetch()) {
+            $pdo->prepare("DELETE FROM {$table} WHERE student_id = ?")->execute([$studentId]);
+        }
+    }
+
+    if ($pdo->query("SHOW TABLES LIKE 'glaz_schedules'")->fetch()) {
+        $scheduleIds = $pdo->prepare('SELECT id FROM glaz_schedules WHERE student_id = ?');
+        $scheduleIds->execute([$studentId]);
+        $ids = $scheduleIds->fetchAll(PDO::FETCH_COLUMN);
+        if ($ids !== []) {
+            $placeholders = implode(',', array_fill(0, count($ids), '?'));
+            if ($pdo->query("SHOW TABLES LIKE 'glaz_commission_members'")->fetch()) {
+                $pdo->prepare(
+                    "DELETE FROM glaz_commission_members WHERE schedule_id IN ($placeholders)"
+                )->execute($ids);
+            }
+        }
+        $pdo->prepare('DELETE FROM glaz_schedules WHERE student_id = ?')->execute([$studentId]);
+    }
+
+    $student = get_student_by_id($studentId);
+    $userId = $student ? (int) ($student['user_id'] ?? 0) : 0;
+
+    $pdo->prepare('DELETE FROM students WHERE id = ?')->execute([$studentId]);
+
+    if ($userId > 0) {
+        $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'student'")->execute([$userId]);
+    }
+}
+
+function delete_expelled_student(int $expelledId): array
+{
+    if (!can_manage_expelled_students()) {
+        return ['success' => false, 'error' => 'Недостаточно прав для удаления.'];
+    }
+
+    $expelled = get_expelled_student($expelledId);
+    if ($expelled === null) {
+        return ['success' => false, 'error' => 'Запись об отчислении не найдена.'];
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+
+    try {
+        $restoredStudentId = (int) ($expelled['restored_student_id'] ?? 0);
+
+        $pdo->prepare('DELETE FROM expelled_students WHERE id = ?')->execute([$expelledId]);
+
+        if ($restoredStudentId > 0 && get_student_by_id($restoredStudentId) !== null) {
+            purge_student_data_completely($restoredStudentId, $pdo);
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+
+        return ['success' => false, 'error' => 'Не удалось удалить отчисленного студента.'];
+    }
+
+    return ['success' => true];
 }
 
 function get_expelled_record_book(int $expelledId): array
@@ -215,6 +417,7 @@ function expel_student(
     $recordBook = get_student_record_book($studentId);
     $debts = collect_student_debts_snapshot($studentId);
     $actor = current_user();
+    $period = get_active_gradebook_period();
 
     $pdo = db();
     $pdo->beginTransaction();
@@ -229,8 +432,9 @@ function expel_student(
                 address_registered, address_actual,
                 district, is_low_income, family_type, siblings_under_18, residence_type, is_nonresident,
                 without_parental_care,
-                expulsion_order, expulsion_date, expulsion_reason, expelled_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+                expulsion_order, expulsion_date, expulsion_reason,
+                expulsion_academic_year, expulsion_semester, expelled_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $studentId,
@@ -265,6 +469,8 @@ function expel_student(
             $orderNumber,
             $expulsionDate,
             $reason,
+            (string) $period['academic_year'],
+            (string) $period['semester'],
             $actor ? (int) $actor['id'] : null,
         ]);
         $expelledId = (int) $pdo->lastInsertId();

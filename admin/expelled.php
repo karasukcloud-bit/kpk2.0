@@ -3,20 +3,14 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
-require_once __DIR__ . '/../includes/expelled.php';
 
-require_expelled_manager();
-
-$showRestored = !isset($_GET['active_only']);
-$list = list_expelled_students($showRestored);
-$success = flash_get('success');
-$error = flash_get('error');
+$viewBase = 'expelled_view.php';
+require __DIR__ . '/../includes/expelled/list_page.php';
 
 $pageTitle = 'Отчисленные студенты — Администрирование';
 $showHeader = true;
 $basePath = '../';
 $currentAdminTab = 'expelled';
-$viewBase = 'expelled_view.php';
 require __DIR__ . '/../includes/header.php';
 ?>
 

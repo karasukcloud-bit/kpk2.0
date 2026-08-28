@@ -103,6 +103,7 @@ function run_migrations(PDO $pdo): void
     ensure_notifications_schema($pdo);
     ensure_glaz_schema($pdo);
     ensure_expelled_students_schema($pdo);
+    ensure_expelled_period_schema($pdo);
     ensure_student_transfers_schema($pdo);
     ensure_student_social_schema($pdo);
     ensure_activity_logs_schema($pdo);
@@ -332,6 +333,49 @@ function ensure_expelled_students_schema(PDO $pdo): void
                     ON DELETE SET NULL
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+}
+
+function ensure_expelled_period_schema(PDO $pdo): void
+{
+    static $done = false;
+
+    if ($done) {
+        return;
+    }
+
+    $done = true;
+
+    if (!$pdo->query("SHOW TABLES LIKE 'expelled_students'")->fetch()) {
+        return;
+    }
+
+    if (!$pdo->query("SHOW COLUMNS FROM expelled_students LIKE 'expulsion_academic_year'")->fetch()) {
+        $pdo->exec(
+            "ALTER TABLE expelled_students
+             ADD expulsion_academic_year VARCHAR(9) NULL DEFAULT NULL AFTER expulsion_reason,
+             ADD expulsion_semester ENUM('1', '2') NULL DEFAULT NULL AFTER expulsion_academic_year"
+        );
+    }
+
+    require_once __DIR__ . '/expelled.php';
+
+    $rows = $pdo->query(
+        "SELECT id, expulsion_date
+         FROM expelled_students
+         WHERE expulsion_academic_year IS NULL OR expulsion_academic_year = ''"
+    )->fetchAll();
+
+    if ($rows !== []) {
+        $stmt = $pdo->prepare(
+            'UPDATE expelled_students
+             SET expulsion_academic_year = ?, expulsion_semester = ?
+             WHERE id = ?'
+        );
+        foreach ($rows as $row) {
+            $period = expelled_period_from_date((string) $row['expulsion_date']);
+            $stmt->execute([$period['academic_year'], $period['semester'], (int) $row['id']]);
+        }
     }
 }
 

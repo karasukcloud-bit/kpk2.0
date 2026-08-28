@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= e($pageTitle ?? 'КПК — Успеваемость') ?></title>
     <?php $basePath = $basePath ?? ''; ?>
+    <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.svg" type="image/svg+xml">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.png" type="image/png" sizes="32x32">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon-16.png" type="image/png" sizes="16x16">
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
