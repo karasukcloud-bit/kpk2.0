@@ -462,6 +462,21 @@ function display_user_email(?string $email): string
     return $email;
 }
 
+function is_real_user_email(string $email): bool
+{
+    $email = mb_strtolower(trim($email));
+
+    if ($email === '' || !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        return false;
+    }
+
+    if (is_phone_placeholder_email($email)) {
+        return false;
+    }
+
+    return !preg_match('/@student\.local$/i', $email);
+}
+
 function email_from_phone(string $phone): string
 {
     return normalize_phone_digits($phone) . '@phone.local';
@@ -599,25 +614,31 @@ function register_user(
     return ['success' => true, 'user_id' => $userId];
 }
 
-function authenticate_user(string $login, string $password): array
+function authenticate_user(string $login, string $password, string $loginType = 'phone'): array
 {
     $login = trim($login);
     $user = null;
+    $loginType = $loginType === 'email' ? 'email' : 'phone';
 
-    if (is_valid_login_phone($login) || normalize_phone_digits($login) !== '') {
-        $user = find_user_by_phone($login);
-    }
-
-    if ($user === null && $login !== '') {
-        $emailLogin = mb_strtolower($login);
-        if (strpos($emailLogin, '@') === false) {
-            $emailLogin .= '@student.local';
+    if ($loginType === 'phone') {
+        if (!is_valid_login_phone($login)) {
+            return ['success' => false, 'error' => 'Неверный телефон или пароль.'];
         }
-        $user = find_user_by_email($emailLogin);
+        $user = find_user_by_phone($login);
+    } else {
+        if (!is_real_user_email($login)) {
+            return ['success' => false, 'error' => 'Неверный email или пароль.'];
+        }
+        $user = find_user_by_email(mb_strtolower($login));
     }
 
     if ($user === null) {
-        return ['success' => false, 'error' => 'Неверный телефон или пароль.'];
+        return [
+            'success' => false,
+            'error' => $loginType === 'email'
+                ? 'Неверный email или пароль.'
+                : 'Неверный телефон или пароль.',
+        ];
     }
 
     if (!(int) $user['is_active']) {

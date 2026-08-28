@@ -1031,31 +1031,62 @@ document.addEventListener('DOMContentLoaded', () => {
         if (digits === '') {
             return '';
         }
+        if (digits[0] !== '7') {
+            digits = '7' + digits.replace(/^7+/, '');
+        }
         return '+' + digits.slice(0, 11);
     };
 
     document.querySelectorAll('input[data-phone-login]').forEach((input) => {
-        const stripSpaces = () => {
-            input.value = input.value.replace(/\s+/g, '');
+        const applyPhoneMask = () => {
+            input.value = formatLoginPhone(input.value);
         };
 
-        input.addEventListener('input', stripSpaces);
+        input.addEventListener('input', applyPhoneMask);
 
-        input.addEventListener('blur', () => {
-            input.value = formatLoginPhone(input.value);
-        });
+        input.addEventListener('blur', applyPhoneMask);
 
         const form = input.closest('form');
         if (form) {
-            form.addEventListener('submit', () => {
-                input.value = formatLoginPhone(input.value);
-            });
+            form.addEventListener('submit', applyPhoneMask);
         }
 
         if (input.value.trim() !== '') {
-            input.value = formatLoginPhone(input.value);
+            applyPhoneMask();
         }
     });
+
+    const loginForm = document.querySelector('[data-login-form]');
+    if (loginForm) {
+        const phoneGroup = loginForm.querySelector('[data-login-phone-group]');
+        const emailGroup = loginForm.querySelector('[data-login-email-group]');
+        const phoneInput = loginForm.querySelector('[data-phone-login]');
+        const emailInput = loginForm.querySelector('[data-login-email]');
+
+        const syncLoginType = () => {
+            const type = loginForm.querySelector('[data-login-type]:checked')?.value || 'phone';
+            const isPhone = type === 'phone';
+
+            if (phoneGroup) {
+                phoneGroup.hidden = !isPhone;
+            }
+            if (emailGroup) {
+                emailGroup.hidden = isPhone;
+            }
+            if (phoneInput) {
+                phoneInput.required = isPhone;
+            }
+            if (emailInput) {
+                emailInput.required = !isPhone;
+            }
+        };
+
+        loginForm.querySelectorAll('[data-login-type]').forEach((input) => {
+            input.addEventListener('change', syncLoginType);
+        });
+
+        syncLoginType();
+    }
 
     const composeRegisteredAddress = () => {
         const region = document.getElementById('address_region');

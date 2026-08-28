@@ -155,7 +155,8 @@ function find_specialty_by_code(string $code): ?array
 function get_all_groups(): array
 {
     $stmt = db()->query(
-        'SELECT g.id, g.number, g.specialty_id, g.curator_id, g.created_at,
+        'SELECT g.id, g.number, g.specialty_id, g.curator_id,
+                g.is_professionality, g.is_general_education, g.created_at,
                 s.name AS specialty_name, s.code AS specialty_code,
                 u.full_name AS curator_name
          FROM study_groups g
@@ -184,8 +185,13 @@ function get_group_by_id(int $id): ?array
     return $row ?: null;
 }
 
-function create_group(string $number, int $specialtyId, ?int $curatorId = null): array
-{
+function create_group(
+    string $number,
+    int $specialtyId,
+    ?int $curatorId = null,
+    bool $isProfessionality = false,
+    bool $isGeneralEducation = false
+): array {
     $number = trim($number);
 
     if ($number === '') {
@@ -201,15 +207,29 @@ function create_group(string $number, int $specialtyId, ?int $curatorId = null):
     }
 
     $stmt = db()->prepare(
-        'INSERT INTO study_groups (number, specialty_id, curator_id) VALUES (?, ?, ?)'
+        'INSERT INTO study_groups
+         (number, specialty_id, curator_id, is_professionality, is_general_education)
+         VALUES (?, ?, ?, ?, ?)'
     );
-    $stmt->execute([$number, $specialtyId, $curatorId ?: null]);
+    $stmt->execute([
+        $number,
+        $specialtyId,
+        $curatorId ?: null,
+        $isProfessionality ? 1 : 0,
+        $isGeneralEducation ? 1 : 0,
+    ]);
 
     return ['success' => true, 'id' => (int) db()->lastInsertId()];
 }
 
-function update_group(int $id, string $number, int $specialtyId, ?int $curatorId = null): array
-{
+function update_group(
+    int $id,
+    string $number,
+    int $specialtyId,
+    ?int $curatorId = null,
+    bool $isProfessionality = false,
+    bool $isGeneralEducation = false
+): array {
     $group = get_group_by_id($id);
     if ($group === null) {
         return ['success' => false, 'error' => 'Группа не найдена.'];
@@ -231,9 +251,19 @@ function update_group(int $id, string $number, int $specialtyId, ?int $curatorId
     }
 
     $stmt = db()->prepare(
-        'UPDATE study_groups SET number = ?, specialty_id = ?, curator_id = ? WHERE id = ?'
+        'UPDATE study_groups
+         SET number = ?, specialty_id = ?, curator_id = ?,
+             is_professionality = ?, is_general_education = ?
+         WHERE id = ?'
     );
-    $stmt->execute([$number, $specialtyId, $curatorId ?: null, $id]);
+    $stmt->execute([
+        $number,
+        $specialtyId,
+        $curatorId ?: null,
+        $isProfessionality ? 1 : 0,
+        $isGeneralEducation ? 1 : 0,
+        $id,
+    ]);
 
     return ['success' => true];
 }
@@ -263,6 +293,65 @@ function find_group_by_number(string $number): ?array
     $row = $stmt->fetch();
 
     return $row ?: null;
+}
+
+function group_labels_from_input(array $input): array
+{
+    return [
+        'is_professionality' => !empty($input['label_professionality']),
+        'is_general_education' => !empty($input['label_general_education']),
+    ];
+}
+
+function group_labels_text(array $group): string
+{
+    $labels = [];
+
+    if (!empty($group['is_professionality'])) {
+        $labels[] = 'Профессионалитет';
+    }
+
+    if (!empty($group['is_general_education'])) {
+        $labels[] = 'Общеобразовательный цикл';
+    }
+
+    return $labels !== [] ? implode(', ', $labels) : '—';
+}
+
+function render_group_labels_fields(array $data = []): void
+{
+    $isProfessionality = !empty($data['is_professionality']);
+    $isGeneralEducation = !empty($data['is_general_education']);
+    ?>
+    <div class="form__group form__group--checkboxes">
+        <span class="form__label">Метки группы</span>
+        <label class="checkbox-label">
+            <input type="checkbox" name="label_professionality" value="1"
+                <?= $isProfessionality ? 'checked' : '' ?>>
+            Профессионалитет
+        </label>
+        <label class="checkbox-label">
+            <input type="checkbox" name="label_general_education" value="1"
+                <?= $isGeneralEducation ? 'checked' : '' ?>>
+            Общеобразовательный цикл
+        </label>
+    </div>
+    <?php
+}
+
+function render_group_labels_badges(array $group): string
+{
+    $html = '';
+
+    if (!empty($group['is_professionality'])) {
+        $html .= '<span class="badge badge--group-label">Профессионалитет</span> ';
+    }
+
+    if (!empty($group['is_general_education'])) {
+        $html .= '<span class="badge badge--group-label badge--group-label-alt">Общеобразовательный цикл</span>';
+    }
+
+    return trim($html) !== '' ? trim($html) : '—';
 }
 
 function render_specialty_options(array $specialties, int $selectedId = 0): string

@@ -51,12 +51,14 @@ CREATE TABLE IF NOT EXISTS specialties (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS study_groups (
-    id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    number       VARCHAR(50) NOT NULL UNIQUE,
-    specialty_id INT UNSIGNED NOT NULL,
-    curator_id   INT UNSIGNED NULL DEFAULT NULL,
-    created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    id                   INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    number               VARCHAR(50) NOT NULL UNIQUE,
+    specialty_id         INT UNSIGNED NOT NULL,
+    curator_id           INT UNSIGNED NULL DEFAULT NULL,
+    is_professionality   TINYINT(1) NOT NULL DEFAULT 0,
+    is_general_education TINYINT(1) NOT NULL DEFAULT 0,
+    created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_study_groups_specialty
         FOREIGN KEY (specialty_id) REFERENCES specialties(id)
         ON DELETE RESTRICT,

@@ -14,7 +14,7 @@
     <div class="page">
         <?php if (!empty($showHeader)): ?>
         <header class="header">
-            <div class="header__brand">
+            <a href="<?= e($basePath) ?>dashboard.php" class="header__brand" title="На главную">
                 <span class="header__logo">
                     <img
                         class="header__logo-img"
@@ -25,7 +25,7 @@
                     >
                 </span>
                 <span class="header__title">СПО-ПРОГРЕСС</span>
-            </div>
+            </a>
             <?php if (is_logged_in()): ?>
             <?php
             $headerUser = current_user();

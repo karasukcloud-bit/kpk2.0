@@ -34,11 +34,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $error = $result['error'];
     } else {
+        $labels = group_labels_from_input($_POST);
         $result = update_group(
             $id,
             $_POST['number'] ?? '',
             (int) ($_POST['specialty_id'] ?? 0),
-            (int) ($_POST['curator_id'] ?? 0) ?: null
+            (int) ($_POST['curator_id'] ?? 0) ?: null,
+            $labels['is_professionality'],
+            $labels['is_general_education']
         );
 
         if ($result['success']) {
@@ -112,6 +115,16 @@ $success = flash_get('success');
                     ) ?>
                 </select>
             </div>
+
+            <?php
+            $editGroupLabels = $_SERVER['REQUEST_METHOD'] === 'POST' && !isset($_POST['action'])
+                ? group_labels_from_input($_POST)
+                : [
+                    'is_professionality' => !empty($group['is_professionality']),
+                    'is_general_education' => !empty($group['is_general_education']),
+                ];
+            render_group_labels_fields($editGroupLabels);
+            ?>
 
             <div class="form__actions">
                 <button type="submit" class="btn btn--primary">Сохранить</button>

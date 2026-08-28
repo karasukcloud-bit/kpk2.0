@@ -210,6 +210,27 @@ function get_students_by_group(int $groupId): array
     return $stmt->fetchAll();
 }
 
+function get_students_list(?int $groupId = null): array
+{
+    $sql = 'SELECT s.*, g.number AS group_number, sp.name AS group_specialty_name
+            FROM students s
+            INNER JOIN study_groups g ON g.id = s.group_id
+            INNER JOIN specialties sp ON sp.id = g.specialty_id';
+    $params = [];
+
+    if ($groupId !== null && $groupId > 0) {
+        $sql .= ' WHERE s.group_id = ?';
+        $params[] = $groupId;
+    }
+
+    $sql .= ' ORDER BY g.number ASC, s.full_name ASC';
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    return $stmt->fetchAll();
+}
+
 function get_student_by_id(int $id): ?array
 {
     $stmt = db()->prepare('SELECT * FROM students WHERE id = ? LIMIT 1');

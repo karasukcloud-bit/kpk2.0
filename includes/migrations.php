@@ -109,6 +109,36 @@ function run_migrations(PDO $pdo): void
     ensure_courseworks_schema($pdo);
     ensure_practices_schema($pdo);
     ensure_gia_schema($pdo);
+    ensure_study_groups_labels_schema($pdo);
+}
+
+function ensure_study_groups_labels_schema(PDO $pdo): void
+{
+    static $done = false;
+
+    if ($done) {
+        return;
+    }
+
+    $done = true;
+
+    if (!$pdo->query("SHOW TABLES LIKE 'study_groups'")->fetch()) {
+        return;
+    }
+
+    if (!$pdo->query("SHOW COLUMNS FROM study_groups LIKE 'is_professionality'")->fetch()) {
+        $pdo->exec(
+            'ALTER TABLE study_groups
+             ADD is_professionality TINYINT(1) NOT NULL DEFAULT 0 AFTER curator_id'
+        );
+    }
+
+    if (!$pdo->query("SHOW COLUMNS FROM study_groups LIKE 'is_general_education'")->fetch()) {
+        $pdo->exec(
+            'ALTER TABLE study_groups
+             ADD is_general_education TINYINT(1) NOT NULL DEFAULT 0 AFTER is_professionality'
+        );
+    }
 }
 
 function ensure_activity_logs_schema(PDO $pdo): void

@@ -37,7 +37,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'add_specialty') {
             $result = create_specialty($_POST['name'] ?? '', $_POST['code'] ?? '');
         } elseif ($action === 'add_group') {
-            $result = create_group($_POST['number'] ?? '', (int) ($_POST['specialty_id'] ?? 0));
+            $labels = group_labels_from_input($_POST);
+            $result = create_group(
+                $_POST['number'] ?? '',
+                (int) ($_POST['specialty_id'] ?? 0),
+                null,
+                $labels['is_professionality'],
+                $labels['is_general_education']
+            );
         } elseif ($action === 'add_attendance_reason') {
             $result = create_attendance_reason($_POST['reason_name'] ?? '');
         } elseif ($action === 'update_attendance_reason') {
@@ -544,6 +551,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                             <th>Специальность</th>
                             <th>Код</th>
                             <th>Куратор</th>
+                            <th>Метки</th>
                             <th class="table__actions-col">Действия</th>
                         </tr>
                     </thead>
@@ -555,6 +563,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                             $group['specialty_name'] ?? '',
                             $group['specialty_code'] ?? '',
                             $group['curator_name'] ?? '',
+                            group_labels_text($group),
                         ])));
                         ?>
                         <tr data-search-row data-search-text="<?= e($groupSearchText) ?>">
@@ -563,6 +572,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                             <td><?= e($group['specialty_name']) ?></td>
                             <td><code><?= e($group['specialty_code']) ?></code></td>
                             <td><?= e($group['curator_name'] ?? '—') ?></td>
+                            <td class="group-labels-cell"><?= render_group_labels_badges($group) ?></td>
                             <td class="table__actions">
                                 <a href="group_edit.php?id=<?= (int) $group['id'] ?>" class="btn btn--ghost btn--sm">Изменить</a>
                             </td>
@@ -596,9 +606,15 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                         ) ?>
                     </select>
                 </div>
-                <div class="form__group form__group--align-end">
-                    <button type="submit" class="btn btn--primary btn--block">Добавить</button>
-                </div>
+            </div>
+            <?php
+            $addGroupLabels = ($_POST['action'] ?? '') === 'add_group'
+                ? group_labels_from_input($_POST)
+                : ['is_professionality' => false, 'is_general_education' => false];
+            render_group_labels_fields($addGroupLabels);
+            ?>
+            <div class="form__actions">
+                <button type="submit" class="btn btn--primary">Добавить</button>
             </div>
         </form>
         <?php endif; ?>
