@@ -1,11 +1,11 @@
 -- База данных системы контроля успеваемости и посещаемости
 -- Выполните в phpMyAdmin или через консоль MySQL
 
-CREATE DATABASE IF NOT EXISTS kpk_attendance
+CREATE DATABASE IF NOT EXISTS spo_progress
     CHARACTER SET utf8mb4
     COLLATE utf8mb4_unicode_ci;
 
-USE kpk_attendance;
+USE spo_progress;
 
 CREATE TABLE IF NOT EXISTS users (
     id            INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
