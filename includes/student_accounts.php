@@ -6,6 +6,11 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/students.php';
 
+function curator_show_student_auth_data(): bool
+{
+    return false;
+}
+
 function transliterate_to_login(string $text): string
 {
     $map = [

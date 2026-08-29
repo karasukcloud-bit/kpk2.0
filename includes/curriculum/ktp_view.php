@@ -30,6 +30,7 @@ if ((string) ($item['academic_year'] ?? '') !== '') {
 
 $topics = get_ktp_topics($itemId);
 $ktpSummary = build_ktp_plan_summary($topics);
+$isProfessionality = curriculum_item_is_professionality($item);
 $backUrl = 'curriculum_edit.php?group_id=' . $groupId . '&year=' . urlencode($academicYear);
 
 $pageTitle = 'КТП — ' . ($item['subject_name'] ?? '');
@@ -109,11 +110,23 @@ $displayOrDash = static function (?string $value): string {
                     </thead>
                     <tbody>
                         <?php foreach ($topics as $index => $topic): ?>
-                        <tr>
-                            <td><?= $index + 1 ?></td>
-                            <td><?= e($topic['title']) ?></td>
+                        <?php $isSemesterMarker = ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? 'lecture')); ?>
+                        <tr class="<?= $isSemesterMarker ? 'ktp-row--semester-marker' : '' ?>">
+                            <td><?php
+                                $topicNum = ktp_topic_display_number($topics, $index);
+                                echo $topicNum !== null ? (int) $topicNum : '';
+                            ?></td>
+                            <td<?= $isSemesterMarker ? ' colspan="3"' : '' ?>>
+                                <?php if ($isSemesterMarker): ?>
+                                    <strong><?= e(ktp_semester_marker_title()) ?></strong>
+                                <?php else: ?>
+                                    <?= e($topic['title']) ?>
+                                <?php endif; ?>
+                            </td>
+                            <?php if (!$isSemesterMarker): ?>
                             <td><?= e(ktp_lesson_type_label((string) ($topic['lesson_type'] ?? 'lecture'))) ?></td>
-                            <td><?= e(rtrim(rtrim(number_format((float) ($topic['hours'] ?? 2), 1, '.', ''), '0'), '.')) ?></td>
+                            <td><?= e(format_ktp_topic_hours($topic, $isProfessionality)) ?></td>
+                            <?php endif; ?>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -129,6 +142,10 @@ $displayOrDash = static function (?string $value): string {
                     <dd><?= e((string) $ktpSummary['lecture_hours']) ?></dd>
                     <dt>Часов практических</dt>
                     <dd><?= e((string) $ktpSummary['practice_hours']) ?></dd>
+                    <?php if ($isProfessionality): ?>
+                    <dt>Часов профориентированных</dt>
+                    <dd><?= e((string) $ktpSummary['orientation_hours']) ?></dd>
+                    <?php endif; ?>
                     <dt>Часов промежуточной аттестации</dt>
                     <dd><?= e((string) $ktpSummary['attestation_hours']) ?></dd>
                     <dt>Часов самостоятельных работ</dt>

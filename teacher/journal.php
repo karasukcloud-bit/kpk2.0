@@ -134,6 +134,8 @@ $lessons = $assignment ? get_journal_lessons($itemId) : [];
 $grades = $assignment ? get_journal_grades($itemId) : [];
 $totals = $assignment ? build_journal_totals($students, $lessons, $grades) : [];
 $ktpProgress = $assignment ? get_ktp_topics_with_progress($itemId) : [];
+$journalItem = $itemId > 0 ? get_curriculum_item_by_id($itemId) : null;
+$isProfessionality = curriculum_item_is_professionality($journalItem);
 $defaultTopicId = $assignment ? get_next_ktp_topic_id($itemId, $lessons) : null;
 $coveredSummary = $assignment ? build_covered_material_summary($lessons) : null;
 $gradingConfig = get_grading_config();
@@ -236,14 +238,28 @@ require __DIR__ . '/../includes/header.php';
                                 </thead>
                                 <tbody>
                                     <?php foreach ($ktpProgress as $index => $topic): ?>
-                                    <?php $isIndependent = !ktp_is_journal_selectable_type((string) ($topic['lesson_type'] ?? 'lecture')); ?>
-                                    <tr class="<?= !empty($topic['completed']) ? 'ktp-row--done' : '' ?><?= $isIndependent ? ' ktp-row--independent' : '' ?>">
-                                        <td><?= $index + 1 ?></td>
+                                    <?php
+                                    $isSemesterMarker = ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? 'lecture'));
+                                    $isNonJournal = !ktp_is_journal_selectable_type((string) ($topic['lesson_type'] ?? 'lecture'));
+                                    $rowClass = !empty($topic['completed']) ? 'ktp-row--done' : '';
+                                    if ($isSemesterMarker) {
+                                        $rowClass .= ' ktp-row--semester-marker';
+                                    } elseif ($isNonJournal) {
+                                        $rowClass .= ' ktp-row--independent';
+                                    }
+                                    ?>
+                                    <tr class="<?= trim($rowClass) ?>">
+                                        <td><?php
+                                            $topicNum = ktp_topic_display_number($ktpProgress, $index);
+                                            echo $topicNum !== null ? (int) $topicNum : '';
+                                        ?></td>
                                         <td><?= e($topic['title']) ?></td>
                                         <td><?= e(ktp_lesson_type_label((string) $topic['lesson_type'])) ?></td>
-                                        <td><?= e(rtrim(rtrim(number_format((float) $topic['hours'], 1, '.', ''), '0'), '.')) ?></td>
+                                        <td><?= e(format_ktp_topic_hours($topic, $isProfessionality)) ?></td>
                                         <td>
-                                            <?php if ($isIndependent): ?>
+                                            <?php if ($isSemesterMarker): ?>
+                                                <span class="badge badge--semester-2">Разделитель</span>
+                                            <?php elseif ($isNonJournal): ?>
                                                 <span class="badge badge--inactive">Не для журнала</span>
                                             <?php elseif (!empty($topic['completed'])): ?>
                                                 <span class="badge badge--success">Пройдена</span>
@@ -575,6 +591,7 @@ require __DIR__ . '/../includes/header.php';
                     $isCompleted = !empty($topic['completed']);
                     $isIndependent = !ktp_is_journal_selectable_type((string) ($topic['lesson_type'] ?? 'lecture'));
                     $isDisabled = $isCompleted || $isIndependent;
+                    $topicNum = ktp_topic_display_number($ktpProgress, $index);
                     ?>
                     <option
                         value="<?= (int) $topic['id'] ?>"
@@ -582,9 +599,9 @@ require __DIR__ . '/../includes/header.php';
                         data-independent="<?= $isIndependent ? '1' : '0' ?>"
                         <?= $isDisabled ? 'disabled' : '' ?>
                     >
-                        <?= ($index + 1) ?>. <?= e($topic['title']) ?>
+                        <?= $topicNum !== null ? ((int) $topicNum . '. ') : '' ?><?= e($topic['title']) ?>
                         · <?= e(ktp_lesson_type_label((string) ($topic['lesson_type'] ?? 'lecture'))) ?>
-                        · <?= e(rtrim(rtrim(number_format((float) ($topic['hours'] ?? 2), 1, '.', ''), '0'), '.')) ?> ч.<?php
+                        · <?= e(format_ktp_topic_hours($topic, $isProfessionality)) ?> ч.<?php
                         if ($isIndependent): ?> · не для журнала<?php
                         elseif ($isCompleted): ?> · пройдена<?php
                         endif; ?>
@@ -597,7 +614,7 @@ require __DIR__ . '/../includes/header.php';
                 </p>
                 <?php else: ?>
                 <p class="text-muted form-hint">
-                    Пройденные темы и самостоятельная работа недоступны для выбора.
+                    Пройденные темы, самостоятельная работа и разделители семестра недоступны для выбора.
                     В журнал вносятся только занятия, которые отрабатывает преподаватель.
                 </p>
                 <?php endif; ?>

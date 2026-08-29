@@ -770,8 +770,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         const refreshNumbers = () => {
-            Array.from(ktpSortable.querySelectorAll('[data-ktp-num]')).forEach((cell, index) => {
-                cell.textContent = String(index + 1);
+            let num = 0;
+            Array.from(ktpSortable.querySelectorAll('[data-ktp-num]')).forEach((cell) => {
+                num += 1;
+                cell.textContent = String(num);
             });
         };
 
@@ -872,12 +874,86 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    document.querySelectorAll('[data-ktp-competency-block]').forEach((block) => {
+        const updateCompetencySelected = () => {
+            const okNode = block.querySelector('[data-ktp-selected-ok]');
+            const pkNode = block.querySelector('[data-ktp-selected-pk]');
+            const collectLabels = (selector) => Array.from(block.querySelectorAll(selector))
+                .filter((input) => input.checked)
+                .map((input) => input.dataset.competencyLabel || input.value);
+            const sortLabels = (labels) => labels.sort((left, right) => {
+                const leftNum = parseInt(String(left).replace(/\D/g, ''), 10) || 0;
+                const rightNum = parseInt(String(right).replace(/\D/g, ''), 10) || 0;
+                return leftNum - rightNum;
+            });
+
+            if (okNode) {
+                const okLabels = sortLabels(collectLabels('input[name="ok_codes[]"]'));
+                okNode.textContent = okLabels.length > 0 ? okLabels.join(', ') : '—';
+            }
+            if (pkNode) {
+                const pkLabels = sortLabels(collectLabels('input[name="pk_codes[]"]'));
+                pkNode.textContent = pkLabels.length > 0 ? pkLabels.join(', ') : '—';
+            }
+        };
+
+        block.addEventListener('change', (event) => {
+            if (event.target.matches('input[name="ok_codes[]"], input[name="pk_codes[]"]')) {
+                updateCompetencySelected();
+            }
+        });
+        updateCompetencySelected();
+    });
+
+    const ktpTopicForm = document.querySelector('[data-ktp-topic-form]');
+    const supportsKtpOrientation = (type) => type === 'lecture' || type === 'practice';
+
+    const syncKtpOrientationFields = (root) => {
+        if (!root || root.dataset.ktpProfessionality !== '1') {
+            return;
+        }
+        const typeSelect = root.querySelector('[data-ktp-lesson-type], [data-ktp-edit-type]');
+        const type = typeSelect ? typeSelect.value : 'lecture';
+        root.querySelectorAll('[data-ktp-orientation-field]').forEach((field) => {
+            field.hidden = !supportsKtpOrientation(type);
+        });
+    };
+
+    if (ktpTopicForm) {
+        const topicTypeSelect = ktpTopicForm.querySelector('[data-ktp-lesson-type]');
+        syncKtpOrientationFields(ktpTopicForm);
+        if (topicTypeSelect) {
+            topicTypeSelect.addEventListener('change', () => syncKtpOrientationFields(ktpTopicForm));
+        }
+    }
+
     const ktpEditModal = document.querySelector('[data-ktp-edit-modal]');
     if (ktpEditModal) {
         const titleInput = ktpEditModal.querySelector('[data-ktp-edit-title]');
         const typeSelect = ktpEditModal.querySelector('[data-ktp-edit-type]');
         const hoursInput = ktpEditModal.querySelector('[data-ktp-edit-hours]');
+        const orientationInput = ktpEditModal.querySelector('[data-ktp-edit-orientation]');
         const idInput = ktpEditModal.querySelector('[data-ktp-edit-id]');
+        const deadlineInput = ktpEditModal.querySelector('[data-ktp-edit-deadline]');
+        const controlSelect = ktpEditModal.querySelector('[data-ktp-edit-control]');
+        const competencyBlock = ktpEditModal.querySelector('[data-ktp-competency-block]');
+
+        const setCompetencyCheckboxes = (rawValue, selector) => {
+            if (!competencyBlock) {
+                return;
+            }
+            const values = String(rawValue || '')
+                .split(',')
+                .map((item) => item.trim())
+                .filter(Boolean);
+            competencyBlock.querySelectorAll(selector).forEach((input) => {
+                input.checked = values.includes(input.value);
+            });
+            const trigger = competencyBlock.querySelector('input[name="ok_codes[]"], input[name="pk_codes[]"]');
+            if (trigger) {
+                trigger.dispatchEvent(new Event('change', { bubbles: true }));
+            }
+        };
 
         const attestationLabels = {
             diff_credit: 'Промежуточная аттестация. Дифференцированный зачёт',
@@ -912,7 +988,19 @@ document.addEventListener('DOMContentLoaded', () => {
             if (hoursInput) {
                 hoursInput.value = button.dataset.hours || '1';
             }
+            if (orientationInput) {
+                orientationInput.value = button.dataset.orientationHours || '0';
+            }
+            if (deadlineInput) {
+                deadlineInput.value = button.dataset.deadline || '';
+            }
+            setCompetencyCheckboxes(button.dataset.okCodes || '', 'input[name="ok_codes[]"]');
+            setCompetencyCheckboxes(button.dataset.pkCodes || '', 'input[name="pk_codes[]"]');
+            if (controlSelect) {
+                controlSelect.value = button.dataset.controlForm || '';
+            }
             syncAttestationTitle();
+            syncKtpOrientationFields(ktpEditModal);
             if (titleInput && attestationLabels[typeSelect.value]) {
                 titleInput.value = attestationLabels[typeSelect.value];
             }
@@ -929,7 +1017,10 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         if (typeSelect) {
-            typeSelect.addEventListener('change', syncAttestationTitle);
+            typeSelect.addEventListener('change', () => {
+                syncAttestationTitle();
+                syncKtpOrientationFields(ktpEditModal);
+            });
         }
 
         document.querySelectorAll('[data-ktp-edit-open]').forEach((button) => {

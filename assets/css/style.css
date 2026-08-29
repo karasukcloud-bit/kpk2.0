@@ -2580,6 +2580,19 @@ body.modal-open {
     font-style: italic;
 }
 
+.ktp-row--semester-marker td {
+    background: #eff6ff;
+    border-top: 2px solid #3b82f6;
+    border-bottom: 2px solid #3b82f6;
+    font-weight: 600;
+    text-align: center;
+}
+
+.ktp-row--semester-marker .ktp-col-num,
+.ktp-row--semester-marker .ktp-col-handle {
+    color: #1d4ed8;
+}
+
 .ktp-view-table .badge {
     margin-right: 0.35rem;
 }
@@ -2653,7 +2666,6 @@ body.modal-open {
 }
 
 .ktp-edit-table .table__actions {
-    display: inline-flex;
     align-items: center;
     gap: 0.2rem;
     white-space: nowrap;
@@ -2661,6 +2673,99 @@ body.modal-open {
 
 .ktp-plan-summary {
     margin-top: 1rem;
+}
+
+.ktp-constructor-modes {
+    margin-bottom: 1.25rem;
+}
+
+.ktp-topic-row,
+.ktp-extra-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: flex-end;
+}
+
+.form__group--ktp-title {
+    flex: 1 1 20rem;
+    min-width: 12rem;
+}
+
+.form__group--compact {
+    flex: 0 0 auto;
+    width: auto;
+}
+
+.ktp-field-compact {
+    width: auto;
+    min-width: 7.5rem;
+    max-width: 13rem;
+}
+
+.ktp-competency-layout {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 11rem;
+    gap: 1rem;
+    align-items: start;
+    margin-top: 0.75rem;
+}
+
+.ktp-competency-pickers {
+    display: grid;
+    gap: 0.85rem;
+}
+
+.ktp-competency-checkboxes {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(4.5rem, max-content));
+    gap: 0.35rem 0.65rem;
+    margin-top: 0.35rem;
+}
+
+.ktp-competency-check {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.875rem;
+    white-space: nowrap;
+    cursor: pointer;
+}
+
+.ktp-competency-check input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+}
+
+.ktp-competency-selected {
+    padding: 0.65rem 0.75rem;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    background: #f8fafc;
+}
+
+.ktp-selected-block {
+    display: grid;
+    gap: 0.45rem;
+    margin-top: 0.35rem;
+    font-size: 0.875rem;
+    line-height: 1.35;
+}
+
+.ktp-selected-line strong {
+    display: block;
+    margin-bottom: 0.15rem;
+}
+
+.ktp-competency-cell {
+    min-width: 7rem;
+    max-width: 12rem;
+    font-size: 0.875rem;
+    line-height: 1.35;
+}
+
+.ktp-edit-table th,
+.ktp-edit-table td {
 }
 
 #attendance-reasons {

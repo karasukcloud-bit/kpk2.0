@@ -19,7 +19,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $result = create_student($groupId, $data);
 
         if ($result['success']) {
-            if (!empty($result['login']) && !empty($result['password'])) {
+            if (curator_show_student_auth_data() && !empty($result['login']) && !empty($result['password'])) {
                 $loginShow = (string) $result['login'];
                 if (substr($loginShow, -13) === '@student.local') {
                     $loginShow = substr($loginShow, 0, -13);
@@ -28,11 +28,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'success',
                     'Студент добавлен. Логин: ' . $loginShow . ' · Пароль: ' . $result['password']
                 );
-                header('Location: student_edit.php?id=' . (int) $result['id']);
-                exit;
+            } else {
+                flash_set('success', 'Студент добавлен в группу.');
             }
-            flash_set('success', 'Студент добавлен в группу.');
-            header('Location: group.php?group_id=' . $groupId);
+            header('Location: student_edit.php?id=' . (int) $result['id']);
             exit;
         }
 

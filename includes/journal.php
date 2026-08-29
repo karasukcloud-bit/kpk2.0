@@ -332,7 +332,7 @@ function save_journal_lesson_data(
         if (!ktp_is_journal_selectable_type((string) ($topic['lesson_type'] ?? 'lecture'))) {
             return [
                 'success' => false,
-                'error' => 'Самостоятельная работа не записывается в журнал — эти часы преподаватель не отрабатывает.',
+                'error' => 'Эта строка КТП не записывается в журнал.',
             ];
         }
 

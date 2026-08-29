@@ -58,7 +58,7 @@ require __DIR__ . '/../includes/header.php';
                             <td><?= (int) $subject['ktp_count'] ?></td>
                             <td class="table__actions">
                                 <a
-                                    href="ktp.php?item_id=<?= (int) $subject['curriculum_item_id'] ?>"
+                                    href="ktp_constructor.php?item_id=<?= (int) $subject['curriculum_item_id'] ?>&mode=manual"
                                     class="btn btn--primary btn--sm"
                                 >КТП</a>
                                 <a

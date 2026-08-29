@@ -111,6 +111,73 @@ function run_migrations(PDO $pdo): void
     ensure_practices_schema($pdo);
     ensure_gia_schema($pdo);
     ensure_study_groups_labels_schema($pdo);
+    ensure_ktp_constructor_schema($pdo);
+}
+
+function ensure_ktp_constructor_schema(PDO $pdo): void
+{
+    static $done = false;
+
+    if ($done) {
+        return;
+    }
+
+    $done = true;
+
+    if (!$pdo->query("SHOW TABLES LIKE 'ktp_topics'")->fetch()) {
+        return;
+    }
+
+    $addCol = static function (PDO $pdo, string $name, string $definition): void {
+        if ($pdo->query("SHOW COLUMNS FROM ktp_topics LIKE " . $pdo->quote($name))->fetch()) {
+            return;
+        }
+        $pdo->exec('ALTER TABLE ktp_topics ADD ' . $definition);
+    };
+
+    $addCol($pdo, 'deadline_date', 'deadline_date DATE NULL DEFAULT NULL AFTER hours');
+    $addCol($pdo, 'ok_codes', "ok_codes VARCHAR(255) NOT NULL DEFAULT '' AFTER deadline_date");
+    $addCol($pdo, 'pk_codes', "pk_codes VARCHAR(255) NOT NULL DEFAULT '' AFTER ok_codes");
+    $addCol(
+        $pdo,
+        'control_form',
+        "control_form ENUM('oral', 'written', 'test', 'practical') NULL DEFAULT NULL AFTER pk_codes"
+    );
+    $addCol($pdo, 'orientation_hours', 'orientation_hours DECIMAL(4,1) NOT NULL DEFAULT 0 AFTER hours');
+
+    if (!$pdo->query("SHOW TABLES LIKE 'ktp_work_programs'")->fetch()) {
+        $pdo->exec("
+            CREATE TABLE ktp_work_programs (
+                id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                curriculum_item_id INT UNSIGNED NOT NULL,
+                original_name      VARCHAR(255) NOT NULL,
+                stored_path        VARCHAR(500) NOT NULL,
+                uploaded_by        INT UNSIGNED NULL,
+                uploaded_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_ktp_wp_item (curriculum_item_id),
+                CONSTRAINT fk_ktp_wp_item
+                    FOREIGN KEY (curriculum_item_id) REFERENCES curriculum_items(id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_ktp_wp_user
+                    FOREIGN KEY (uploaded_by) REFERENCES users(id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+
+    $lessonTypeCol = $pdo->query("SHOW COLUMNS FROM ktp_topics LIKE 'lesson_type'")->fetch();
+    if ($lessonTypeCol) {
+        $typeDef = (string) ($lessonTypeCol['Type'] ?? '');
+        if (stripos($typeDef, 'semester_2') === false) {
+            $pdo->exec(
+                "ALTER TABLE ktp_topics
+                 MODIFY lesson_type ENUM(
+                    'lecture', 'practice', 'independent',
+                    'diff_credit', 'credit', 'exam', 'control', 'semester_2'
+                 ) NOT NULL DEFAULT 'lecture'"
+            );
+        }
+    }
 }
 
 function ensure_study_groups_labels_schema(PDO $pdo): void

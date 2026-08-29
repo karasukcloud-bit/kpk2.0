@@ -56,9 +56,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result['success']) {
                 flash_set(
                     'success',
-                    !empty($result['created'])
-                        ? ('Учётная запись создана. Логин: ' . $result['login'] . ' · Пароль: ' . $result['password'])
-                        : ('Учётная запись уже есть. Логин: ' . $result['login'])
+                    curator_show_student_auth_data()
+                        ? (!empty($result['created'])
+                            ? ('Учётная запись создана. Логин: ' . $result['login'] . ' · Пароль: ' . $result['password'])
+                            : ('Учётная запись уже есть. Логин: ' . $result['login']))
+                        : (!empty($result['created'])
+                            ? 'Учётная запись создана.'
+                            : 'Учётная запись уже есть.')
                 );
                 header('Location: student_edit.php?id=' . $id);
                 exit;
@@ -69,7 +73,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($result['success']) {
                 flash_set(
                     'success',
-                    'Новый пароль: ' . $result['password'] . ' (логин: ' . $result['login'] . ')'
+                    curator_show_student_auth_data()
+                        ? ('Новый пароль: ' . $result['password'] . ' (логин: ' . $result['login'] . ')')
+                        : 'Новый пароль сгенерирован.'
                 );
                 header('Location: student_edit.php?id=' . $id);
                 exit;
@@ -192,6 +198,7 @@ $studentAvatar = normalize_avatar_value((string) ($account['avatar'] ?? 'icon:pe
                 <dd><?= !empty($student['without_parental_care']) ? 'Да' : 'Нет' ?></dd>
             </dl>
 
+            <?php if (curator_show_student_auth_data()): ?>
             <div class="student-creds">
                 <h3>Учётная запись студента</h3>
                 <?php if ($account): ?>
@@ -219,6 +226,7 @@ $studentAvatar = normalize_avatar_value((string) ($account['avatar'] ?? 'icon:pe
                     </form>
                 <?php endif; ?>
             </div>
+            <?php endif; ?>
 
             <div class="form__actions">
                 <button type="button" class="btn btn--primary" data-profile-edit-open>Редактировать</button>

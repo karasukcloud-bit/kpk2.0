@@ -162,9 +162,20 @@ require __DIR__ . '/../header.php';
                             </thead>
                             <tbody>
                                 <?php foreach ($topics as $index => $topic): ?>
-                                <tr class="<?= !empty($topic['completed']) ? 'ktp-row--done' : '' ?>">
-                                    <td><?= $index + 1 ?></td>
-                                    <td><?= e($topic['title']) ?></td>
+                                <?php $isSemesterMarker = ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? 'lecture')); ?>
+                                <tr class="<?= !empty($topic['completed']) ? 'ktp-row--done' : '' ?><?= $isSemesterMarker ? ' ktp-row--semester-marker' : '' ?>">
+                                    <td><?php
+                                        $topicNum = ktp_topic_display_number($topics, $index);
+                                        echo $topicNum !== null ? (int) $topicNum : '';
+                                    ?></td>
+                                    <td<?= $isSemesterMarker ? ' colspan="4"' : '' ?>>
+                                        <?php if ($isSemesterMarker): ?>
+                                            <strong><?= e(ktp_semester_marker_title()) ?></strong>
+                                        <?php else: ?>
+                                            <?= e($topic['title']) ?>
+                                        <?php endif; ?>
+                                    </td>
+                                    <?php if (!$isSemesterMarker): ?>
                                     <td><?= e(ktp_lesson_type_label((string) ($topic['lesson_type'] ?? 'lecture'))) ?></td>
                                     <td><?= e($formatHours($topic['hours'] ?? 0)) ?></td>
                                     <td>
@@ -179,6 +190,7 @@ require __DIR__ . '/../header.php';
                                             <span class="text-muted">Не пройдена</span>
                                         <?php endif; ?>
                                     </td>
+                                    <?php endif; ?>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
