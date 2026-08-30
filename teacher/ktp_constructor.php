@@ -32,8 +32,8 @@ if ($itemId > 0 && $item === null) {
     exit;
 }
 
-if ($itemId > 0 && $mode !== 'manual' && $mode !== 'rp' && $mode !== 'rows' && $mode !== 'word') {
-    $mode = 'manual';
+if ($itemId > 0 && ($mode === 'manual' || ($mode !== 'rp' && $mode !== 'rows' && $mode !== 'word'))) {
+    $mode = 'rows';
 }
 
 if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -41,7 +41,7 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
     } else {
         $action = $_POST['action'] ?? '';
-        $redirect = 'ktp_constructor.php?item_id=' . $itemId . '&mode=' . urlencode($mode !== '' ? $mode : 'manual');
+        $redirect = 'ktp_constructor.php?item_id=' . $itemId . '&mode=' . urlencode($mode !== '' ? $mode : 'rows');
 
         if ($action === 'upload_work_program') {
             $result = save_ktp_work_program($itemId, $_FILES['work_program'] ?? []);
@@ -89,114 +89,28 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             flash_set('success', 'Предпросмотр импорта отменён.');
             header('Location: ' . $redirect);
             exit;
-        } elseif ($action === 'add_ktp_semester_marker' && ($mode === 'manual' || $mode === 'rows')) {
-            $result = add_ktp_semester_marker($itemId);
+        } elseif ($action === 'add_ktp_semester_marker' && $mode === 'rows') {
+            $markerType = (string) ($_POST['marker_type'] ?? 'semester_2');
+            $result = add_ktp_semester_marker($itemId, $markerType);
             if ($result['success']) {
-                flash_set('success', 'Разделитель 2 семестра добавлен в КТП.');
+                flash_set('success', 'Разделитель «' . ktp_semester_marker_title($markerType) . '» добавлен в КТП.');
                 header('Location: ' . $redirect);
                 exit;
             }
             $error = $result['error'];
-        } elseif ($mode === 'manual') {
-            if ($action === 'add_ktp_topic') {
-                $result = add_ktp_topic(
-                    $itemId,
-                    $_POST['ktp_title'] ?? '',
-                    $_POST['ktp_lesson_type'] ?? 'lecture',
-                    $_POST['ktp_hours'] ?? 2,
-                    true,
-                    $_POST
-                );
-            } elseif ($action === 'add_ktp_attestation') {
-                $result = add_ktp_attestation(
-                    $itemId,
-                    $_POST['attestation_type'] ?? '',
-                    $_POST['attestation_hours'] ?? 1
-                );
-            } elseif ($action === 'update_ktp_topic') {
-                $topicId = (int) ($_POST['topic_id'] ?? 0);
-                $topic = get_ktp_topic_by_id($topicId);
-                if ($topic === null || (int) $topic['curriculum_item_id'] !== $itemId) {
-                    $result = ['success' => false, 'error' => 'Тема не найдена.'];
-                } else {
-                    $lessonType = (string) ($_POST['ktp_lesson_type'] ?? 'lecture');
-                    $result = update_ktp_topic(
-                        $topicId,
-                        $_POST['ktp_title'] ?? '',
-                        $lessonType,
-                        $_POST['ktp_hours'] ?? 1,
-                        $lessonType !== 'exam',
-                        $_POST
-                    );
-                }
-            } elseif ($action === 'delete_ktp_topic') {
-                $topicId = (int) ($_POST['topic_id'] ?? 0);
-                $topic = get_ktp_topic_by_id($topicId);
-                if ($topic === null || (int) $topic['curriculum_item_id'] !== $itemId) {
-                    $result = ['success' => false, 'error' => 'Тема не найдена.'];
-                } else {
-                    $result = delete_ktp_topic($topicId);
-                }
-            } else {
-                $result = ['success' => false, 'error' => 'Неизвестное действие.'];
-            }
-
-            if (isset($result) && $result['success']) {
-                if ($action === 'add_ktp_topic') {
-                    $count = (int) ($result['count'] ?? 1);
-                    $msg = $count > 1
-                        ? ('Добавлено строк темы: ' . $count . ' (по 1 часу).')
-                        : 'Тема добавлена в КТП.';
-                } elseif ($action === 'add_ktp_attestation') {
-                    $count = (int) ($result['count'] ?? 1);
-                    $msg = $count > 1
-                        ? ('Добавлена промежуточная аттестация: ' . $count . ' стр.')
-                        : 'Промежуточная аттестация добавлена.';
-                } elseif ($action === 'update_ktp_topic') {
-                    $added = (int) ($result['added'] ?? 0);
-                    $msg = $added > 0
-                        ? ('Тема обновлена, добавлено строк: ' . $added . ' (по 1 часу).')
-                        : 'Тема обновлена.';
-                } else {
-                    $msg = 'Строка КТП удалена.';
-                }
-                flash_set('success', $msg);
-                if ($action === 'add_ktp_topic') {
-                    ktp_store_add_form_draft($itemId, 'topic', $_POST);
-                } elseif ($action === 'add_ktp_attestation') {
-                    ktp_store_add_form_draft($itemId, 'attestation', $_POST);
-                }
-                header('Location: ' . $redirect);
-                exit;
-            }
-
-            if (isset($result)) {
-                $error = $result['error'];
-            }
         }
     }
 }
 
-$isTableMode = $itemId > 0 && ($mode === 'manual' || $mode === 'rows');
-if ($isTableMode && $mode === 'rows') {
+$isTableMode = $itemId > 0 && $mode === 'rows';
+if ($isTableMode) {
     ensure_ktp_has_starter_row($itemId);
 }
 $topics = $isTableMode ? get_ktp_topics_with_progress($itemId) : [];
 $ktpSummary = $isTableMode ? build_ktp_plan_summary($topics) : [];
 $workProgram = $itemId > 0 && $mode === 'rp' ? get_ktp_work_program($itemId) : null;
 $wordImportPreview = $itemId > 0 && $mode === 'word' ? ktp_word_import_get_preview($itemId) : null;
-$ktpTopicFormDraft = $itemId > 0 ? ktp_get_add_form_draft($itemId, 'topic') : [];
-$ktpAttestationFormDraft = $itemId > 0 ? ktp_get_add_form_draft($itemId, 'attestation') : [];
 $ktpColumnWidths = $itemId > 0 ? get_ktp_column_widths($itemId) : null;
-
-if ($itemId > 0 && $mode === 'manual' && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($error)) {
-    $failedAction = (string) ($_POST['action'] ?? '');
-    if ($failedAction === 'add_ktp_topic') {
-        $ktpTopicFormDraft = array_merge($ktpTopicFormDraft, $_POST);
-    } elseif ($failedAction === 'add_ktp_attestation') {
-        $ktpAttestationFormDraft = array_merge($ktpAttestationFormDraft, $_POST);
-    }
-}
 
 $success = flash_get('success');
 $pageTitle = $item
@@ -270,10 +184,6 @@ require __DIR__ . '/../includes/header.php';
 
             <nav class="journal-subtabs ktp-constructor-modes">
                 <a
-                    href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=manual"
-                    class="journal-subtabs__item<?= $mode === 'manual' ? ' journal-subtabs__item--active' : '' ?>"
-                >Ручной</a>
-                <a
                     href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=rows"
                     class="journal-subtabs__item<?= $mode === 'rows' ? ' journal-subtabs__item--active' : '' ?>"
                 >Строки</a>
@@ -287,9 +197,7 @@ require __DIR__ . '/../includes/header.php';
                 >С загрузкой РП</a>
             </nav>
 
-            <?php if ($mode === 'manual'): ?>
-                <?php require __DIR__ . '/../includes/ktp/manual_editor.php'; ?>
-            <?php elseif ($mode === 'rows'): ?>
+            <?php if ($mode === 'rows'): ?>
                 <?php require __DIR__ . '/../includes/ktp/rows_editor.php'; ?>
             <?php elseif ($mode === 'word'): ?>
                 <?php require __DIR__ . '/../includes/ktp/word_import_ui.php'; ?>

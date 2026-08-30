@@ -376,7 +376,7 @@ function ktp_pdf_render_html(array $document, ?array $timesFonts = null): string
                     echo $topicNum !== null ? (int) $topicNum : '';
                 ?></td>
                 <?php if ($isSemesterMarker): ?>
-                <td colspan="6"><strong><?= htmlspecialchars(ktp_semester_marker_title(), ENT_QUOTES, 'UTF-8') ?></strong></td>
+                <td colspan="6"><strong><?= htmlspecialchars(ktp_semester_marker_title((string) ($topic['lesson_type'] ?? 'semester_2')), ENT_QUOTES, 'UTF-8') ?></strong></td>
                 <?php else: ?>
                 <td><?= htmlspecialchars((string) $topic['title'], ENT_QUOTES, 'UTF-8') ?></td>
                 <td class="col-type"><?= htmlspecialchars(ktp_lesson_type_label((string) $topic['lesson_type']), ENT_QUOTES, 'UTF-8') ?></td>

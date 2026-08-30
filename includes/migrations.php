@@ -168,12 +168,13 @@ function ensure_ktp_constructor_schema(PDO $pdo): void
     $lessonTypeCol = $pdo->query("SHOW COLUMNS FROM ktp_topics LIKE 'lesson_type'")->fetch();
     if ($lessonTypeCol) {
         $typeDef = (string) ($lessonTypeCol['Type'] ?? '');
-        if (stripos($typeDef, 'semester_2') === false) {
+        if (stripos($typeDef, 'semester_1') === false || stripos($typeDef, 'semester_2') === false) {
             $pdo->exec(
                 "ALTER TABLE ktp_topics
                  MODIFY lesson_type ENUM(
                     'lecture', 'practice', 'independent',
-                    'diff_credit', 'credit', 'exam', 'control', 'semester_2'
+                    'diff_credit', 'credit', 'exam', 'control',
+                    'semester_1', 'semester_2'
                  ) NOT NULL DEFAULT 'lecture'"
             );
         }

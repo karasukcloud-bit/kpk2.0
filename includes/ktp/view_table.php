@@ -45,7 +45,7 @@ $isProfessionality = curriculum_item_is_professionality($item);
                         echo $topicNum !== null ? (int) $topicNum : '';
                     ?></td>
                     <?php if ($isSemesterMarker): ?>
-                    <td colspan="6"><strong><?= e(ktp_semester_marker_title()) ?></strong></td>
+                    <td colspan="6"><strong><?= e(ktp_semester_marker_title((string) ($topic['lesson_type'] ?? 'semester_2'))) ?></strong></td>
                     <?php else: ?>
                     <td class="ktp-rows-title-cell"><?= e($topic['title']) ?></td>
                     <td><?= e(ktp_lesson_type_label((string) $topic['lesson_type'])) ?></td>

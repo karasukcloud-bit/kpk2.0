@@ -118,7 +118,7 @@ $displayOrDash = static function (?string $value): string {
                             ?></td>
                             <td<?= $isSemesterMarker ? ' colspan="3"' : '' ?>>
                                 <?php if ($isSemesterMarker): ?>
-                                    <strong><?= e(ktp_semester_marker_title()) ?></strong>
+                                    <strong><?= e(ktp_semester_marker_title((string) ($topic['lesson_type'] ?? 'semester_2'))) ?></strong>
                                 <?php else: ?>
                                     <?= e($topic['title']) ?>
                                 <?php endif; ?>

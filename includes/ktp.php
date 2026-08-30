@@ -15,6 +15,7 @@ function ktp_lesson_type_label(string $type): string
         'credit' => 'Зачёт',
         'exam' => 'Экзамен',
         'control' => 'Контрольная работа',
+        'semester_1' => '1 семестр (полугодие)',
         'semester_2' => '2 семестр (полугодие)',
     ];
 
@@ -31,22 +32,39 @@ function ktp_is_attestation_type(string $type): bool
     return in_array($type, ktp_attestation_types(), true);
 }
 
+function ktp_semester_marker_types(): array
+{
+    return ['semester_1', 'semester_2'];
+}
+
 /** Темы, которые преподаватель отрабатывает и может вносить в журнал. */
 function ktp_is_journal_selectable_type(string $type): bool
 {
     $type = normalize_ktp_lesson_type($type);
 
-    return $type !== 'independent' && $type !== 'semester_2';
+    return $type !== 'independent' && !ktp_is_semester_marker_type($type);
 }
 
 function ktp_is_semester_marker_type(string $type): bool
 {
-    return normalize_ktp_lesson_type($type) === 'semester_2';
+    return in_array(normalize_ktp_lesson_type($type), ktp_semester_marker_types(), true);
 }
 
-function ktp_semester_marker_title(): string
+function ktp_semester_marker_title(string $type = 'semester_2'): string
 {
+    $type = normalize_ktp_lesson_type($type);
+    if ($type === 'semester_1') {
+        return '1 семестр (полугодие)';
+    }
+
     return '2 семестр (полугодие)';
+}
+
+function normalize_ktp_semester_marker_type(string $type): ?string
+{
+    $type = normalize_ktp_lesson_type($type);
+
+    return ktp_is_semester_marker_type($type) ? $type : null;
 }
 
 function ktp_topic_display_number(array $topics, int $index): ?int
@@ -79,50 +97,110 @@ function curriculum_item_ends_after_attestation(?array $item): bool
     return ($item['semester'] ?? '') === '1';
 }
 
-function has_ktp_semester_marker(int $curriculumItemId): bool
+function has_ktp_semester_marker(int $curriculumItemId, ?string $markerType = null): bool
 {
-    $stmt = db()->prepare(
-        "SELECT id FROM ktp_topics
-         WHERE curriculum_item_id = ? AND lesson_type = 'semester_2'
-         LIMIT 1"
-    );
-    $stmt->execute([$curriculumItemId]);
+    $markerType = $markerType !== null ? normalize_ktp_semester_marker_type($markerType) : null;
+    if ($markerType !== null) {
+        $stmt = db()->prepare(
+            'SELECT id FROM ktp_topics
+             WHERE curriculum_item_id = ? AND lesson_type = ?
+             LIMIT 1'
+        );
+        $stmt->execute([$curriculumItemId, $markerType]);
+    } else {
+        $stmt = db()->prepare(
+            "SELECT id FROM ktp_topics
+             WHERE curriculum_item_id = ? AND lesson_type IN ('semester_1', 'semester_2')
+             LIMIT 1"
+        );
+        $stmt->execute([$curriculumItemId]);
+    }
 
     return (bool) $stmt->fetch();
 }
 
-function add_ktp_semester_marker(int $curriculumItemId): array
+function insert_ktp_semester_marker(
+    int $curriculumItemId,
+    string $markerType = 'semester_2',
+    ?int $afterTopicId = null
+): array {
+    $item = get_curriculum_item_by_id($curriculumItemId);
+    if ($item === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    $markerType = normalize_ktp_semester_marker_type($markerType);
+    if ($markerType === null) {
+        return ['success' => false, 'error' => 'Некорректный тип разделителя семестра.'];
+    }
+
+    $pdo = db();
+    $sortOrder = 1;
+
+    if ($afterTopicId !== null && $afterTopicId > 0) {
+        $after = get_ktp_topic_by_id($afterTopicId);
+        if ($after === null || (int) $after['curriculum_item_id'] !== $curriculumItemId) {
+            return ['success' => false, 'error' => 'Строка для вставки не найдена.'];
+        }
+        $sortOrder = (int) $after['sort_order'] + 1;
+        $pdo->prepare(
+            'UPDATE ktp_topics SET sort_order = sort_order + 1
+             WHERE curriculum_item_id = ? AND sort_order >= ?'
+        )->execute([$curriculumItemId, $sortOrder]);
+    } else {
+        $stmt = $pdo->prepare(
+            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ktp_topics WHERE curriculum_item_id = ?'
+        );
+        $stmt->execute([$curriculumItemId]);
+        $sortOrder = (int) $stmt->fetchColumn();
+    }
+
+    $title = ktp_semester_marker_title($markerType);
+    $pdo->prepare(
+        'INSERT INTO ktp_topics
+            (curriculum_item_id, title, lesson_type, hours, orientation_hours, deadline_date, ok_codes, pk_codes, control_form, sort_order)
+         VALUES (?, ?, ?, 0, 0, NULL, \'\', \'\', NULL, ?)'
+    )->execute([$curriculumItemId, $title, $markerType, $sortOrder]);
+
+    $id = (int) $pdo->lastInsertId();
+    $topic = get_ktp_topic_by_id($id);
+    if ($topic === null) {
+        return ['success' => false, 'error' => 'Не удалось создать разделитель.'];
+    }
+
+    $topic['completed'] = false;
+
+    return [
+        'success' => true,
+        'id' => $id,
+        'topic' => ktp_topic_payload_for_json($topic, curriculum_item_is_professionality($item)),
+    ];
+}
+
+function add_ktp_semester_marker(int $curriculumItemId, string $markerType = 'semester_2'): array
 {
     $item = get_curriculum_item_by_id($curriculumItemId);
     if ($item === null) {
         return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
     }
 
-    if (!curriculum_item_spans_two_semesters($item)) {
+    $markerType = normalize_ktp_semester_marker_type($markerType) ?? 'semester_2';
+
+    if ($markerType === 'semester_2' && !curriculum_item_spans_two_semesters($item)) {
         return [
             'success' => false,
             'error' => 'Разделитель 2 семестра доступен только для предметов на оба семестра.',
         ];
     }
 
-    if (has_ktp_semester_marker($curriculumItemId)) {
-        return ['success' => false, 'error' => 'Разделитель 2 семестра уже добавлен в КТП.'];
+    if (has_ktp_semester_marker($curriculumItemId, $markerType)) {
+        return [
+            'success' => false,
+            'error' => 'Разделитель «' . ktp_semester_marker_title($markerType) . '» уже добавлен в КТП.',
+        ];
     }
 
-    $stmt = db()->prepare(
-        'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ktp_topics WHERE curriculum_item_id = ?'
-    );
-    $stmt->execute([$curriculumItemId]);
-    $sortOrder = (int) $stmt->fetchColumn();
-
-    $stmt = db()->prepare(
-        'INSERT INTO ktp_topics
-            (curriculum_item_id, title, lesson_type, hours, deadline_date, ok_codes, pk_codes, control_form, sort_order)
-         VALUES (?, ?, \'semester_2\', 0, NULL, \'\', \'\', NULL, ?)'
-    );
-    $stmt->execute([$curriculumItemId, ktp_semester_marker_title(), $sortOrder]);
-
-    return ['success' => true, 'id' => (int) db()->lastInsertId()];
+    return insert_ktp_semester_marker($curriculumItemId, $markerType, null);
 }
 
 function curriculum_item_is_professionality(?array $item): bool
@@ -197,6 +275,7 @@ function normalize_ktp_lesson_type(string $type): string
         'credit',
         'exam',
         'control',
+        'semester_1',
         'semester_2',
     ];
 
@@ -699,15 +778,20 @@ function split_ktp_topics_by_semester_half(array $topics): array
 {
     $first = [];
     $second = [];
-    $inSecond = false;
+    $half = 1;
 
     foreach ($topics as $topic) {
-        if (ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? ''))) {
-            $inSecond = true;
+        $type = normalize_ktp_lesson_type((string) ($topic['lesson_type'] ?? ''));
+        if ($type === 'semester_1') {
+            $half = 1;
+            continue;
+        }
+        if ($type === 'semester_2') {
+            $half = 2;
             continue;
         }
 
-        if ($inSecond) {
+        if ($half === 2) {
             $second[] = $topic;
         } else {
             $first[] = $topic;
@@ -788,15 +872,46 @@ function ktp_workload_op_hours(array $bucket): float
     );
 }
 
+function ktp_topics_have_semester_split(array $topics): bool
+{
+    foreach ($topics as $topic) {
+        if (normalize_ktp_lesson_type((string) ($topic['lesson_type'] ?? '')) === 'semester_2') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function ktp_workload_pair_slots(array $slots): array
+{
+    $slots = array_values(array_map('intval', $slots));
+    if (count($slots) >= 2) {
+        return [$slots[0], $slots[1]];
+    }
+
+    $first = $slots[0] ?? 1;
+    $pair = $first % 2 === 1 ? $first + 1 : $first - 1;
+    if ($pair < 1 || $pair > 8) {
+        $pair = $first % 2 === 1 ? min(8, $first + 1) : max(1, $first - 1);
+    }
+
+    return $first % 2 === 1 ? [$first, $pair] : [$pair, $first];
+}
+
 function ktp_workload_semester_buckets(array $item, array $topics): array
 {
     $slots = ktp_workload_semester_slots($item);
     $split = split_ktp_topics_by_semester_half($topics);
+    $shouldSplit = ktp_topics_have_semester_split($topics)
+        || (count($slots) === 2 && curriculum_item_spans_two_semesters($item));
 
-    if (count($slots) === 2 && curriculum_item_spans_two_semesters($item)) {
+    if ($shouldSplit) {
+        $pairSlots = ktp_workload_pair_slots($slots);
+
         return [
-            $slots[0] => accumulate_ktp_workload_bucket($split['first']),
-            $slots[1] => accumulate_ktp_workload_bucket($split['second']),
+            $pairSlots[0] => accumulate_ktp_workload_bucket($split['first']),
+            $pairSlots[1] => accumulate_ktp_workload_bucket($split['second']),
         ];
     }
 
@@ -941,6 +1056,24 @@ function get_ktp_topics(int $curriculumItemId): array
     $stmt->execute([$curriculumItemId]);
 
     return $stmt->fetchAll();
+}
+
+function get_ktp_topics_in_ids_order(int $curriculumItemId, array $orderedIds): array
+{
+    $orderedIds = array_values(array_unique(array_map('intval', $orderedIds)));
+    $byId = [];
+    foreach (get_ktp_topics($curriculumItemId) as $topic) {
+        $byId[(int) $topic['id']] = $topic;
+    }
+
+    $ordered = [];
+    foreach ($orderedIds as $topicId) {
+        if (isset($byId[$topicId])) {
+            $ordered[] = $byId[$topicId];
+        }
+    }
+
+    return $ordered !== [] ? $ordered : array_values($byId);
 }
 
 function get_ktp_topic_by_id(int $topicId): ?array
@@ -1262,7 +1395,7 @@ function ktp_topic_payload_for_json(array $topic, bool $isProfessionality = fals
         'ok_label' => format_ktp_competency_codes_list($topic['ok_codes'] ?? null),
         'pk_label' => format_ktp_competency_codes_list($topic['pk_codes'] ?? null),
         'control_label' => ktp_control_form_label($topic['control_form'] ?? null),
-        'type_label' => $isMarker ? ktp_semester_marker_title() : ktp_lesson_type_label($type),
+        'type_label' => $isMarker ? ktp_semester_marker_title($type) : ktp_lesson_type_label($type),
     ];
 }
 

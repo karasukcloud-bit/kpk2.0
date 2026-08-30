@@ -84,7 +84,7 @@ $formatHours = static function ($hours): string {
                     ?></td>
                     <td<?= $isSemesterMarker ? ' colspan="6"' : '' ?>>
                         <?php if ($isSemesterMarker): ?>
-                            <strong><?= e(ktp_semester_marker_title()) ?></strong>
+                            <strong><?= e(ktp_semester_marker_title((string) ($topic['lesson_type'] ?? 'semester_2'))) ?></strong>
                         <?php else: ?>
                             <?= e($topic['title']) ?>
                         <?php endif; ?>
@@ -259,22 +259,32 @@ $formatHours = static function ($hours): string {
     Предмет ведётся только в 1 семестре. После промежуточной аттестации журнал по этому предмету не заполняется.
 </p>
 <?php elseif (curriculum_item_spans_two_semesters($item)): ?>
-<h3 class="subsection-title">2 семестр (полугодие)</h3>
+<h3 class="subsection-title">Разделители семестров</h3>
 <p class="text-muted form-hint">
-    Для предметов на оба семестра после промежуточной аттестации добавьте разделитель начала 2 семестра,
+    Для предметов на оба семестра добавьте разделители начала 1 и 2 семестра,
     затем продолжайте заполнять темы КТП.
 </p>
-<?php if (has_ktp_semester_marker($itemId)): ?>
-<p class="text-muted">Разделитель 2 семестра уже добавлен в таблицу КТП.</p>
-<?php else: ?>
-<form method="post" class="form">
+<div class="form__actions">
+<?php if (!has_ktp_semester_marker($itemId, 'semester_1')): ?>
+<form method="post" class="form form--inline">
     <?= csrf_field() ?>
     <input type="hidden" name="action" value="add_ktp_semester_marker">
-    <div class="form__actions">
-        <button type="submit" class="btn btn--primary">Добавить «2 семестр (полугодие)»</button>
-    </div>
+    <input type="hidden" name="marker_type" value="semester_1">
+    <button type="submit" class="btn btn--ghost">Добавить «1 семестр (полугодие)»</button>
 </form>
 <?php endif; ?>
+<?php if (!has_ktp_semester_marker($itemId, 'semester_2')): ?>
+<form method="post" class="form form--inline">
+    <?= csrf_field() ?>
+    <input type="hidden" name="action" value="add_ktp_semester_marker">
+    <input type="hidden" name="marker_type" value="semester_2">
+    <button type="submit" class="btn btn--primary">Добавить «2 семестр (полугодие)»</button>
+</form>
+<?php endif; ?>
+<?php if (has_ktp_semester_marker($itemId, 'semester_1') && has_ktp_semester_marker($itemId, 'semester_2')): ?>
+<p class="text-muted">Разделители 1 и 2 семестра уже добавлены в таблицу КТП.</p>
+<?php endif; ?>
+</div>
 <?php endif; ?>
 
 <div class="modal" data-ktp-edit-modal data-ktp-professionality="<?= $isProfessionality ? '1' : '0' ?>" hidden>

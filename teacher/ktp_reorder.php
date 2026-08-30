@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/profile.php';
 require_once __DIR__ . '/../includes/ktp.php';
+require_once __DIR__ . '/../includes/ktp/summary_table.php';
 
 require_teacher_panel();
 
@@ -39,9 +40,20 @@ if (!is_array($orderRaw)) {
     $orderRaw = [];
 }
 
-$result = reorder_ktp_topics($itemId, $orderRaw);
+$orderedIds = array_values(array_unique(array_map('intval', $orderRaw)));
+$result = reorder_ktp_topics($itemId, $orderedIds);
+if ($result['success']) {
+    $item = get_curriculum_item_by_id($itemId);
+    if ($item !== null) {
+        // Считаем по порядку из запроса — совпадает с DOM после перетаскивания.
+        $result['workload'] = build_ktp_workload_client_payload(
+            $item,
+            get_ktp_topics_in_ids_order($itemId, $orderedIds)
+        );
+    }
+}
 if (!$result['success']) {
     http_response_code(400);
 }
 
-echo json_encode($result);
+echo json_encode($result, JSON_UNESCAPED_UNICODE);

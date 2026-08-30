@@ -70,7 +70,7 @@ require __DIR__ . '/../includes/header.php';
                 <a href="ktp_pdf.php?item_id=<?= $itemId ?>" class="btn btn--secondary btn--sm">Скачать PDF</a>
                 <button type="button" class="btn btn--ghost btn--sm" data-ktp-print>Печать</button>
                 <?php endif; ?>
-                <a href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=manual" class="btn btn--primary btn--sm">Редактировать</a>
+                <a href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=rows" class="btn btn--primary btn--sm">Редактировать</a>
             </div>
         </div>
 

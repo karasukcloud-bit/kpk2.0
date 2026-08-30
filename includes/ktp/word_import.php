@@ -256,9 +256,16 @@ function ktp_word_is_skip_row(string $title, float $hours, string $nameCell): bo
     return false;
 }
 
-function ktp_word_is_semester_marker(string $text): bool
+function ktp_word_is_semester_marker(string $text): ?string
 {
-    return (bool) preg_match('/\b2\s*[-]?\s*семестр/ui', $text);
+    if (preg_match('/\b1\s*[-]?\s*семестр/ui', $text)) {
+        return 'semester_1';
+    }
+    if (preg_match('/\b2\s*[-]?\s*семестр/ui', $text)) {
+        return 'semester_2';
+    }
+
+    return null;
 }
 
 function ktp_word_row_value(array $row, int $index): string
@@ -285,10 +292,11 @@ function ktp_word_parse_table_rows(array $rows, int $headerRow, array $map): arr
             $title = $lastTitle;
         }
 
-        if (ktp_word_is_semester_marker($nameCell . ' ' . $contentCell . ' ' . $title)) {
+        $markerType = ktp_word_is_semester_marker($nameCell . ' ' . $contentCell . ' ' . $title);
+        if ($markerType !== null) {
             $parsed[] = [
-                'title' => ktp_semester_marker_title(),
-                'lesson_type' => 'semester_2',
+                'title' => ktp_semester_marker_title($markerType),
+                'lesson_type' => $markerType,
                 'hours' => 0.0,
                 'orientation_hours' => 0.0,
                 'ok_codes' => '',

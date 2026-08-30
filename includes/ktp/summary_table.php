@@ -195,3 +195,32 @@ function render_ktp_plan_summary_table(array $item, array $topics, bool $liveUpd
     <?php if (!$forPdf): ?></div><?php endif; ?>
     <?php
 }
+
+function build_ktp_workload_client_payload(array $item, array $topics): array
+{
+    $data = build_ktp_workload_table_data($item, $topics);
+    $isProfessionality = (bool) $data['is_professionality'];
+    $semesterSlots = array_values(array_map('intval', $data['semester_slots']));
+    $rows = [];
+
+    foreach ($data['rows'] as $row) {
+        $rowKey = (string) $row['key'];
+        $semesters = [];
+        for ($semester = 1; $semester <= 8; $semester++) {
+            $semesters[(string) $semester] = in_array($semester, $semesterSlots, true)
+                ? format_ktp_workload_semester_display($row, $isProfessionality, $semester)
+                : '—';
+        }
+        $rows[$rowKey] = [
+            'course' => format_ktp_workload_display($row, $isProfessionality),
+            'semesters' => $semesters,
+        ];
+    }
+
+    return [
+        'semester_slots' => $semesterSlots,
+        'split_semesters' => count($semesterSlots) > 1,
+        'professionality' => $isProfessionality,
+        'rows' => $rows,
+    ];
+}

@@ -629,6 +629,7 @@ body {
 
 .table__actions {
     white-space: nowrap;
+    text-align: center;
 }
 
 .inline-form {
@@ -2674,6 +2675,7 @@ body.modal-open {
     align-items: center;
     gap: 0.2rem;
     white-space: nowrap;
+    text-align: center;
 }
 
 .ktp-plan-summary {

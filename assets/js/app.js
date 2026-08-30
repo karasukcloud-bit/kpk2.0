@@ -804,8 +804,9 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         };
 
-        const collectOrder = () => Array.from(ktpSortable.querySelectorAll('[data-topic-id]'))
-            .map((row) => row.dataset.topicId);
+        const collectOrder = () => Array.from(ktpSortable.querySelectorAll(':scope > tr[data-topic-id]'))
+            .map((row) => row.dataset.topicId)
+            .filter((id) => id && id !== '0');
 
         const saveOrder = () => {
             const formData = new FormData();
@@ -825,6 +826,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     if (!data.success) {
                         throw new Error(data.error || 'Не удалось сохранить порядок.');
                     }
+                    // После drag DOM уже в нужном порядке — всегда пересчитываем сводку из него,
+                    // чтобы ответ сервера не затирал корректное распределение на мгновение.
+                    document.dispatchEvent(new CustomEvent('ktp-rows-changed'));
                     setStatus('Порядок сохранён');
                 })
                 .catch((error) => {
@@ -875,8 +879,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 row.setAttribute('draggable', 'false');
                 dragRow = null;
                 refreshNumbers();
-                saveOrder();
+                // Сразу пересчитываем сводку по текущему DOM.
                 document.dispatchEvent(new CustomEvent('ktp-rows-changed'));
+                saveOrder();
             });
 
             row.addEventListener('dragover', (event) => {
@@ -1123,6 +1128,46 @@ document.addEventListener('DOMContentLoaded', () => {
             return String(num).replace(/\.0$/, '');
         };
 
+        const setWorkloadCell = (workloadTable, rowKey, columnType, semesterIndex, text) => {
+            let selector;
+            if (columnType === 'course') {
+                selector = '[data-ktp-workload-course="' + rowKey + '"]';
+            } else {
+                selector = '[data-ktp-workload-row="' + rowKey + '"][data-ktp-workload-sem="' + semesterIndex + '"]';
+            }
+            const cell = workloadTable.querySelector(selector);
+            if (cell) {
+                cell.textContent = text;
+            }
+        };
+
+        const applyWorkloadPayload = (payload) => {
+            const workloadTable = document.querySelector('[data-ktp-workload-table]');
+            if (!workloadTable || !payload || !payload.rows) {
+                return false;
+            }
+
+            const slots = Array.isArray(payload.semester_slots) ? payload.semester_slots : [];
+            workloadTable.dataset.semesterSlots = slots.join(',');
+            workloadTable.dataset.splitSemesters = payload.split_semesters ? '1' : '0';
+            if (typeof payload.professionality === 'boolean') {
+                workloadTable.dataset.professionality = payload.professionality ? '1' : '0';
+            }
+
+            Object.keys(payload.rows).forEach((rowKey) => {
+                const rowData = payload.rows[rowKey] || {};
+                setWorkloadCell(workloadTable, rowKey, 'course', 0, rowData.course || '—');
+                const semesters = rowData.semesters || {};
+                for (let semester = 1; semester <= 8; semester += 1) {
+                    const value = semesters[String(semester)] || semesters[semester] || '—';
+                    setWorkloadCell(workloadTable, rowKey, 'sem', semester, value);
+                }
+            });
+
+            return true;
+        };
+        window.applyKtpWorkloadPayload = applyWorkloadPayload;
+
         const updateSummaryTable = () => {
             const workloadTable = document.querySelector('[data-ktp-workload-table]');
             if (!body || !workloadTable) {
@@ -1130,11 +1175,34 @@ document.addEventListener('DOMContentLoaded', () => {
             }
 
             const isProfessionality = workloadTable.dataset.professionality === '1';
-            const splitSemesters = workloadTable.dataset.splitSemesters === '1';
-            const semesterSlots = (workloadTable.dataset.semesterSlots || '')
+            let semesterSlots = (workloadTable.dataset.semesterSlots || '')
                 .split(',')
                 .map((value) => Number(value))
                 .filter((value) => Number.isFinite(value) && value > 0);
+
+            const hasSemester2Marker = Array.from(
+                body.querySelectorAll('.ktp-row--semester-marker')
+            ).some((row) => {
+                const markerType = row.getAttribute('data-lesson-type') || row.dataset.lessonType || '';
+                if (markerType === 'semester_2') {
+                    return true;
+                }
+                const text = (row.textContent || '').toLowerCase().replace(/\s+/g, ' ');
+                return text.indexOf('2 семестр') !== -1;
+            });
+            let splitSemesters = workloadTable.dataset.splitSemesters === '1' || hasSemester2Marker;
+
+            if (splitSemesters && semesterSlots.length < 2 && semesterSlots.length === 1) {
+                const firstSlot = semesterSlots[0];
+                const pairSlot = firstSlot % 2 === 1 ? firstSlot + 1 : firstSlot - 1;
+                if (pairSlot >= 1 && pairSlot <= 8) {
+                    semesterSlots = firstSlot % 2 === 1
+                        ? [firstSlot, pairSlot]
+                        : [pairSlot, firstSlot];
+                    workloadTable.dataset.semesterSlots = semesterSlots.join(',');
+                    workloadTable.dataset.splitSemesters = '1';
+                }
+            }
 
             const createBucket = () => ({
                 lecture: { hours: 0, orient: 0 },
@@ -1173,10 +1241,25 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
             };
 
-            let inSecondSemester = false;
+            let currentHalf = 1;
             body.querySelectorAll('[data-ktp-row]').forEach((row) => {
                 if (row.classList.contains('ktp-row--semester-marker')) {
-                    inSecondSemester = true;
+                    let markerType = row.getAttribute('data-lesson-type') || row.dataset.lessonType || '';
+                    if (!markerType) {
+                        const text = (row.textContent || '').toLowerCase().replace(/\s+/g, ' ');
+                        if (text.indexOf('1 семестр') !== -1) {
+                            markerType = 'semester_1';
+                        } else if (text.indexOf('2 семестр') !== -1) {
+                            markerType = 'semester_2';
+                        }
+                    }
+                    if (markerType === 'semester_1') {
+                        currentHalf = 1;
+                        row.setAttribute('data-lesson-type', 'semester_1');
+                    } else if (markerType === 'semester_2') {
+                        currentHalf = 2;
+                        row.setAttribute('data-lesson-type', 'semester_2');
+                    }
                     return;
                 }
 
@@ -1186,7 +1269,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 const lessonType = typeSelect ? typeSelect.value : 'lecture';
                 const hours = Number(hoursInput ? hoursInput.value : 0) || 0;
                 const orient = Number(orientationInput ? orientationInput.value : 0) || 0;
-                const bucket = splitSemesters && inSecondSemester ? secondBucket : firstBucket;
+                const bucket = splitSemesters && currentHalf === 2 ? secondBucket : firstBucket;
 
                 addToBucket(bucket, lessonType, hours, orient);
             });
@@ -1237,19 +1320,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 return total + '/' + formatSummaryNumber(orient);
             };
 
-            const setWorkloadCell = (rowKey, columnType, semesterIndex, text) => {
-                let selector;
-                if (columnType === 'course') {
-                    selector = '[data-ktp-workload-course="' + rowKey + '"]';
-                } else {
-                    selector = '[data-ktp-workload-row="' + rowKey + '"][data-ktp-workload-sem="' + semesterIndex + '"]';
-                }
-                const cell = workloadTable.querySelector(selector);
-                if (cell) {
-                    cell.textContent = text;
-                }
-            };
-
             const buildSemesterDisplays = (getMetrics, formatValue) => {
                 const displays = {};
                 Object.keys(semesterBuckets).forEach((semesterKey) => {
@@ -1262,12 +1332,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const updateWorkloadRow = (rowKey, totalDisplay, getMetrics, formatValue) => {
                 const semesterDisplays = buildSemesterDisplays(getMetrics, formatValue);
-                setWorkloadCell(rowKey, 'course', 0, totalDisplay);
+                setWorkloadCell(workloadTable, rowKey, 'course', 0, totalDisplay);
                 for (let semester = 1; semester <= 8; semester += 1) {
                     const value = Object.prototype.hasOwnProperty.call(semesterDisplays, semester)
                         ? semesterDisplays[semester]
                         : '—';
-                    setWorkloadCell(rowKey, 'sem', semester, value);
+                    setWorkloadCell(workloadTable, rowKey, 'sem', semester, value);
                 }
             };
 
@@ -1316,12 +1386,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 (bucket) => bucket.attestationForms,
                 (forms) => (forms.length > 0 ? forms.join(', ') : '—')
             );
-            setWorkloadCell('attestation_forms', 'course', 0, totalForms);
+            setWorkloadCell(workloadTable, 'attestation_forms', 'course', 0, totalForms);
             for (let semester = 1; semester <= 8; semester += 1) {
                 const value = Object.prototype.hasOwnProperty.call(formDisplays, semester)
                     ? formDisplays[semester]
                     : '—';
-                setWorkloadCell('attestation_forms', 'sem', semester, value);
+                setWorkloadCell(workloadTable, 'attestation_forms', 'sem', semester, value);
             }
         };
 
@@ -1478,6 +1548,21 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!template || !template.content) {
                 return null;
             }
+            if (topic.is_semester_marker) {
+                const tr = document.createElement('tr');
+                tr.className = 'ktp-rows-row ktp-sortable-row ktp-row--semester-marker';
+                tr.dataset.topicId = String(topic.id || 0);
+                tr.dataset.lessonType = topic.lesson_type || 'semester_2';
+                const title = topic.type_label || topic.title || 'Семестр';
+                tr.innerHTML = ''
+                    + '<td class="ktp-col-handle"><span class="ktp-drag-handle" title="Перетащить" aria-hidden="true">⋮⋮</span></td>'
+                    + '<td class="ktp-col-num"></td>'
+                    + '<td colspan="6"><strong>' + title.replace(/</g, '&lt;') + '</strong></td>'
+                    + '<td class="table__actions">'
+                    + '<button type="button" class="journal-icon-btn journal-icon-btn--danger" title="Удалить" data-ktp-row-delete>×</button>'
+                    + '</td>';
+                return tr;
+            }
             const node = template.content.firstElementChild.cloneNode(true);
             fillRowFromTopic(node, topic);
             return node;
@@ -1504,6 +1589,9 @@ document.addEventListener('DOMContentLoaded', () => {
                     .then((data) => {
                         if (!data.success) {
                             throw new Error(data.error || 'Не удалось сохранить строку.');
+                        }
+                        if (!applyWorkloadPayload(data.workload)) {
+                            updateSummaryTable();
                         }
                         setStatus('Сохранено');
                     })
@@ -1602,6 +1690,12 @@ document.addEventListener('DOMContentLoaded', () => {
         renumberRows();
 
         document.addEventListener('ktp-rows-changed', updateSummaryTable);
+        document.addEventListener('ktp-workload-updated', (event) => {
+            const payload = event.detail && event.detail.workload;
+            if (!applyWorkloadPayload(payload)) {
+                updateSummaryTable();
+            }
+        });
 
         const insertBtn = document.querySelector('[data-ktp-row-insert]');
         const copyBtn = document.querySelector('[data-ktp-row-copy]');
@@ -1638,12 +1732,56 @@ document.addEventListener('DOMContentLoaded', () => {
                             titleCell.focus();
                         }
                         setStatus('Строка добавлена');
+                        if (!applyWorkloadPayload(data.workload)) {
+                            updateSummaryTable();
+                        }
                     })
                     .catch((error) => {
                         setStatus(error.message || 'Ошибка добавления.', true);
                     });
             });
         }
+
+        document.querySelectorAll('[data-ktp-row-insert-marker]').forEach((markerBtn) => {
+            markerBtn.addEventListener('click', () => {
+                const semester = markerBtn.dataset.semester === '1' ? '1' : '2';
+                const markerType = 'semester_' + semester;
+                const afterId = activeRow ? (activeRow.dataset.topicId || '0') : '0';
+                const formData = new FormData();
+                formData.append('csrf_token', csrfToken);
+                formData.append('item_id', itemId);
+                formData.append('action', 'insert_marker');
+                formData.append('marker_type', markerType);
+                formData.append('after_topic_id', afterId);
+                setStatus('Добавление разделителя…');
+                postAction(formData)
+                    .then((data) => {
+                        if (!data.success || !data.topic) {
+                            throw new Error(data.error || 'Не удалось вставить разделитель.');
+                        }
+                        const row = createRowFromTopic(data.topic);
+                        if (!row) {
+                            throw new Error('Не удалось создать строку разделителя.');
+                        }
+                        if (activeRow && activeRow.nextSibling) {
+                            body.insertBefore(row, activeRow.nextSibling);
+                        } else {
+                            body.appendChild(row);
+                        }
+                        bindRow(row);
+                        body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
+                        setActiveRow(row);
+                        renumberRows();
+                        if (!applyWorkloadPayload(data.workload)) {
+                            updateSummaryTable();
+                        }
+                        setStatus('Разделитель «' + semester + ' семестр» добавлен, часы пересчитаны');
+                    })
+                    .catch((error) => {
+                        setStatus(error.message || 'Ошибка добавления разделителя.', true);
+                    });
+            });
+        });
 
         if (copyBtn) {
             copyBtn.addEventListener('click', () => {
@@ -1676,6 +1814,9 @@ document.addEventListener('DOMContentLoaded', () => {
                         body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
                         setActiveRow(row);
                         renumberRows();
+                        if (!applyWorkloadPayload(data.workload)) {
+                            updateSummaryTable();
+                        }
                         setStatus('Строка скопирована');
                     })
                     .catch((error) => {

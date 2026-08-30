@@ -53,7 +53,7 @@ $renderRow = static function (
         $rowClass .= ' ktp-row--semester-marker';
     }
     ?>
-    <tr class="<?= e($rowClass) ?>" data-ktp-row data-topic-id="<?= $topicId ?>">
+    <tr class="<?= e($rowClass) ?>" data-ktp-row data-topic-id="<?= $topicId ?>"<?= $isSemesterMarker ? ' data-lesson-type="' . e($lessonType) . '"' : '' ?>>
         <td class="ktp-col-handle">
             <span class="ktp-drag-handle" title="Перетащить" aria-hidden="true">⋮⋮</span>
         </td>
@@ -63,7 +63,7 @@ $renderRow = static function (
         ?></td>
         <?php if ($isSemesterMarker): ?>
         <td colspan="6">
-            <strong><?= e(ktp_semester_marker_title()) ?></strong>
+            <strong><?= e(ktp_semester_marker_title($lessonType)) ?></strong>
         </td>
         <?php else: ?>
         <td
@@ -231,7 +231,7 @@ $renderRow = static function (
                 <th<?= ktp_column_width_attr($ktpColumnWidths, 4) ?>>Сроки</th>
                 <th<?= ktp_column_width_attr($ktpColumnWidths, 5) ?>>ОК / ПК</th>
                 <th<?= ktp_column_width_attr($ktpColumnWidths, 6) ?>>Форма контроля</th>
-                <th class="table__actions-col">Действия</th>
+                <th class="table__actions-col"></th>
             </tr>
         </thead>
         <tbody
@@ -291,20 +291,14 @@ $renderRow = static function (
 <div class="ktp-rows-toolbar">
     <button type="button" class="btn btn--primary" data-ktp-row-insert>Вставить строку</button>
     <button type="button" class="btn btn--ghost" data-ktp-row-copy>Скопировать строку</button>
+    <button type="button" class="btn btn--ghost" data-ktp-row-insert-marker data-semester="1">1 семестр</button>
+    <button type="button" class="btn btn--ghost" data-ktp-row-insert-marker data-semester="2">2 семестр</button>
 </div>
 
 <?php if (curriculum_item_spans_two_semesters($item)): ?>
 <hr class="divider">
-<h3 class="subsection-title">2 семестр (полугодие)</h3>
-<?php if (has_ktp_semester_marker($itemId)): ?>
-<p class="text-muted">Разделитель 2 семестра уже добавлен в таблицу КТП.</p>
-<?php else: ?>
-<form method="post" class="form">
-    <?= csrf_field() ?>
-    <input type="hidden" name="action" value="add_ktp_semester_marker">
-    <div class="form__actions">
-        <button type="submit" class="btn btn--primary">Добавить «2 семестр (полугодие)»</button>
-    </div>
-</form>
-<?php endif; ?>
+<p class="text-muted">
+    Для предметов на оба семестра вставьте разделители «1 семестр» и «2 семестр» в нужных местах таблицы —
+    часы до/после разделителей попадут в соответствующие столбцы сводки.
+</p>
 <?php endif; ?>
