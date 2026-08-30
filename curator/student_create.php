@@ -31,7 +31,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             } else {
                 flash_set('success', 'Студент добавлен в группу.');
             }
-            header('Location: student_edit.php?id=' . (int) $result['id']);
+            header('Location: group.php?group_id=' . $groupId);
             exit;
         }
 
