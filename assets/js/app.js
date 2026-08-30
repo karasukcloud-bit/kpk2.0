@@ -750,9 +750,9 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    const ktpSortable = document.querySelector('[data-ktp-sortable]');
-    if (ktpSortable) {
-        const statusNode = document.querySelector('[data-ktp-reorder-status]');
+    document.querySelectorAll('[data-ktp-sortable]').forEach((ktpSortable) => {
+        const statusSelector = ktpSortable.dataset.reorderStatus || '[data-ktp-reorder-status]';
+        const statusNode = document.querySelector(statusSelector);
         const reorderUrl = ktpSortable.dataset.reorderUrl;
         const csrfToken = ktpSortable.dataset.csrf;
         const itemId = ktpSortable.dataset.itemId;
@@ -767,9 +767,36 @@ document.addEventListener('DOMContentLoaded', () => {
             statusNode.textContent = text || '';
             statusNode.classList.toggle('ktp-reorder-status--error', isError);
             statusNode.classList.toggle('ktp-reorder-status--ok', Boolean(text) && !isError);
+            statusNode.classList.toggle('alert', isError);
+            statusNode.classList.toggle('alert--error', isError);
+            if (text && !isError) {
+                window.clearTimeout(saveTimer);
+                saveTimer = window.setTimeout(() => {
+                    statusNode.hidden = true;
+                    statusNode.textContent = '';
+                    statusNode.classList.remove('ktp-reorder-status--ok');
+                }, 1800);
+            }
         };
 
         const refreshNumbers = () => {
+            if (ktpSortable.querySelector('[data-ktp-row]')) {
+                let num = 0;
+                ktpSortable.querySelectorAll('[data-ktp-row]').forEach((row) => {
+                    const numCell = row.querySelector('[data-ktp-num], .ktp-col-num');
+                    if (!numCell) {
+                        return;
+                    }
+                    if (row.classList.contains('ktp-row--semester-marker')) {
+                        numCell.textContent = '';
+                        return;
+                    }
+                    num += 1;
+                    numCell.textContent = String(num);
+                });
+                return;
+            }
+
             let num = 0;
             Array.from(ktpSortable.querySelectorAll('[data-ktp-num]')).forEach((cell) => {
                 num += 1;
@@ -799,15 +826,18 @@ document.addEventListener('DOMContentLoaded', () => {
                         throw new Error(data.error || 'Не удалось сохранить порядок.');
                     }
                     setStatus('Порядок сохранён');
-                    window.clearTimeout(saveTimer);
-                    saveTimer = window.setTimeout(() => setStatus(''), 1800);
                 })
                 .catch((error) => {
                     setStatus(error.message || 'Ошибка сохранения порядка.', true);
                 });
         };
 
-        ktpSortable.querySelectorAll('.ktp-sortable-row').forEach((row) => {
+        const bindSortableRow = (row) => {
+            if (row.dataset.sortableBound === '1') {
+                return;
+            }
+            row.dataset.sortableBound = '1';
+
             const handle = row.querySelector('.ktp-drag-handle');
 
             if (handle) {
@@ -846,6 +876,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 dragRow = null;
                 refreshNumbers();
                 saveOrder();
+                document.dispatchEvent(new CustomEvent('ktp-rows-changed'));
             });
 
             row.addEventListener('dragover', (event) => {
@@ -871,8 +902,17 @@ document.addEventListener('DOMContentLoaded', () => {
             row.addEventListener('drop', (event) => {
                 event.preventDefault();
             });
+        };
+
+        ktpSortable.querySelectorAll('.ktp-sortable-row').forEach(bindSortableRow);
+
+        ktpSortable.addEventListener('ktp-sortable-bind', (event) => {
+            const row = event.detail?.row;
+            if (row instanceof HTMLElement) {
+                bindSortableRow(row);
+            }
         });
-    }
+    });
 
     document.querySelectorAll('[data-ktp-competency-block]').forEach((block) => {
         const updateCompetencySelected = () => {
@@ -1038,6 +1078,831 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const ktpRowsEditor = document.querySelector('[data-ktp-rows-editor]');
+    if (ktpRowsEditor) {
+        const body = ktpRowsEditor.querySelector('[data-ktp-rows-body]');
+        const statusNode = document.querySelector('[data-ktp-rows-status]');
+        const template = document.getElementById('ktp-rows-row-template');
+        const actionUrl = ktpRowsEditor.dataset.actionUrl;
+        const csrfToken = ktpRowsEditor.dataset.csrf;
+        const itemId = ktpRowsEditor.dataset.itemId;
+        const attestationTitles = {
+            diff_credit: 'Промежуточная аттестация. Дифференцированный зачёт',
+            credit: 'Промежуточная аттестация. Зачёт',
+            exam: 'Промежуточная аттестация. Экзамен',
+            control: 'Промежуточная аттестация. Контрольная работа',
+        };
+        let activeRow = body ? body.querySelector('[data-ktp-row]:last-child') : null;
+        let statusTimer = null;
+        const saveTimers = new WeakMap();
+
+        const setStatus = (text, isError) => {
+            if (!statusNode) {
+                return;
+            }
+            statusNode.hidden = !text;
+            statusNode.textContent = text || '';
+            statusNode.classList.toggle('alert', !!isError);
+            statusNode.classList.toggle('alert--error', !!isError);
+            window.clearTimeout(statusTimer);
+            if (text && !isError) {
+                statusTimer = window.setTimeout(() => {
+                    statusNode.hidden = true;
+                    statusNode.textContent = '';
+                }, 1800);
+            }
+        };
+
+        const isAttestationType = (type) => Object.prototype.hasOwnProperty.call(attestationTitles, type);
+
+        const formatSummaryNumber = (value) => {
+            const num = Number(value);
+            if (!Number.isFinite(num)) {
+                return '0';
+            }
+            return String(num).replace(/\.0$/, '');
+        };
+
+        const updateSummaryTable = () => {
+            const workloadTable = document.querySelector('[data-ktp-workload-table]');
+            if (!body || !workloadTable) {
+                return;
+            }
+
+            const isProfessionality = workloadTable.dataset.professionality === '1';
+            const splitSemesters = workloadTable.dataset.splitSemesters === '1';
+            const semesterSlots = (workloadTable.dataset.semesterSlots || '')
+                .split(',')
+                .map((value) => Number(value))
+                .filter((value) => Number.isFinite(value) && value > 0);
+
+            const createBucket = () => ({
+                lecture: { hours: 0, orient: 0 },
+                practice: { hours: 0, orient: 0 },
+                independent: { hours: 0, orient: 0 },
+                attestation: { hours: 0, orient: 0 },
+                attestationForms: [],
+            });
+
+            const firstBucket = createBucket();
+            const secondBucket = createBucket();
+            const attestationFormShort = {
+                exam: 'Э',
+                credit: 'З',
+                diff_credit: 'ДЗ',
+                control: 'КР',
+            };
+
+            const addToBucket = (bucket, lessonType, hours, orient) => {
+                if (lessonType === 'lecture') {
+                    bucket.lecture.hours += hours;
+                    bucket.lecture.orient += orient;
+                } else if (lessonType === 'practice') {
+                    bucket.practice.hours += hours;
+                    bucket.practice.orient += orient;
+                } else if (lessonType === 'independent') {
+                    bucket.independent.hours += hours;
+                    bucket.independent.orient += orient;
+                } else if (isAttestationType(lessonType)) {
+                    bucket.attestation.hours += hours;
+                    bucket.attestation.orient += orient;
+                    const short = attestationFormShort[lessonType] || '';
+                    if (short && hours > 0) {
+                        bucket.attestationForms.push(short + ' (' + formatSummaryNumber(hours) + ' ч.)');
+                    }
+                }
+            };
+
+            let inSecondSemester = false;
+            body.querySelectorAll('[data-ktp-row]').forEach((row) => {
+                if (row.classList.contains('ktp-row--semester-marker')) {
+                    inSecondSemester = true;
+                    return;
+                }
+
+                const typeSelect = row.querySelector('[data-ktp-field="lesson_type"]');
+                const hoursInput = row.querySelector('[data-ktp-field="hours"]');
+                const orientationInput = row.querySelector('[data-ktp-field="orientation_hours"]');
+                const lessonType = typeSelect ? typeSelect.value : 'lecture';
+                const hours = Number(hoursInput ? hoursInput.value : 0) || 0;
+                const orient = Number(orientationInput ? orientationInput.value : 0) || 0;
+                const bucket = splitSemesters && inSecondSemester ? secondBucket : firstBucket;
+
+                addToBucket(bucket, lessonType, hours, orient);
+            });
+
+            const mergeBuckets = (...buckets) => {
+                const merged = createBucket();
+                buckets.forEach((bucket) => {
+                    ['lecture', 'practice', 'independent', 'attestation'].forEach((key) => {
+                        merged[key].hours += bucket[key].hours;
+                        merged[key].orient += bucket[key].orient;
+                    });
+                    merged.attestationForms = merged.attestationForms.concat(bucket.attestationForms);
+                });
+                return merged;
+            };
+
+            const semesterBuckets = {};
+            if (splitSemesters && semesterSlots.length >= 2) {
+                semesterBuckets[semesterSlots[0]] = firstBucket;
+                semesterBuckets[semesterSlots[1]] = secondBucket;
+            } else if (semesterSlots.length > 0) {
+                semesterBuckets[semesterSlots[0]] = mergeBuckets(firstBucket, secondBucket);
+            }
+
+            const totalBucket = mergeBuckets(firstBucket, secondBucket);
+
+            const teacherMetrics = (bucket) => ({
+                hours: bucket.lecture.hours + bucket.practice.hours + bucket.attestation.hours,
+                orient: bucket.lecture.orient + bucket.practice.orient + bucket.attestation.orient,
+            });
+
+            const opHours = (bucket) => (
+                bucket.lecture.hours
+                + bucket.practice.hours
+                + bucket.independent.hours
+                + bucket.attestation.hours
+            );
+
+            const formatTotalOnly = (hours) => (hours > 0 ? formatSummaryNumber(hours) : '—');
+            const formatPair = (hours, orient) => {
+                if (hours <= 0 && orient <= 0) {
+                    return '—';
+                }
+                const total = formatSummaryNumber(hours);
+                if (!isProfessionality) {
+                    return total;
+                }
+                return total + '/' + formatSummaryNumber(orient);
+            };
+
+            const setWorkloadCell = (rowKey, columnType, semesterIndex, text) => {
+                let selector;
+                if (columnType === 'course') {
+                    selector = '[data-ktp-workload-course="' + rowKey + '"]';
+                } else {
+                    selector = '[data-ktp-workload-row="' + rowKey + '"][data-ktp-workload-sem="' + semesterIndex + '"]';
+                }
+                const cell = workloadTable.querySelector(selector);
+                if (cell) {
+                    cell.textContent = text;
+                }
+            };
+
+            const buildSemesterDisplays = (getMetrics, formatValue) => {
+                const displays = {};
+                Object.keys(semesterBuckets).forEach((semesterKey) => {
+                    const semesterIndex = Number(semesterKey);
+                    const bucket = semesterBuckets[semesterIndex];
+                    displays[semesterIndex] = formatValue(getMetrics(bucket));
+                });
+                return displays;
+            };
+
+            const updateWorkloadRow = (rowKey, totalDisplay, getMetrics, formatValue) => {
+                const semesterDisplays = buildSemesterDisplays(getMetrics, formatValue);
+                setWorkloadCell(rowKey, 'course', 0, totalDisplay);
+                for (let semester = 1; semester <= 8; semester += 1) {
+                    const value = Object.prototype.hasOwnProperty.call(semesterDisplays, semester)
+                        ? semesterDisplays[semester]
+                        : '—';
+                    setWorkloadCell(rowKey, 'sem', semester, value);
+                }
+            };
+
+            updateWorkloadRow(
+                'op_volume',
+                formatTotalOnly(opHours(totalBucket)),
+                opHours,
+                formatTotalOnly
+            );
+            updateWorkloadRow(
+                'with_teacher',
+                formatPair(teacherMetrics(totalBucket).hours, teacherMetrics(totalBucket).orient),
+                teacherMetrics,
+                (metrics) => formatPair(metrics.hours, metrics.orient)
+            );
+            updateWorkloadRow(
+                'lectures',
+                formatPair(totalBucket.lecture.hours, totalBucket.lecture.orient),
+                (bucket) => bucket.lecture,
+                (metrics) => formatPair(metrics.hours, metrics.orient)
+            );
+            updateWorkloadRow(
+                'practice',
+                formatPair(totalBucket.practice.hours, totalBucket.practice.orient),
+                (bucket) => bucket.practice,
+                (metrics) => formatPair(metrics.hours, metrics.orient)
+            );
+            updateWorkloadRow('consultations', '—', () => ({ hours: 0, orient: 0 }), () => '—');
+            updateWorkloadRow(
+                'independent',
+                formatPair(totalBucket.independent.hours, totalBucket.independent.orient),
+                (bucket) => bucket.independent,
+                (metrics) => formatPair(metrics.hours, metrics.orient)
+            );
+            updateWorkloadRow(
+                'attestation',
+                formatPair(totalBucket.attestation.hours, totalBucket.attestation.orient),
+                (bucket) => bucket.attestation,
+                (metrics) => formatPair(metrics.hours, metrics.orient)
+            );
+
+            const totalForms = totalBucket.attestationForms.length > 0
+                ? totalBucket.attestationForms.join(', ')
+                : '—';
+            const formDisplays = buildSemesterDisplays(
+                (bucket) => bucket.attestationForms,
+                (forms) => (forms.length > 0 ? forms.join(', ') : '—')
+            );
+            setWorkloadCell('attestation_forms', 'course', 0, totalForms);
+            for (let semester = 1; semester <= 8; semester += 1) {
+                const value = Object.prototype.hasOwnProperty.call(formDisplays, semester)
+                    ? formDisplays[semester]
+                    : '—';
+                setWorkloadCell('attestation_forms', 'sem', semester, value);
+            }
+        };
+
+        const renumberRows = () => {
+            if (!body) {
+                return;
+            }
+            let num = 0;
+            body.querySelectorAll('[data-ktp-row]').forEach((row) => {
+                const typeSelect = row.querySelector('[data-ktp-field="lesson_type"]');
+                const numCell = row.querySelector('[data-ktp-num], .ktp-col-num');
+                if (!numCell) {
+                    return;
+                }
+                if (row.classList.contains('ktp-row--semester-marker')) {
+                    numCell.textContent = '';
+                    return;
+                }
+                num += 1;
+                numCell.textContent = String(num);
+            });
+            updateSummaryTable();
+        };
+
+        const updateCompSummary = (row) => {
+            const summary = row.querySelector('[data-ktp-comp-summary]');
+            if (!summary) {
+                return;
+            }
+            const ok = Array.from(row.querySelectorAll('[data-ktp-field="ok"]:checked'))
+                .map((input) => {
+                    const label = input.closest('label');
+                    const text = label ? label.querySelector('span') : null;
+                    return text ? text.textContent.trim() : input.value;
+                });
+            const pk = Array.from(row.querySelectorAll('[data-ktp-field="pk"]:checked'))
+                .map((input) => {
+                    const label = input.closest('label');
+                    const text = label ? label.querySelector('span') : null;
+                    return text ? text.textContent.trim() : input.value;
+                });
+            const parts = [];
+            if (ok.length) {
+                parts.push('ОК: ' + ok.join(', '));
+            }
+            if (pk.length) {
+                parts.push('ПК: ' + pk.join(', '));
+            }
+            summary.textContent = parts.length ? parts.join('; ') : '—';
+        };
+
+        const getTitleText = (cell) => (cell ? (cell.textContent || '').replace(/\u00a0/g, ' ').trim() : '');
+
+        const setTitleText = (cell, text) => {
+            if (!cell) {
+                return;
+            }
+            cell.textContent = text || '';
+        };
+
+        const syncRowTypeUi = (row) => {
+            const typeSelect = row.querySelector('[data-ktp-field="lesson_type"]');
+            const titleCell = row.querySelector('[data-ktp-field="title"]');
+            const orientationInput = row.querySelector('[data-ktp-orientation-input]');
+            const orientationSep = row.querySelector('[data-ktp-orientation-sep]');
+            if (!typeSelect) {
+                return;
+            }
+            const type = typeSelect.value;
+            if (titleCell) {
+                if (isAttestationType(type)) {
+                    setTitleText(titleCell, attestationTitles[type] || getTitleText(titleCell));
+                    titleCell.contentEditable = 'false';
+                } else {
+                    titleCell.contentEditable = 'true';
+                }
+            }
+            if (orientationInput) {
+                const show = type === 'lecture' || type === 'practice';
+                orientationInput.hidden = !show;
+                if (orientationSep) {
+                    orientationSep.hidden = !show;
+                }
+                if (!show) {
+                    orientationInput.value = '0';
+                }
+            }
+        };
+
+        const collectRowPayload = (row) => {
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
+            formData.append('item_id', itemId);
+            formData.append('action', 'save');
+            formData.append('topic_id', row.dataset.topicId || '0');
+            formData.append('ktp_title', getTitleText(row.querySelector('[data-ktp-field="title"]')));
+            formData.append('ktp_lesson_type', (row.querySelector('[data-ktp-field="lesson_type"]') || {}).value || 'lecture');
+            formData.append('ktp_hours', (row.querySelector('[data-ktp-field="hours"]') || {}).value || '1');
+            const orientation = row.querySelector('[data-ktp-field="orientation_hours"]');
+            formData.append('ktp_orientation_hours', orientation ? orientation.value : '0');
+            formData.append('ktp_deadline', (row.querySelector('[data-ktp-field="deadline"]') || {}).value || '');
+            formData.append('ktp_control_form', (row.querySelector('[data-ktp-field="control_form"]') || {}).value || '');
+            row.querySelectorAll('[data-ktp-field="ok"]:checked').forEach((input) => {
+                formData.append('ok_codes[]', input.value);
+            });
+            row.querySelectorAll('[data-ktp-field="pk"]:checked').forEach((input) => {
+                formData.append('pk_codes[]', input.value);
+            });
+            return formData;
+        };
+
+        const fillRowFromTopic = (row, topic) => {
+            row.dataset.topicId = String(topic.id || 0);
+            const titleCell = row.querySelector('[data-ktp-field="title"]');
+            const typeSelect = row.querySelector('[data-ktp-field="lesson_type"]');
+            const hoursInput = row.querySelector('[data-ktp-field="hours"]');
+            const orientationInput = row.querySelector('[data-ktp-field="orientation_hours"]');
+            const deadlineInput = row.querySelector('[data-ktp-field="deadline"]');
+            const controlSelect = row.querySelector('[data-ktp-field="control_form"]');
+
+            if (titleCell) {
+                setTitleText(titleCell, topic.title || '');
+            }
+            if (typeSelect) {
+                typeSelect.value = topic.lesson_type || 'lecture';
+            }
+            if (hoursInput) {
+                hoursInput.value = String(topic.hours || 1).replace(/\.0$/, '');
+            }
+            if (orientationInput) {
+                orientationInput.value = String(topic.orientation_hours || 0).replace(/\.0$/, '');
+            }
+            if (deadlineInput) {
+                deadlineInput.value = topic.deadline_date || '';
+            }
+            if (controlSelect) {
+                controlSelect.value = topic.control_form || '';
+            }
+
+            const okSet = new Set(String(topic.ok_codes || '').split(',').map((v) => v.trim()).filter(Boolean));
+            const pkSet = new Set(String(topic.pk_codes || '').split(',').map((v) => v.trim()).filter(Boolean));
+            row.querySelectorAll('[data-ktp-field="ok"]').forEach((input) => {
+                input.checked = okSet.has(input.value);
+            });
+            row.querySelectorAll('[data-ktp-field="pk"]').forEach((input) => {
+                input.checked = pkSet.has(input.value);
+            });
+
+            syncRowTypeUi(row);
+            updateCompSummary(row);
+        };
+
+        const createRowFromTopic = (topic) => {
+            if (!template || !template.content) {
+                return null;
+            }
+            const node = template.content.firstElementChild.cloneNode(true);
+            fillRowFromTopic(node, topic);
+            return node;
+        };
+
+        const postAction = (formData) => fetch(actionUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin',
+        }).then((response) => response.json());
+
+        const saveRow = (row, immediate) => {
+            if (row.classList.contains('ktp-row--semester-marker')) {
+                return;
+            }
+            const topicId = row.dataset.topicId;
+            if (!topicId || topicId === '0') {
+                return;
+            }
+
+            const run = () => {
+                setStatus('Сохранение…');
+                postAction(collectRowPayload(row))
+                    .then((data) => {
+                        if (!data.success) {
+                            throw new Error(data.error || 'Не удалось сохранить строку.');
+                        }
+                        setStatus('Сохранено');
+                    })
+                    .catch((error) => {
+                        setStatus(error.message || 'Ошибка сохранения.', true);
+                    });
+            };
+
+            const existing = saveTimers.get(row);
+            if (existing) {
+                window.clearTimeout(existing);
+            }
+            if (immediate) {
+                run();
+                return;
+            }
+            saveTimers.set(row, window.setTimeout(run, 400));
+        };
+
+        const setActiveRow = (row) => {
+            if (!row || !body.contains(row)) {
+                return;
+            }
+            if (activeRow) {
+                activeRow.classList.remove('ktp-rows-row--active');
+            }
+            activeRow = row;
+            activeRow.classList.add('ktp-rows-row--active');
+        };
+
+        const bindRow = (row) => {
+            row.addEventListener('focusin', () => setActiveRow(row));
+            row.addEventListener('click', () => setActiveRow(row));
+
+            row.querySelectorAll('input, select').forEach((field) => {
+                const eventName = field.type === 'checkbox' || field.tagName === 'SELECT' || field.type === 'date'
+                    ? 'change'
+                    : 'input';
+                field.addEventListener(eventName, () => {
+                    if (field.dataset.ktpField === 'lesson_type') {
+                        syncRowTypeUi(row);
+                    }
+                    if (field.dataset.ktpField === 'ok' || field.dataset.ktpField === 'pk') {
+                        updateCompSummary(row);
+                    }
+                    updateSummaryTable();
+                    saveRow(row, field.type === 'checkbox' || field.tagName === 'SELECT' || field.type === 'date');
+                });
+                if (eventName === 'input') {
+                    field.addEventListener('change', () => saveRow(row, true));
+                }
+            });
+
+            const titleCell = row.querySelector('[data-ktp-field="title"]');
+            if (titleCell) {
+                titleCell.addEventListener('input', () => saveRow(row, false));
+                titleCell.addEventListener('blur', () => saveRow(row, true));
+                titleCell.addEventListener('keydown', (event) => {
+                    if (event.key === 'Enter') {
+                        event.preventDefault();
+                        document.execCommand('insertLineBreak');
+                    }
+                });
+            }
+
+            const deleteBtn = row.querySelector('[data-ktp-row-delete]');
+            if (deleteBtn) {
+                deleteBtn.addEventListener('click', () => {
+                    if (!window.confirm('Удалить строку КТП?')) {
+                        return;
+                    }
+                    const formData = new FormData();
+                    formData.append('csrf_token', csrfToken);
+                    formData.append('item_id', itemId);
+                    formData.append('action', 'delete');
+                    formData.append('topic_id', row.dataset.topicId || '0');
+                    setStatus('Удаление…');
+                    postAction(formData)
+                        .then((data) => {
+                            if (!data.success) {
+                                throw new Error(data.error || 'Не удалось удалить строку.');
+                            }
+                            window.location.reload();
+                        })
+                        .catch((error) => {
+                            setStatus(error.message || 'Ошибка удаления.', true);
+                        });
+                });
+            }
+
+            syncRowTypeUi(row);
+            updateCompSummary(row);
+        };
+
+        body.querySelectorAll('[data-ktp-row]').forEach((row) => bindRow(row));
+        renumberRows();
+
+        document.addEventListener('ktp-rows-changed', updateSummaryTable);
+
+        const insertBtn = document.querySelector('[data-ktp-row-insert]');
+        const copyBtn = document.querySelector('[data-ktp-row-copy]');
+
+        if (insertBtn) {
+            insertBtn.addEventListener('click', () => {
+                const afterId = activeRow ? (activeRow.dataset.topicId || '0') : '0';
+                const formData = new FormData();
+                formData.append('csrf_token', csrfToken);
+                formData.append('item_id', itemId);
+                formData.append('action', 'insert');
+                formData.append('after_topic_id', afterId);
+                setStatus('Добавление строки…');
+                postAction(formData)
+                    .then((data) => {
+                        if (!data.success || !data.topic) {
+                            throw new Error(data.error || 'Не удалось вставить строку.');
+                        }
+                        const row = createRowFromTopic(data.topic);
+                        if (!row) {
+                            throw new Error('Не удалось создать строку.');
+                        }
+                        if (activeRow && activeRow.nextSibling) {
+                            body.insertBefore(row, activeRow.nextSibling);
+                        } else {
+                            body.appendChild(row);
+                        }
+                        bindRow(row);
+                        body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
+                        setActiveRow(row);
+                        renumberRows();
+                        const titleCell = row.querySelector('[data-ktp-field="title"]');
+                        if (titleCell && titleCell.isContentEditable) {
+                            titleCell.focus();
+                        }
+                        setStatus('Строка добавлена');
+                    })
+                    .catch((error) => {
+                        setStatus(error.message || 'Ошибка добавления.', true);
+                    });
+            });
+        }
+
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                const source = activeRow || body.querySelector('[data-ktp-row]:last-child');
+                if (!source || source.classList.contains('ktp-row--semester-marker')) {
+                    setStatus('Нет строки для копирования.', true);
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('csrf_token', csrfToken);
+                formData.append('item_id', itemId);
+                formData.append('action', 'copy');
+                formData.append('topic_id', source.dataset.topicId || '0');
+                setStatus('Копирование…');
+                postAction(formData)
+                    .then((data) => {
+                        if (!data.success || !data.topic) {
+                            throw new Error(data.error || 'Не удалось скопировать строку.');
+                        }
+                        const row = createRowFromTopic(data.topic);
+                        if (!row) {
+                            throw new Error('Не удалось создать строку.');
+                        }
+                        if (source.nextSibling) {
+                            body.insertBefore(row, source.nextSibling);
+                        } else {
+                            body.appendChild(row);
+                        }
+                        bindRow(row);
+                        body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
+                        setActiveRow(row);
+                        renumberRows();
+                        setStatus('Строка скопирована');
+                    })
+                    .catch((error) => {
+                        setStatus(error.message || 'Ошибка копирования.', true);
+                    });
+            });
+        }
+    }
+
+    document.querySelectorAll('table[data-col-resize]').forEach((table) => {
+        const headCells = Array.from(table.querySelectorAll('thead th'));
+        if (headCells.length < 2) {
+            return;
+        }
+
+        const minWidth = 36;
+        const persistOffset = Number(table.dataset.colResizePersistOffset || 0);
+        const persistCols = Number(table.dataset.colResizePersistCols || 0) || headCells.length;
+        const saveUrl = table.dataset.colResizeSaveUrl || '';
+        const itemId = table.dataset.itemId || '';
+        const csrfToken = table.dataset.csrf || '';
+        const storageKey = [
+            'col-resize',
+            table.dataset.colResizeKey || 'table',
+            itemId,
+            String(headCells.length),
+        ].join(':');
+        let widthsReady = false;
+        let saveServerTimer = null;
+
+        const applyWidths = (widthsPx) => {
+            const total = widthsPx.reduce((sum, value) => sum + value, 0);
+            if (total <= 0) {
+                return;
+            }
+            table.style.width = '100%';
+            table.style.tableLayout = 'fixed';
+            headCells.forEach((th, index) => {
+                th.style.width = ((widthsPx[index] / total) * 100).toFixed(4) + '%';
+            });
+            widthsReady = true;
+        };
+
+        const applySavedPercentages = (saved) => {
+            if (!Array.isArray(saved) || saved.length !== persistCols) {
+                return false;
+            }
+            const numeric = saved.map((value) => Number(value));
+            if (numeric.some((value) => !Number.isFinite(value) || value <= 0)) {
+                return false;
+            }
+            const total = numeric.reduce((sum, value) => sum + value, 0);
+            if (total <= 0) {
+                return false;
+            }
+            const normalized = numeric.map((value) => (value / total) * 100);
+
+            table.style.width = '100%';
+            table.style.tableLayout = 'fixed';
+
+            if (headCells.length > persistOffset + persistCols) {
+                const tableWidth = table.getBoundingClientRect().width || 1;
+                const actionCol = headCells[persistOffset + persistCols];
+                const actionWidth = actionCol.getBoundingClientRect().width;
+                const actionPct = (actionWidth / tableWidth) * 100;
+                const contentPct = 100 - actionPct;
+                headCells.forEach((th, index) => {
+                    if (index >= persistOffset && index < persistOffset + persistCols) {
+                        const savedIndex = index - persistOffset;
+                        th.style.width = ((normalized[savedIndex] / 100) * contentPct).toFixed(4) + '%';
+                    } else if (index === persistOffset + persistCols) {
+                        th.style.width = actionPct.toFixed(4) + '%';
+                    }
+                });
+            } else {
+                headCells.forEach((th, index) => {
+                    if (index < normalized.length) {
+                        th.style.width = normalized[index].toFixed(4) + '%';
+                    }
+                });
+            }
+
+            widthsReady = true;
+            return true;
+        };
+
+        const collectWidthsPx = () => headCells.map((th) => th.getBoundingClientRect().width);
+
+        const getPersistCells = () => headCells.slice(persistOffset, persistOffset + persistCols);
+
+        const getPersistPercentages = () => {
+            const widths = getPersistCells().map((th) => th.getBoundingClientRect().width);
+            const total = widths.reduce((sum, value) => sum + value, 0);
+            if (total <= 0) {
+                return null;
+            }
+            return widths.map((value) => (value / total) * 100);
+        };
+
+        const saveWidthsToServer = () => {
+            if (!saveUrl || !itemId) {
+                return;
+            }
+            const percentages = getPersistPercentages();
+            if (!percentages) {
+                return;
+            }
+            const formData = new FormData();
+            formData.append('action', 'save_column_widths');
+            formData.append('item_id', itemId);
+            formData.append('column_widths', JSON.stringify(percentages));
+            formData.append('csrf_token', csrfToken);
+            fetch(saveUrl, { method: 'POST', body: formData }).catch(() => {});
+        };
+
+        const saveWidths = () => {
+            try {
+                const widths = collectWidthsPx();
+                if (widths.some((value) => value <= 0)) {
+                    return;
+                }
+                window.localStorage.setItem(storageKey, JSON.stringify(widths));
+            } catch (error) {
+                // ignore quota / private mode
+            }
+            if (saveUrl && itemId) {
+                clearTimeout(saveServerTimer);
+                saveServerTimer = setTimeout(saveWidthsToServer, 400);
+            }
+        };
+
+        const restoreFromServer = () => {
+            const raw = table.dataset.columnWidths;
+            if (!raw) {
+                return false;
+            }
+            try {
+                return applySavedPercentages(JSON.parse(raw));
+            } catch (error) {
+                return false;
+            }
+        };
+
+        const restoreFromLocalStorage = () => {
+            try {
+                const raw = window.localStorage.getItem(storageKey);
+                if (!raw) {
+                    return false;
+                }
+                const widths = JSON.parse(raw);
+                if (!Array.isArray(widths) || widths.length !== headCells.length) {
+                    return false;
+                }
+                const numeric = widths.map((value) => Number(value));
+                if (numeric.some((value) => !Number.isFinite(value) || value <= 0)) {
+                    return false;
+                }
+                applyWidths(numeric);
+                return true;
+            } catch (error) {
+                return false;
+            }
+        };
+
+        const lockCurrentWidths = () => {
+            if (widthsReady) {
+                return;
+            }
+            const widths = collectWidthsPx();
+            if (widths.some((value) => value <= 0)) {
+                return;
+            }
+            applyWidths(widths);
+        };
+
+        if (!restoreFromServer()) {
+            if (restoreFromLocalStorage() && saveUrl && itemId) {
+                saveWidthsToServer();
+            }
+        }
+
+        headCells.forEach((th, index) => {
+            if (index >= headCells.length - 1) {
+                return;
+            }
+
+            const handle = document.createElement('span');
+            handle.className = 'col-resize-handle';
+            handle.title = 'Изменить ширину столбца';
+            th.appendChild(handle);
+
+            handle.addEventListener('mousedown', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                lockCurrentWidths();
+
+                const leftTh = th;
+                const rightTh = headCells[index + 1];
+                const startX = event.clientX;
+                const leftStart = leftTh.getBoundingClientRect().width;
+                const rightStart = rightTh.getBoundingClientRect().width;
+                const pairTotal = leftStart + rightStart;
+                const tableWidth = table.getBoundingClientRect().width || 1;
+
+                document.body.classList.add('is-col-resizing');
+
+                const onMove = (moveEvent) => {
+                    let leftWidth = leftStart + (moveEvent.clientX - startX);
+                    leftWidth = Math.max(minWidth, Math.min(leftWidth, pairTotal - minWidth));
+                    const rightWidth = pairTotal - leftWidth;
+                    leftTh.style.width = ((leftWidth / tableWidth) * 100).toFixed(4) + '%';
+                    rightTh.style.width = ((rightWidth / tableWidth) * 100).toFixed(4) + '%';
+                };
+
+                const onUp = () => {
+                    document.body.classList.remove('is-col-resizing');
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    saveWidths();
+                };
+
+                document.addEventListener('mousemove', onMove);
+                document.addEventListener('mouseup', onUp);
+            });
+        });
+    });
+
     const profileView = document.querySelector('[data-profile-view]');
     const profileEdit = document.querySelector('[data-profile-edit]');
     if (profileView && profileEdit) {
@@ -1106,26 +1971,35 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     });
 
-    const normalizePhoneDigits = (value) => {
-        let digits = String(value).replace(/\D/g, '');
-        if (digits.length === 11 && digits[0] === '8') {
-            digits = '7' + digits.slice(1);
-        }
-        return digits;
-    };
+    const normalizePhoneDigits = (value) => String(value).replace(/\D/g, '').slice(0, 11);
 
     const formatLoginPhone = (value) => {
-        let digits = normalizePhoneDigits(value);
-        if (digits.length === 10) {
-            digits = '7' + digits;
-        }
+        const digits = normalizePhoneDigits(value);
         if (digits === '') {
             return '';
         }
-        if (digits[0] !== '7') {
-            digits = '7' + digits.replace(/^7+/, '');
+
+        if (digits.length === 11 && digits[0] === '8') {
+            return '+7' + digits.slice(1);
         }
-        return '+' + digits.slice(0, 11);
+
+        if (digits.length === 11 && digits[0] === '7') {
+            return '+' + digits;
+        }
+
+        if (digits.length === 10) {
+            return digits[0] === '7' ? '+' + digits : '+7' + digits;
+        }
+
+        if (digits[0] === '8' && digits.length > 1) {
+            return '+7' + digits.slice(1);
+        }
+
+        if (digits[0] === '7') {
+            return '+' + digits;
+        }
+
+        return '+' + digits;
     };
 
     document.querySelectorAll('input[data-phone-login]').forEach((input) => {
@@ -1346,6 +2220,49 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         teachersSearch.addEventListener('input', filterTeachers);
+
+        const credentialsUrl = teachersTable.dataset.teachersCredentialsUrl;
+        const csrfToken = teachersTable.dataset.csrf;
+        if (credentialsUrl && csrfToken) {
+            teachersTable.querySelectorAll('[data-teacher-credentials-sent]').forEach((checkbox) => {
+                checkbox.addEventListener('click', (event) => {
+                    event.stopPropagation();
+                });
+
+                checkbox.addEventListener('change', () => {
+                    const teacherId = checkbox.dataset.teacherId;
+                    if (!teacherId) {
+                        return;
+                    }
+
+                    const formData = new FormData();
+                    formData.append('csrf_token', csrfToken);
+                    formData.append('teacher_id', teacherId);
+                    formData.append('sent', checkbox.checked ? '1' : '0');
+
+                    checkbox.disabled = true;
+
+                    fetch(credentialsUrl, {
+                        method: 'POST',
+                        body: formData,
+                        credentials: 'same-origin',
+                    })
+                        .then((response) => response.json())
+                        .then((data) => {
+                            if (!data.success) {
+                                throw new Error(data.error || 'Не удалось сохранить отметку.');
+                            }
+                        })
+                        .catch((error) => {
+                            checkbox.checked = !checkbox.checked;
+                            window.alert(error.message || 'Не удалось сохранить отметку.');
+                        })
+                        .finally(() => {
+                            checkbox.disabled = false;
+                        });
+                });
+            });
+        }
     }
 
     document.querySelectorAll('[data-table-search]').forEach((input) => {
@@ -1735,4 +2652,10 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    document.querySelectorAll('[data-ktp-print]').forEach((button) => {
+        button.addEventListener('click', () => {
+            window.print();
+        });
+    });
 });

@@ -372,8 +372,7 @@ function get_glaz_view_highlights(?int $userId = null): array
     }
 
     if ($userId > 0) {
-        $curatorGroup = get_curator_group($userId);
-        if ($curatorGroup) {
+        foreach (get_groups_for_curator($userId) as $curatorGroup) {
             $groupNumbers[] = (string) $curatorGroup['number'];
         }
     }

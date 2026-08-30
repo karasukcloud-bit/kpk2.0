@@ -249,6 +249,7 @@ function get_curriculum_item_by_id(int $itemId): ?array
     $stmt = db()->prepare(
         'SELECT ci.*, sub.name AS subject_name, cp.group_id, cp.academic_year,
                 g.number AS group_number, g.is_professionality,
+                s.code AS specialty_code, s.name AS specialty_name,
                 u.full_name AS teacher_name,
                 u.email AS teacher_email,
                 u.phone AS teacher_phone,
@@ -257,6 +258,7 @@ function get_curriculum_item_by_id(int $itemId): ?array
          INNER JOIN subjects sub ON sub.id = ci.subject_id
          INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
          INNER JOIN study_groups g ON g.id = cp.group_id
+         INNER JOIN specialties s ON s.id = g.specialty_id
          LEFT JOIN users u ON u.id = ci.teacher_id
          WHERE ci.id = ?
          LIMIT 1'

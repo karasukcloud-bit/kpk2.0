@@ -8,26 +8,12 @@ require_once __DIR__ . '/../includes/group_report.php';
 
 require_curator_panel();
 
-$groups = get_groups_for_curator();
-$groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
-
-if ($groupId === 0 && count($groups) === 1) {
-    $groupId = (int) $groups[0]['id'];
-}
-
-$group = null;
-$students = [];
-$error = null;
-
-if ($groupId > 0) {
-    if (!can_manage_group($groupId)) {
-        $error = 'Нет доступа к выбранной группе.';
-        $groupId = 0;
-    } else {
-        $group = get_group_by_id($groupId);
-        $students = get_students_by_group($groupId);
-    }
-}
+$ctx = resolve_curator_group_context(isset($_GET['group_id']) ? (int) $_GET['group_id'] : null);
+$groups = $ctx['groups'];
+$groupId = $ctx['group_id'];
+$group = $ctx['group'];
+$students = $group ? get_students_by_group($groupId) : [];
+$error = $ctx['error'];
 
 $report = $group ? build_group_report($students, $groupId) : null;
 
@@ -36,6 +22,7 @@ $showHeader = true;
 $basePath = '../';
 $currentCuratorTab = 'report';
 $curatorGroupId = $groupId;
+$curatorGroups = $groups;
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -62,24 +49,6 @@ require __DIR__ . '/../includes/header.php';
         </section>
     <?php else: ?>
         <section class="panel">
-            <?php if (count($groups) > 1): ?>
-            <form method="get" class="form form--filter">
-                <div class="form__row form__row--filter">
-                    <div class="form__group">
-                        <label for="group_id">Группа</label>
-                        <select id="group_id" name="group_id" onchange="this.form.submit()">
-                            <option value="">— Выберите группу —</option>
-                            <?php foreach ($groups as $item): ?>
-                            <option value="<?= (int) $item['id'] ?>"<?= (int) $item['id'] === $groupId ? ' selected' : '' ?>>
-                                <?= e($item['number']) ?> · <?= e($item['specialty_name']) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-            </form>
-            <?php endif; ?>
-
             <?php if ($group === null): ?>
                 <p class="text-muted">Выберите группу, чтобы открыть справку.</p>
             <?php else: ?>

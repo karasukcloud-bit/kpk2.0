@@ -76,7 +76,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 posted_staff_roles(),
                 null,
                 posted_curator_group_id(),
-                $_POST['phone'] ?? ''
+                $_POST['phone'] ?? '',
+                posted_curator_group_id_2()
             );
 
             if ($result['success']) {
@@ -206,6 +207,9 @@ $emailDisplay = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '
             $selectedCuratorGroupId = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save')
                 ? posted_curator_group_id()
                 : ($teacher['curator_group_id'] ?? null);
+            $selectedCuratorGroupId2 = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save')
+                ? posted_curator_group_id_2()
+                : ($teacher['curator_group_id_2'] ?? null);
             $forCuratorUserId = $id;
             require __DIR__ . '/../includes/role_fields.php';
             ?>

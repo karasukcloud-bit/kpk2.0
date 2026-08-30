@@ -429,12 +429,30 @@ function normalize_phone_digits(string $phone): string
 
 function format_login_phone(string $phone): string
 {
-    $digits = normalize_phone_digits($phone);
+    $digits = preg_replace('/\D+/', '', $phone) ?? '';
+    $digits = substr($digits, 0, 11);
     if ($digits === '') {
         return '';
     }
+
+    if (strlen($digits) === 11 && $digits[0] === '8') {
+        return '+7' . substr($digits, 1);
+    }
+
+    if (strlen($digits) === 11 && $digits[0] === '7') {
+        return '+' . $digits;
+    }
+
     if (strlen($digits) === 10) {
-        $digits = '7' . $digits;
+        return $digits[0] === '7' ? '+' . $digits : '+7' . $digits;
+    }
+
+    if ($digits[0] === '8' && strlen($digits) > 1) {
+        return '+7' . substr($digits, 1);
+    }
+
+    if ($digits[0] === '7') {
+        return '+' . $digits;
     }
 
     return '+' . $digits;

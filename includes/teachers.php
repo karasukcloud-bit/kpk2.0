@@ -10,7 +10,7 @@ require_once __DIR__ . '/students.php';
 function get_all_teachers(): array
 {
     $stmt = db()->query(
-        "SELECT id, email, full_name, phone, is_active, created_at
+        "SELECT id, email, full_name, phone, is_active, auth_credentials_sent, created_at
          FROM users
          WHERE role = 'teacher'
          ORDER BY full_name COLLATE utf8mb4_unicode_ci ASC"
@@ -19,10 +19,20 @@ function get_all_teachers(): array
 
     foreach ($teachers as &$teacher) {
         $teacher['phone'] = (string) ($teacher['phone'] ?? '');
+        $teacher['auth_credentials_sent'] = (int) ($teacher['auth_credentials_sent'] ?? 0);
         $teacher['staff_roles'] = get_user_staff_roles((int) $teacher['id']);
-        $curatorGroup = get_curator_group((int) $teacher['id']);
-        $teacher['curator_group_id'] = $curatorGroup ? (int) $curatorGroup['id'] : null;
-        $teacher['curator_group_number'] = $curatorGroup['number'] ?? null;
+        $curatorGroups = in_array('curator', $teacher['staff_roles'], true)
+            ? get_groups_for_curator((int) $teacher['id'])
+            : [];
+        $teacher['curator_group_id'] = isset($curatorGroups[0]) ? (int) $curatorGroups[0]['id'] : null;
+        $teacher['curator_group_id_2'] = isset($curatorGroups[1]) ? (int) $curatorGroups[1]['id'] : null;
+        $teacher['curator_group_number'] = implode(', ', array_map(
+            static fn (array $group): string => (string) $group['number'],
+            $curatorGroups
+        ));
+        if ($teacher['curator_group_number'] === '') {
+            $teacher['curator_group_number'] = null;
+        }
     }
     unset($teacher);
 
@@ -46,9 +56,18 @@ function get_teacher_by_id(int $id): ?array
 
     $teacher['phone'] = (string) ($teacher['phone'] ?? '');
     $teacher['staff_roles'] = get_user_staff_roles($id);
-    $curatorGroup = get_curator_group($id);
-    $teacher['curator_group_id'] = $curatorGroup ? (int) $curatorGroup['id'] : null;
-    $teacher['curator_group_number'] = $curatorGroup['number'] ?? null;
+    $curatorGroups = in_array('curator', $teacher['staff_roles'], true)
+        ? get_groups_for_curator($id)
+        : [];
+    $teacher['curator_group_id'] = isset($curatorGroups[0]) ? (int) $curatorGroups[0]['id'] : null;
+    $teacher['curator_group_id_2'] = isset($curatorGroups[1]) ? (int) $curatorGroups[1]['id'] : null;
+    $teacher['curator_group_number'] = implode(', ', array_map(
+        static fn (array $group): string => (string) $group['number'],
+        $curatorGroups
+    ));
+    if ($teacher['curator_group_number'] === '') {
+        $teacher['curator_group_number'] = null;
+    }
 
     return $teacher;
 }
@@ -59,7 +78,8 @@ function create_teacher(
     string $fullName,
     array $staffRoles,
     ?int $curatorGroupId = null,
-    string $phone = ''
+    string $phone = '',
+    ?int $curatorGroupId2 = null
 ): array {
     $result = register_user($email, $password, $fullName, 'teacher', $staffRoles, $phone);
     if (!$result['success']) {
@@ -68,7 +88,7 @@ function create_teacher(
 
     $userId = (int) $result['user_id'];
 
-    $groupResult = sync_curator_group($userId, $staffRoles, $curatorGroupId);
+    $groupResult = sync_curator_groups($userId, $staffRoles, curator_group_ids_from_values($curatorGroupId, $curatorGroupId2));
     if (!$groupResult['success']) {
         $stmt = db()->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
         $stmt->execute([$userId]);
@@ -86,7 +106,8 @@ function update_teacher(
     array $staffRoles,
     ?string $password = null,
     ?int $curatorGroupId = null,
-    string $phone = ''
+    string $phone = '',
+    ?int $curatorGroupId2 = null
 ): array {
     $teacher = get_teacher_by_id($id);
 
@@ -152,7 +173,7 @@ function update_teacher(
 
     set_user_staff_roles($id, $staffRoles);
 
-    $groupResult = sync_curator_group($id, $staffRoles, $curatorGroupId);
+    $groupResult = sync_curator_groups($id, $staffRoles, curator_group_ids_from_values($curatorGroupId, $curatorGroupId2));
     if (!$groupResult['success']) {
         return $groupResult;
     }
@@ -223,6 +244,21 @@ function delete_teacher(int $id): array
     return ['success' => true];
 }
 
+function set_teacher_auth_credentials_sent(int $id, bool $sent): array
+{
+    $teacher = get_teacher_by_id($id);
+    if ($teacher === null) {
+        return ['success' => false, 'error' => 'Преподаватель не найден.'];
+    }
+
+    $stmt = db()->prepare(
+        "UPDATE users SET auth_credentials_sent = ? WHERE id = ? AND role = 'teacher'"
+    );
+    $stmt->execute([$sent ? 1 : 0, $id]);
+
+    return ['success' => true, 'sent' => $sent];
+}
+
 function format_date(?string $datetime): string
 {
     if ($datetime === null || $datetime === '') {
@@ -249,4 +285,29 @@ function posted_curator_group_id(): ?int
     $value = (int) ($_POST['curator_group_id'] ?? 0);
 
     return $value > 0 ? $value : null;
+}
+
+function posted_curator_group_id_2(): ?int
+{
+    $value = (int) ($_POST['curator_group_id_2'] ?? 0);
+
+    return $value > 0 ? $value : null;
+}
+
+function posted_curator_group_ids(): array
+{
+    return curator_group_ids_from_values(posted_curator_group_id(), posted_curator_group_id_2());
+}
+
+function curator_group_ids_from_values(?int $groupId, ?int $groupId2 = null): array
+{
+    $ids = [];
+    if ($groupId !== null && $groupId > 0) {
+        $ids[] = $groupId;
+    }
+    if ($groupId2 !== null && $groupId2 > 0 && $groupId2 !== ($ids[0] ?? null)) {
+        $ids[] = $groupId2;
+    }
+
+    return $ids;
 }

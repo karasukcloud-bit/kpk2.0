@@ -44,6 +44,7 @@ $showHeader = true;
 $basePath = '../';
 $currentCuratorTab = 'group';
 $curatorGroupId = $groupId;
+$curatorGroups = get_groups_for_curator();
 require __DIR__ . '/../includes/header.php';
 ?>
 

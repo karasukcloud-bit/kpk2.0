@@ -13,9 +13,11 @@ $studentInfoColumns = [
     ['key' => 'mother_name', 'label' => 'ФИО мамы'],
     ['key' => 'mother_phone', 'label' => 'Телефон мамы'],
     ['key' => 'mother_workplace', 'label' => 'Место работы мамы'],
+    ['key' => 'mother_education', 'label' => 'Образование мамы'],
     ['key' => 'father_name', 'label' => 'ФИО папы'],
     ['key' => 'father_phone', 'label' => 'Телефон папы'],
     ['key' => 'father_workplace', 'label' => 'Место работы папы'],
+    ['key' => 'father_education', 'label' => 'Образование папы'],
     ['key' => 'address_registered', 'label' => 'Адрес по прописке'],
     ['key' => 'address_region', 'label' => 'Область / край'],
     ['key' => 'address_district', 'label' => 'Район / округ'],
@@ -47,12 +49,16 @@ $renderStudentInfoCell = static function (array $student, string $key): string {
             return (string) (($student['mother_phone'] ?? '') !== '' ? $student['mother_phone'] : '—');
         case 'mother_workplace':
             return (string) (($student['mother_workplace'] ?? '') !== '' ? $student['mother_workplace'] : '—');
+        case 'mother_education':
+            return student_education_label(isset($student['mother_education']) ? (string) $student['mother_education'] : null);
         case 'father_name':
             return (string) (($student['father_name'] ?? '') !== '' ? $student['father_name'] : '—');
         case 'father_phone':
             return (string) (($student['father_phone'] ?? '') !== '' ? $student['father_phone'] : '—');
         case 'father_workplace':
             return (string) (($student['father_workplace'] ?? '') !== '' ? $student['father_workplace'] : '—');
+        case 'father_education':
+            return student_education_label(isset($student['father_education']) ? (string) $student['father_education'] : null);
         case 'address_registered':
             return format_student_registered_address($student);
         case 'address_region':

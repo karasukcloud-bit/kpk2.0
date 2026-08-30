@@ -178,6 +178,19 @@ function ensure_ktp_constructor_schema(PDO $pdo): void
             );
         }
     }
+
+    if (!$pdo->query("SHOW TABLES LIKE 'ktp_item_settings'")->fetch()) {
+        $pdo->exec("
+            CREATE TABLE ktp_item_settings (
+                curriculum_item_id INT UNSIGNED NOT NULL PRIMARY KEY,
+                column_widths     JSON NULL,
+                updated_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                CONSTRAINT fk_ktp_item_settings_item
+                    FOREIGN KEY (curriculum_item_id) REFERENCES curriculum_items(id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
 }
 
 function ensure_study_groups_labels_schema(PDO $pdo): void
@@ -657,6 +670,16 @@ function ensure_student_social_schema(PDO $pdo): void
     );
     $addStudentCol(
         $pdo,
+        'mother_education',
+        "mother_education VARCHAR(255) NOT NULL DEFAULT '' AFTER mother_workplace"
+    );
+    $addStudentCol(
+        $pdo,
+        'father_education',
+        "father_education VARCHAR(255) NOT NULL DEFAULT '' AFTER father_workplace"
+    );
+    $addStudentCol(
+        $pdo,
         'address_region',
         "address_region VARCHAR(255) NOT NULL DEFAULT '' AFTER address_registered"
     );
@@ -739,6 +762,16 @@ function ensure_student_social_schema(PDO $pdo): void
     );
     $addExpelledCol(
         $pdo,
+        'mother_education',
+        "mother_education VARCHAR(255) NOT NULL DEFAULT '' AFTER mother_workplace"
+    );
+    $addExpelledCol(
+        $pdo,
+        'father_education',
+        "father_education VARCHAR(255) NOT NULL DEFAULT '' AFTER father_workplace"
+    );
+    $addExpelledCol(
+        $pdo,
         'address_region',
         "address_region VARCHAR(255) NOT NULL DEFAULT '' AFTER address_registered"
     );
@@ -788,6 +821,14 @@ function ensure_user_profile_schema(PDO $pdo): void
         $pdo->exec(
             "ALTER TABLE users
              ADD avatar VARCHAR(255) NOT NULL DEFAULT 'icon:person' AFTER additional_info"
+        );
+    }
+
+    $credentialsSentCol = $pdo->query("SHOW COLUMNS FROM users LIKE 'auth_credentials_sent'")->fetch();
+    if (!$credentialsSentCol) {
+        $pdo->exec(
+            "ALTER TABLE users
+             ADD auth_credentials_sent TINYINT(1) UNSIGNED NOT NULL DEFAULT 0 AFTER is_active"
         );
     }
 }

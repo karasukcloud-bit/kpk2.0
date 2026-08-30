@@ -37,6 +37,11 @@ $formatHours = static function ($hours): string {
 <?php if ($topics === []): ?>
     <p class="text-muted">Темы пока не добавлены.</p>
 <?php else: ?>
+    <div class="covered-summary ktp-plan-summary">
+        <h3>Сводка КТП</h3>
+        <?php require __DIR__ . '/summary_table.php'; render_ktp_plan_summary_table($item, $topics); ?>
+    </div>
+
     <div class="table-wrap">
         <table class="table ktp-edit-table">
             <thead>
@@ -49,7 +54,6 @@ $formatHours = static function ($hours): string {
                     <th>Сроки</th>
                     <th>ОК / ПК</th>
                     <th>Форма контроля</th>
-                    <th>Статус</th>
                     <th class="table__actions-col">Действия</th>
                 </tr>
             </thead>
@@ -63,9 +67,6 @@ $formatHours = static function ($hours): string {
                 <?php
                 $isSemesterMarker = ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? ''));
                 $rowClass = 'ktp-sortable-row';
-                if (!empty($topic['completed'])) {
-                    $rowClass .= ' ktp-row--done';
-                }
                 if ($isSemesterMarker) {
                     $rowClass .= ' ktp-row--semester-marker';
                 }
@@ -81,7 +82,7 @@ $formatHours = static function ($hours): string {
                         $topicNum = ktp_topic_display_number($topics, $index);
                         echo $topicNum !== null ? (int) $topicNum : '';
                     ?></td>
-                    <td<?= $isSemesterMarker ? ' colspan="7"' : '' ?>>
+                    <td<?= $isSemesterMarker ? ' colspan="6"' : '' ?>>
                         <?php if ($isSemesterMarker): ?>
                             <strong><?= e(ktp_semester_marker_title()) ?></strong>
                         <?php else: ?>
@@ -94,16 +95,6 @@ $formatHours = static function ($hours): string {
                     <td><?= e(format_ktp_deadline_date($topic['deadline_date'] ?? null)) ?></td>
                     <td class="ktp-competency-cell"><?php render_ktp_competency_cell($topic['ok_codes'] ?? null, $topic['pk_codes'] ?? null); ?></td>
                     <td><?= e(ktp_control_form_label($topic['control_form'] ?? null)) ?></td>
-                    <td>
-                        <?php if (!empty($topic['completed'])): ?>
-                            <span class="badge badge--success">Пройдена</span>
-                            <?php if (!empty($topic['first_lesson_date'])): ?>
-                                <span class="text-muted"><?= e(date('d.m.Y', (int) strtotime($topic['first_lesson_date']))) ?></span>
-                            <?php endif; ?>
-                        <?php else: ?>
-                            <span class="text-muted">Не пройдена</span>
-                        <?php endif; ?>
-                    </td>
                     <?php endif; ?>
                     <td class="table__actions">
                         <?php if (!$isSemesterMarker): ?>
@@ -139,28 +130,6 @@ $formatHours = static function ($hours): string {
                 <?php endforeach; ?>
             </tbody>
         </table>
-    </div>
-
-    <div class="covered-summary ktp-plan-summary">
-        <h3>Сводка КТП</h3>
-        <dl class="profile-list">
-            <dt>Уроков (лекция/практика)</dt>
-            <dd><?= (int) $ktpSummary['lessons'] ?></dd>
-            <dt>Часов лекций</dt>
-            <dd><?= e((string) $ktpSummary['lecture_hours']) ?></dd>
-            <dt>Часов практических</dt>
-            <dd><?= e((string) $ktpSummary['practice_hours']) ?></dd>
-            <?php if ($isProfessionality): ?>
-            <dt>Часов профориентированных</dt>
-            <dd><?= e((string) $ktpSummary['orientation_hours']) ?></dd>
-            <?php endif; ?>
-            <dt>Часов промежуточной аттестации</dt>
-            <dd><?= e((string) $ktpSummary['attestation_hours']) ?></dd>
-            <dt>Часов самостоятельных работ</dt>
-            <dd><?= e((string) $ktpSummary['independent_hours']) ?></dd>
-            <dt>Часов всего</dt>
-            <dd><?= e((string) $ktpSummary['total_hours']) ?></dd>
-        </dl>
     </div>
 <?php endif; ?>
 

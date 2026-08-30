@@ -56,14 +56,20 @@ require __DIR__ . '/../includes/header.php';
                 >
             </div>
             <div class="table-wrap">
-                <table class="table" data-teachers-table>
+                <table
+                    class="table"
+                    data-teachers-table
+                    data-teachers-credentials-url="teacher_credentials_sent.php"
+                    data-csrf="<?= e(csrf_token()) ?>"
+                >
                     <thead>
                         <tr>
                             <th class="table__num-col">№</th>
                             <th>ФИО</th>
                             <th>Телефон</th>
                             <th>Роли</th>
-                            <th>Группа куратора</th>
+                            <th>Курируемые группы</th>
+                            <th class="table__check-col" title="Отметка об отправке логина и пароля">Данные отправлены</th>
                             <th class="table__status-col">Статус</th>
                             <th>Дата регистрации</th>
                         </tr>
@@ -81,6 +87,17 @@ require __DIR__ . '/../includes/header.php';
                             <td><?= e(($teacher['phone'] ?? '') !== '' ? $teacher['phone'] : '—') ?></td>
                             <td class="roles-cell"><?= render_staff_roles_badges($teacher['staff_roles'] ?? []) ?></td>
                             <td><?= e($teacher['curator_group_number'] ?? '—') ?></td>
+                            <td class="table__check-col" onclick="event.stopPropagation()">
+                                <label class="checkbox-label checkbox-label--table" title="Регистрационные данные отправлены">
+                                    <input
+                                        type="checkbox"
+                                        data-teacher-credentials-sent
+                                        data-teacher-id="<?= (int) $teacher['id'] ?>"
+                                        <?= (int) ($teacher['auth_credentials_sent'] ?? 0) ? 'checked' : '' ?>
+                                        aria-label="Данные для авторизации отправлены: <?= e($teacher['full_name']) ?>"
+                                    >
+                                </label>
+                            </td>
                             <td class="table__status-col">
                                 <?php if ((int) $teacher['is_active']): ?>
                                     <span class="status-icon status-icon--active" title="Активен" aria-label="Активен">
@@ -105,7 +122,7 @@ require __DIR__ . '/../includes/header.php';
                 </table>
             </div>
             <p class="text-muted teachers-search-empty" data-teachers-empty hidden>Ничего не найдено по запросу.</p>
-            <p class="text-muted table-hint">Нажмите на строку, чтобы редактировать данные преподавателя.</p>
+            <p class="text-muted table-hint">Нажмите на строку, чтобы редактировать данные преподавателя. Отметку об отправке данных можно поставить прямо в таблице.</p>
         <?php endif; ?>
     </section>
 </div>

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/profile.php';
 require_once __DIR__ . '/../includes/ktp.php';
+require_once __DIR__ . '/../includes/ktp/word_import.php';
 require_once __DIR__ . '/../includes/curriculum.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 
@@ -31,7 +32,7 @@ if ($itemId > 0 && $item === null) {
     exit;
 }
 
-if ($itemId > 0 && $mode !== 'manual' && $mode !== 'rp') {
+if ($itemId > 0 && $mode !== 'manual' && $mode !== 'rp' && $mode !== 'rows' && $mode !== 'word') {
     $mode = 'manual';
 }
 
@@ -40,7 +41,6 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
     } else {
         $action = $_POST['action'] ?? '';
-        $extra = ktp_topic_extra_from_post($_POST);
         $redirect = 'ktp_constructor.php?item_id=' . $itemId . '&mode=' . urlencode($mode !== '' ? $mode : 'manual');
 
         if ($action === 'upload_work_program') {
@@ -55,6 +55,44 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
             $result = delete_ktp_work_program($itemId);
             if ($result['success']) {
                 flash_set('success', 'Рабочая программа удалена.');
+                header('Location: ' . $redirect);
+                exit;
+            }
+            $error = $result['error'];
+        } elseif ($action === 'upload_word_ktp' && $mode === 'word') {
+            $result = upload_and_parse_ktp_word($itemId, $_FILES['word_program'] ?? []);
+            if ($result['success']) {
+                flash_set(
+                    'success',
+                    'Файл разобран. Найдено строк: ' . (int) ($result['row_count'] ?? 0) . '. Проверьте предпросмотр и импортируйте.'
+                );
+                header('Location: ' . $redirect);
+                exit;
+            }
+            $error = $result['error'];
+        } elseif ($action === 'import_word_ktp' && $mode === 'word') {
+            $preview = ktp_word_import_get_preview($itemId);
+            if ($preview === null || empty($preview['rows'])) {
+                $error = 'Нет данных для импорта. Загрузите файл Word заново.';
+            } else {
+                $result = import_ktp_topics_from_rows($itemId, $preview['rows'], true);
+                if ($result['success']) {
+                    ktp_word_import_clear_preview($itemId);
+                    flash_set('success', 'Импортировано строк: ' . (int) ($result['imported'] ?? 0) . '.');
+                    header('Location: ktp_constructor.php?item_id=' . $itemId . '&mode=rows');
+                    exit;
+                }
+                $error = $result['error'];
+            }
+        } elseif ($action === 'cancel_word_ktp' && $mode === 'word') {
+            ktp_word_import_clear_preview($itemId);
+            flash_set('success', 'Предпросмотр импорта отменён.');
+            header('Location: ' . $redirect);
+            exit;
+        } elseif ($action === 'add_ktp_semester_marker' && ($mode === 'manual' || $mode === 'rows')) {
+            $result = add_ktp_semester_marker($itemId);
+            if ($result['success']) {
+                flash_set('success', 'Разделитель 2 семестра добавлен в КТП.');
                 header('Location: ' . $redirect);
                 exit;
             }
@@ -75,8 +113,6 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $_POST['attestation_type'] ?? '',
                     $_POST['attestation_hours'] ?? 1
                 );
-            } elseif ($action === 'add_ktp_semester_marker') {
-                $result = add_ktp_semester_marker($itemId);
             } elseif ($action === 'update_ktp_topic') {
                 $topicId = (int) ($_POST['topic_id'] ?? 0);
                 $topic = get_ktp_topic_by_id($topicId);
@@ -116,8 +152,6 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
                     $msg = $count > 1
                         ? ('Добавлена промежуточная аттестация: ' . $count . ' стр.')
                         : 'Промежуточная аттестация добавлена.';
-                } elseif ($action === 'add_ktp_semester_marker') {
-                    $msg = 'Разделитель 2 семестра добавлен в КТП.';
                 } elseif ($action === 'update_ktp_topic') {
                     $added = (int) ($result['added'] ?? 0);
                     $msg = $added > 0
@@ -143,11 +177,17 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
     }
 }
 
-$topics = $itemId > 0 && $mode === 'manual' ? get_ktp_topics_with_progress($itemId) : [];
-$ktpSummary = $itemId > 0 && $mode === 'manual' ? build_ktp_plan_summary($topics) : [];
+$isTableMode = $itemId > 0 && ($mode === 'manual' || $mode === 'rows');
+if ($isTableMode && $mode === 'rows') {
+    ensure_ktp_has_starter_row($itemId);
+}
+$topics = $isTableMode ? get_ktp_topics_with_progress($itemId) : [];
+$ktpSummary = $isTableMode ? build_ktp_plan_summary($topics) : [];
 $workProgram = $itemId > 0 && $mode === 'rp' ? get_ktp_work_program($itemId) : null;
+$wordImportPreview = $itemId > 0 && $mode === 'word' ? ktp_word_import_get_preview($itemId) : null;
 $ktpTopicFormDraft = $itemId > 0 ? ktp_get_add_form_draft($itemId, 'topic') : [];
 $ktpAttestationFormDraft = $itemId > 0 ? ktp_get_add_form_draft($itemId, 'attestation') : [];
+$ktpColumnWidths = $itemId > 0 ? get_ktp_column_widths($itemId) : null;
 
 if ($itemId > 0 && $mode === 'manual' && $_SERVER['REQUEST_METHOD'] === 'POST' && !empty($error)) {
     $failedAction = (string) ($_POST['action'] ?? '');
@@ -176,7 +216,7 @@ require __DIR__ . '/../includes/header.php';
                 <p class="text-muted">Конструктор календарно-тематического планирования</p>
             </div>
             <?php if ($item): ?>
-            <a href="ktp_constructor.php" class="btn btn--ghost btn--sm">← К предметам</a>
+            <a href="ktp.php?item_id=<?= $itemId ?>" class="btn btn--ghost btn--sm">← К просмотру КТП</a>
             <?php endif; ?>
         </div>
         <?php require __DIR__ . '/../includes/teacher_nav.php'; ?>
@@ -211,7 +251,7 @@ require __DIR__ . '/../includes/header.php';
                                 <td><?= (int) $subject['ktp_count'] ?></td>
                                 <td class="table__actions">
                                     <a
-                                        href="ktp_constructor.php?item_id=<?= (int) $subject['curriculum_item_id'] ?>&mode=manual"
+                                        href="ktp.php?item_id=<?= (int) $subject['curriculum_item_id'] ?>"
                                         class="btn btn--primary btn--sm"
                                     >Открыть</a>
                                 </td>
@@ -234,6 +274,14 @@ require __DIR__ . '/../includes/header.php';
                     class="journal-subtabs__item<?= $mode === 'manual' ? ' journal-subtabs__item--active' : '' ?>"
                 >Ручной</a>
                 <a
+                    href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=rows"
+                    class="journal-subtabs__item<?= $mode === 'rows' ? ' journal-subtabs__item--active' : '' ?>"
+                >Строки</a>
+                <a
+                    href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=word"
+                    class="journal-subtabs__item<?= $mode === 'word' ? ' journal-subtabs__item--active' : '' ?>"
+                >Из Word</a>
+                <a
                     href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=rp"
                     class="journal-subtabs__item<?= $mode === 'rp' ? ' journal-subtabs__item--active' : '' ?>"
                 >С загрузкой РП</a>
@@ -241,6 +289,10 @@ require __DIR__ . '/../includes/header.php';
 
             <?php if ($mode === 'manual'): ?>
                 <?php require __DIR__ . '/../includes/ktp/manual_editor.php'; ?>
+            <?php elseif ($mode === 'rows'): ?>
+                <?php require __DIR__ . '/../includes/ktp/rows_editor.php'; ?>
+            <?php elseif ($mode === 'word'): ?>
+                <?php require __DIR__ . '/../includes/ktp/word_import_ui.php'; ?>
             <?php else: ?>
                 <?php if ($success): ?>
                     <div class="alert alert--success"><?= e($success) ?></div>

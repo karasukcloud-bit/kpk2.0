@@ -427,14 +427,14 @@ function expel_student(
             'INSERT INTO expelled_students (
                 original_student_id, group_id, group_number, specialty_name, specialty_code,
                 full_name, phone, birth_date, gender, mother_name, mother_phone, mother_workplace,
-                father_name, father_phone, father_workplace,
+                mother_education, father_name, father_phone, father_workplace, father_education,
                 address_region, address_district, address_locality, address_street, address_house,
                 address_registered, address_actual,
                 district, is_low_income, family_type, siblings_under_18, residence_type, is_nonresident,
                 without_parental_care,
                 expulsion_order, expulsion_date, expulsion_reason,
                 expulsion_academic_year, expulsion_semester, expelled_by
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $studentId,
@@ -449,9 +449,11 @@ function expel_student(
             (string) ($student['mother_name'] ?? ''),
             (string) ($student['mother_phone'] ?? ''),
             (string) ($student['mother_workplace'] ?? ''),
+            (string) ($student['mother_education'] ?? ''),
             (string) ($student['father_name'] ?? ''),
             (string) ($student['father_phone'] ?? ''),
             (string) ($student['father_workplace'] ?? ''),
+            (string) ($student['father_education'] ?? ''),
             (string) ($student['address_region'] ?? ''),
             (string) ($student['address_district'] ?? ''),
             (string) ($student['address_locality'] ?? ''),
@@ -601,9 +603,11 @@ function restore_expelled_student(
         'mother_name' => (string) ($expelled['mother_name'] ?? ''),
         'mother_phone' => (string) ($expelled['mother_phone'] ?? ''),
         'mother_workplace' => (string) ($expelled['mother_workplace'] ?? ''),
+        'mother_education' => (string) ($expelled['mother_education'] ?? ''),
         'father_name' => (string) ($expelled['father_name'] ?? ''),
         'father_phone' => (string) ($expelled['father_phone'] ?? ''),
         'father_workplace' => (string) ($expelled['father_workplace'] ?? ''),
+        'father_education' => (string) ($expelled['father_education'] ?? ''),
         'address_region' => (string) ($expelled['address_region'] ?? ''),
         'address_district' => (string) ($expelled['address_district'] ?? ''),
         'address_locality' => (string) ($expelled['address_locality'] ?? ''),

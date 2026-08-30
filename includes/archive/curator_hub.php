@@ -44,6 +44,14 @@ $gradebookArchive = $periodValid ? get_archive_period_by_id($archiveId) : null;
 $gradebookGroups = $gradebookArchive
     ? get_archive_gradebook_groups((int) $gradebookArchive['id'])
     : [];
+$curatorGroups = get_groups_for_curator();
+$curatorGroupIds = array_map(static fn (array $group): int => (int) $group['id'], $curatorGroups);
+if ($gradebookGroups !== [] && $curatorGroupIds !== []) {
+    $gradebookGroups = array_values(array_filter(
+        $gradebookGroups,
+        static fn (array $group): bool => in_array((int) $group['group_id'], $curatorGroupIds, true)
+    ));
+}
 
 $pageTitle = 'Архив ведомостей — Панель куратора';
 $showHeader = true;

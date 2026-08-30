@@ -8,14 +8,10 @@ require_once __DIR__ . '/../includes/attendance.php';
 
 require_curator_panel();
 
-$groups = get_groups_for_curator();
-$groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
-
-if ($groupId === 0 && count($groups) === 1) {
-    $groupId = (int) $groups[0]['id'];
-}
-
-$group = ($groupId > 0 && can_manage_group($groupId)) ? get_group_by_id($groupId) : null;
+$ctx = resolve_curator_group_context(isset($_GET['group_id']) ? (int) $_GET['group_id'] : null);
+$groups = $ctx['groups'];
+$groupId = $ctx['group_id'];
+$group = $ctx['group'];
 $students = $group ? get_students_by_group($groupId) : [];
 $year = get_default_academic_year();
 $monthOptions = get_academic_year_months($year);
@@ -130,6 +126,11 @@ $showHeader = true;
 $basePath = '../';
 $currentCuratorTab = 'attendance';
 $curatorGroupId = $groupId;
+$curatorGroups = $groups;
+$curatorGroupPreserveParams = ['month' => $month];
+if ($editDayId > 0) {
+    $curatorGroupPreserveParams['edit_day'] = $editDayId;
+}
 require __DIR__ . '/../includes/header.php';
 ?>
 
@@ -156,25 +157,11 @@ require __DIR__ . '/../includes/header.php';
         <?php if (empty($groups)): ?>
             <p class="text-muted">Вам ещё не назначена группа.</p>
         <?php elseif ($group === null): ?>
-            <p class="text-muted">Сначала откройте вкладку «Список группы» и выберите группу.</p>
+            <p class="text-muted">Выберите группу, чтобы вести учёт посещаемости.</p>
         <?php else: ?>
             <form method="get" class="form form--filter">
                 <div class="form__row form__row--filter">
-                    <?php if (count($groups) > 1): ?>
-                    <div class="form__group">
-                        <label for="group_id">Группа</label>
-                        <select id="group_id" name="group_id" onchange="this.form.submit()">
-                            <option value="">— Выберите группу —</option>
-                            <?php foreach ($groups as $item): ?>
-                            <option value="<?= (int) $item['id'] ?>"<?= (int) $item['id'] === $groupId ? ' selected' : '' ?>>
-                                <?= e($item['number']) ?> · <?= e($item['specialty_name']) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                    <?php else: ?>
                     <input type="hidden" name="group_id" value="<?= $groupId ?>">
-                    <?php endif; ?>
                     <div class="form__group">
                         <label for="month">Месяц</label>
                         <select id="month" name="month" onchange="this.form.submit()">

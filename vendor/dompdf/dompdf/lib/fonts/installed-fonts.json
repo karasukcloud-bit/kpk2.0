@@ -1,0 +1,8 @@
+{
+    "times new roman": {
+        "normal": "D:\\OSPanel\\domains\\localhost\\kpk2.0\\vendor\\dompdf\\dompdf\/lib\/fonts\/times_new_roman_normal_073372fe5f99faeac907b4c3f385c48f",
+        "bold": "D:\\OSPanel\\domains\\localhost\\kpk2.0\\vendor\\dompdf\\dompdf\/lib\/fonts\/times_new_roman_bold_71da4817bec1ddb7928f73ba20c0d657",
+        "italic": "D:\\OSPanel\\domains\\localhost\\kpk2.0\\vendor\\dompdf\\dompdf\/lib\/fonts\/times_new_roman_italic_efc2f9cec7c7b838902d5771bf58d380",
+        "bold_italic": "times_new_roman_bold_italic_fcfd1e9443dccb358aba9e9e3d8e5965"
+    }
+}

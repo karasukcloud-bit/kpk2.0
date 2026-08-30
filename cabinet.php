@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 require_once __DIR__ . '/includes/profile.php';
 require_once __DIR__ . '/includes/roles.php';
+require_once __DIR__ . '/includes/organization.php';
 
 require_login();
 
@@ -74,6 +75,7 @@ $avatarIsUpload = strpos($userAvatar, 'file:') === 0;
 $selectedIcon = $avatarIsUpload ? 'person' : user_avatar_icon_key($userAvatar);
 $avatarPresets = avatar_presets();
 $nameParts = split_person_full_name((string) ($user['full_name'] ?? ''));
+$organizationName = trim((string) (get_organization()['name'] ?? ''));
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save_profile')) {
     $nameParts = [
         'last_name' => (string) ($_POST['last_name'] ?? ''),
@@ -105,7 +107,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save
                 <dt>Email</dt>
                 <dd><?= e($displayOrDash(display_user_email((string) ($user['email'] ?? '')))) ?></dd>
                 <dt>Телефон (логин)</dt>
-                <dd><?= e($displayOrDash($user['phone'] ?? '')) ?></dd>
+                <dd><?= e($displayOrDash(format_login_phone((string) ($user['phone'] ?? '')))) ?></dd>
+                <dt>Образовательная организация</dt>
+                <dd><?= e($displayOrDash($organizationName)) ?></dd>
                 <dt>Должность</dt>
                 <dd><?= e($displayOrDash($user['position'] ?? '')) ?></dd>
                 <dt>Образование</dt>
@@ -230,7 +234,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save
                 <div class="form__row">
                     <div class="form__group">
                         <label for="phone">Телефон (логин) <span class="text-muted">*</span></label>
-                        <input type="tel" id="phone" name="phone" required value="<?= e($user['phone'] ?? '') ?>" placeholder="+7 (___) ___-__-__">
+                        <input
+                            type="tel"
+                            id="phone"
+                            name="phone"
+                            required
+                            data-phone-login
+                            inputmode="tel"
+                            autocomplete="tel"
+                            maxlength="12"
+                            value="<?= e(format_login_phone((string) ($user['phone'] ?? ''))) ?>"
+                            placeholder="+79001234567"
+                        >
                     </div>
                     <div class="form__group">
                         <label for="email">Email <span class="text-muted">(необязательно)</span></label>

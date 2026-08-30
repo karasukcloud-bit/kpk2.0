@@ -102,6 +102,7 @@ $showHeader = true;
 $basePath = '../';
 $currentCuratorTab = 'group';
 $curatorGroupId = $groupId;
+$curatorGroups = get_groups_for_curator();
 require __DIR__ . '/../includes/header.php';
 $success = flash_get('success');
 
@@ -164,12 +165,16 @@ $studentAvatar = normalize_avatar_value((string) ($account['avatar'] ?? 'icon:pe
                 <dd><?= e($displayOrDash($student['mother_phone'] ?? '')) ?></dd>
                 <dt>Место работы мамы</dt>
                 <dd><?= e($displayOrDash($student['mother_workplace'] ?? '')) ?></dd>
+                <dt>Образование мамы</dt>
+                <dd><?= e(student_education_label($student['mother_education'] ?? null)) ?></dd>
                 <dt>ФИО папы</dt>
                 <dd><?= e($displayOrDash($student['father_name'] ?? '')) ?></dd>
                 <dt>Телефон папы</dt>
                 <dd><?= e($displayOrDash($student['father_phone'] ?? '')) ?></dd>
                 <dt>Место работы папы</dt>
                 <dd><?= e($displayOrDash($student['father_workplace'] ?? '')) ?></dd>
+                <dt>Образование папы</dt>
+                <dd><?= e(student_education_label($student['father_education'] ?? null)) ?></dd>
                 <dt>Адрес по прописке</dt>
                 <dd><?= e(format_student_registered_address($student)) ?></dd>
                 <dt>Область / край</dt>

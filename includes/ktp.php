@@ -587,6 +587,11 @@ function delete_ktp_work_program(int $curriculumItemId): array
     return ['success' => true];
 }
 
+function format_ktp_summary_number($value): string
+{
+    return rtrim(rtrim(number_format((float) $value, 1, '.', ''), '0'), '.');
+}
+
 function build_ktp_plan_summary(array $topics): array
 {
     $lessons = 0;
@@ -631,6 +636,276 @@ function build_ktp_plan_summary(array $topics): array
             $lectureHours + $practiceHours + $attestationHours + $independentHours,
             1
         ),
+    ];
+}
+
+function ktp_attestation_form_short(string $type): string
+{
+    return match (normalize_ktp_lesson_type($type)) {
+        'exam' => 'Э',
+        'credit' => 'З',
+        'diff_credit' => 'ДЗ',
+        'control' => 'КР',
+        default => '',
+    };
+}
+
+function get_group_base_academic_year(int $groupId): string
+{
+    $stmt = db()->prepare('SELECT MIN(academic_year) AS academic_year FROM curriculum_plans WHERE group_id = ?');
+    $stmt->execute([$groupId]);
+    $year = normalize_academic_year((string) ($stmt->fetchColumn() ?: ''));
+
+    return $year ?? get_default_academic_year();
+}
+
+function ktp_workload_course_year_labels(int $groupId): array
+{
+    $start = (int) explode('-', get_group_base_academic_year($groupId))[0];
+    $labels = [];
+    for ($i = 0; $i < 4; $i++) {
+        $yearStart = $start + $i;
+        $labels[] = $yearStart . ' – ' . ($yearStart + 1);
+    }
+
+    return $labels;
+}
+
+function ktp_workload_semester_slots(array $item): array
+{
+    $groupId = (int) ($item['group_id'] ?? 0);
+    if ($groupId <= 0) {
+        return [1];
+    }
+
+    $baseStart = (int) explode('-', get_group_base_academic_year($groupId))[0];
+    $itemYear = normalize_academic_year((string) ($item['academic_year'] ?? '')) ?? get_default_academic_year();
+    $itemStart = (int) explode('-', $itemYear)[0];
+    $course = max(0, min(3, $itemStart - $baseStart));
+    $semester = (string) ($item['semester'] ?? '1');
+    $slots = [];
+
+    if ($semester === '1' || $semester === 'both') {
+        $slots[] = $course * 2 + 1;
+    }
+    if ($semester === '2' || $semester === 'both') {
+        $slots[] = $course * 2 + 2;
+    }
+
+    return $slots !== [] ? $slots : [$course * 2 + 1];
+}
+
+function split_ktp_topics_by_semester_half(array $topics): array
+{
+    $first = [];
+    $second = [];
+    $inSecond = false;
+
+    foreach ($topics as $topic) {
+        if (ktp_is_semester_marker_type((string) ($topic['lesson_type'] ?? ''))) {
+            $inSecond = true;
+            continue;
+        }
+
+        if ($inSecond) {
+            $second[] = $topic;
+        } else {
+            $first[] = $topic;
+        }
+    }
+
+    return ['first' => $first, 'second' => $second];
+}
+
+function accumulate_ktp_workload_bucket(array $topics): array
+{
+    $bucket = [
+        'lecture' => ['hours' => 0.0, 'orient' => 0.0],
+        'practice' => ['hours' => 0.0, 'orient' => 0.0],
+        'independent' => ['hours' => 0.0, 'orient' => 0.0],
+        'attestation' => ['hours' => 0.0, 'orient' => 0.0],
+        'attestation_forms' => [],
+    ];
+
+    foreach ($topics as $topic) {
+        $type = (string) ($topic['lesson_type'] ?? 'lecture');
+        if (ktp_is_semester_marker_type($type)) {
+            continue;
+        }
+
+        $hours = (float) ($topic['hours'] ?? 0);
+        $orient = (float) ($topic['orientation_hours'] ?? 0);
+
+        if ($type === 'lecture') {
+            $bucket['lecture']['hours'] += $hours;
+            $bucket['lecture']['orient'] += $orient;
+        } elseif ($type === 'practice') {
+            $bucket['practice']['hours'] += $hours;
+            $bucket['practice']['orient'] += $orient;
+        } elseif ($type === 'independent') {
+            $bucket['independent']['hours'] += $hours;
+            $bucket['independent']['orient'] += $orient;
+        } elseif (ktp_is_attestation_type($type)) {
+            $bucket['attestation']['hours'] += $hours;
+            $bucket['attestation']['orient'] += $orient;
+            $short = ktp_attestation_form_short($type);
+            if ($short !== '' && $hours > 0) {
+                $bucket['attestation_forms'][] = $short . ' (' . format_ktp_summary_number($hours) . ' ч.)';
+            }
+        }
+    }
+
+    foreach (['lecture', 'practice', 'independent', 'attestation'] as $key) {
+        $bucket[$key]['hours'] = round($bucket[$key]['hours'], 1);
+        $bucket[$key]['orient'] = round($bucket[$key]['orient'], 1);
+    }
+
+    return $bucket;
+}
+
+function ktp_workload_teacher_metrics(array $bucket): array
+{
+    return [
+        'hours' => round(
+            $bucket['lecture']['hours'] + $bucket['practice']['hours'] + $bucket['attestation']['hours'],
+            1
+        ),
+        'orient' => round(
+            $bucket['lecture']['orient'] + $bucket['practice']['orient'] + $bucket['attestation']['orient'],
+            1
+        ),
+    ];
+}
+
+function ktp_workload_op_hours(array $bucket): float
+{
+    return round(
+        $bucket['lecture']['hours']
+        + $bucket['practice']['hours']
+        + $bucket['independent']['hours']
+        + $bucket['attestation']['hours'],
+        1
+    );
+}
+
+function ktp_workload_semester_buckets(array $item, array $topics): array
+{
+    $slots = ktp_workload_semester_slots($item);
+    $split = split_ktp_topics_by_semester_half($topics);
+
+    if (count($slots) === 2 && curriculum_item_spans_two_semesters($item)) {
+        return [
+            $slots[0] => accumulate_ktp_workload_bucket($split['first']),
+            $slots[1] => accumulate_ktp_workload_bucket($split['second']),
+        ];
+    }
+
+    $allTopics = array_merge($split['first'], $split['second']);
+
+    return [$slots[0] => accumulate_ktp_workload_bucket($allTopics)];
+}
+
+function ktp_workload_merge_buckets(array ...$buckets): array
+{
+    $merged = accumulate_ktp_workload_bucket([]);
+
+    foreach ($buckets as $bucket) {
+        foreach (['lecture', 'practice', 'independent', 'attestation'] as $key) {
+            $merged[$key]['hours'] += $bucket[$key]['hours'];
+            $merged[$key]['orient'] += $bucket[$key]['orient'];
+        }
+        $merged['attestation_forms'] = array_merge($merged['attestation_forms'], $bucket['attestation_forms']);
+    }
+
+    foreach (['lecture', 'practice', 'independent', 'attestation'] as $key) {
+        $merged[$key]['hours'] = round($merged[$key]['hours'], 1);
+        $merged[$key]['orient'] = round($merged[$key]['orient'], 1);
+    }
+
+    return $merged;
+}
+
+function ktp_workload_row_metrics(array $bucket, string $metricKey): array
+{
+    if ($metricKey === 'teacher') {
+        return ktp_workload_teacher_metrics($bucket);
+    }
+
+    if ($metricKey === 'op_volume') {
+        return ['hours' => ktp_workload_op_hours($bucket), 'orient' => 0.0];
+    }
+
+    return $bucket[$metricKey];
+}
+
+function ktp_workload_build_row(
+    string $key,
+    string $label,
+    ?string $sub,
+    string $kind,
+    array $totalBucket,
+    array $semesterBuckets,
+    string $metricKey = ''
+): array {
+    $row = [
+        'key' => $key,
+        'label' => $label,
+        'kind' => $kind,
+    ];
+
+    if ($sub !== null) {
+        $row['sub'] = $sub;
+    }
+
+    if ($kind === 'dash') {
+        return $row;
+    }
+
+    if ($kind === 'text') {
+        $row['text'] = implode(', ', $totalBucket['attestation_forms']);
+        $row['semester_text'] = [];
+        foreach ($semesterBuckets as $semesterIndex => $bucket) {
+            $text = implode(', ', $bucket['attestation_forms']);
+            if ($text !== '') {
+                $row['semester_text'][$semesterIndex] = $text;
+            }
+        }
+
+        return $row;
+    }
+
+    $totalMetrics = ktp_workload_row_metrics($totalBucket, $metricKey);
+    $row['hours'] = $totalMetrics['hours'];
+    $row['orient'] = $totalMetrics['orient'];
+    $row['semester_metrics'] = [];
+
+    foreach ($semesterBuckets as $semesterIndex => $bucket) {
+        $row['semester_metrics'][$semesterIndex] = ktp_workload_row_metrics($bucket, $metricKey);
+    }
+
+    return $row;
+}
+
+function build_ktp_workload_table_data(array $item, array $topics): array
+{
+    $groupId = (int) ($item['group_id'] ?? 0);
+    $semesterBuckets = ktp_workload_semester_buckets($item, $topics);
+    $totalBucket = ktp_workload_merge_buckets(...array_values($semesterBuckets));
+
+    return [
+        'is_professionality' => curriculum_item_is_professionality($item),
+        'semester_slots' => array_keys($semesterBuckets),
+        'course_years' => ktp_workload_course_year_labels($groupId),
+        'rows' => [
+            ktp_workload_build_row('op_volume', 'Объем ОП', null, 'total_only', $totalBucket, $semesterBuckets, 'op_volume'),
+            ktp_workload_build_row('with_teacher', 'Во взаимодействии с преподавателем:', null, 'pair', $totalBucket, $semesterBuckets, 'teacher'),
+            ktp_workload_build_row('lectures', 'лекции', 'в том числе практич. подготовки', 'pair', $totalBucket, $semesterBuckets, 'lecture'),
+            ktp_workload_build_row('practice', 'практические занятия', 'в том числе практич. подготовки', 'pair', $totalBucket, $semesterBuckets, 'practice'),
+            ktp_workload_build_row('consultations', 'консультации', 'в том числе практич. подготовки', 'dash', $totalBucket, $semesterBuckets),
+            ktp_workload_build_row('independent', 'самостоятельная работа', 'в том числе практич. подготовки', 'pair', $totalBucket, $semesterBuckets, 'independent'),
+            ktp_workload_build_row('attestation', 'Промежуточная аттестация', 'в том числе практич. подготовки', 'pair', $totalBucket, $semesterBuckets, 'attestation'),
+            ktp_workload_build_row('attestation_forms', 'Формы промежуточной аттестации', null, 'text', $totalBucket, $semesterBuckets),
+        ],
     ];
 }
 
@@ -966,6 +1241,204 @@ function update_ktp_topic(
     ];
 }
 
+function ktp_topic_payload_for_json(array $topic, bool $isProfessionality = false): array
+{
+    $type = (string) ($topic['lesson_type'] ?? 'lecture');
+    $isMarker = ktp_is_semester_marker_type($type);
+
+    return [
+        'id' => (int) ($topic['id'] ?? 0),
+        'title' => (string) ($topic['title'] ?? ''),
+        'lesson_type' => $type,
+        'hours' => (float) ($topic['hours'] ?? 1),
+        'orientation_hours' => (float) ($topic['orientation_hours'] ?? 0),
+        'deadline_date' => (string) ($topic['deadline_date'] ?? ''),
+        'ok_codes' => (string) ($topic['ok_codes'] ?? ''),
+        'pk_codes' => (string) ($topic['pk_codes'] ?? ''),
+        'control_form' => (string) ($topic['control_form'] ?? ''),
+        'is_semester_marker' => $isMarker,
+        'completed' => !empty($topic['completed']),
+        'hours_label' => format_ktp_topic_hours($topic, $isProfessionality),
+        'ok_label' => format_ktp_competency_codes_list($topic['ok_codes'] ?? null),
+        'pk_label' => format_ktp_competency_codes_list($topic['pk_codes'] ?? null),
+        'control_label' => ktp_control_form_label($topic['control_form'] ?? null),
+        'type_label' => $isMarker ? ktp_semester_marker_title() : ktp_lesson_type_label($type),
+    ];
+}
+
+function insert_ktp_empty_row(int $curriculumItemId, ?int $afterTopicId = null): array
+{
+    $item = get_curriculum_item_by_id($curriculumItemId);
+    if ($item === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    $pdo = db();
+    $sortOrder = 1;
+
+    if ($afterTopicId !== null && $afterTopicId > 0) {
+        $after = get_ktp_topic_by_id($afterTopicId);
+        if ($after === null || (int) $after['curriculum_item_id'] !== $curriculumItemId) {
+            return ['success' => false, 'error' => 'Строка для вставки не найдена.'];
+        }
+        $sortOrder = (int) $after['sort_order'] + 1;
+        $pdo->prepare(
+            'UPDATE ktp_topics SET sort_order = sort_order + 1
+             WHERE curriculum_item_id = ? AND sort_order >= ?'
+        )->execute([$curriculumItemId, $sortOrder]);
+    } else {
+        $stmt = $pdo->prepare(
+            'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM ktp_topics WHERE curriculum_item_id = ?'
+        );
+        $stmt->execute([$curriculumItemId]);
+        $sortOrder = (int) $stmt->fetchColumn();
+    }
+
+    $pdo->prepare(
+        'INSERT INTO ktp_topics
+            (curriculum_item_id, title, lesson_type, hours, orientation_hours, deadline_date, ok_codes, pk_codes, control_form, sort_order)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?)'
+    )->execute([$curriculumItemId, '', 'lecture', 1.0, 0.0, '', '', $sortOrder]);
+
+    $id = (int) $pdo->lastInsertId();
+    $topic = get_ktp_topic_by_id($id);
+    if ($topic === null) {
+        return ['success' => false, 'error' => 'Не удалось создать строку.'];
+    }
+
+    $topic['completed'] = false;
+
+    return [
+        'success' => true,
+        'topic' => ktp_topic_payload_for_json($topic, curriculum_item_is_professionality($item)),
+    ];
+}
+
+function copy_ktp_row(int $topicId): array
+{
+    $source = get_ktp_topic_by_id($topicId);
+    if ($source === null) {
+        return ['success' => false, 'error' => 'Строка не найдена.'];
+    }
+
+    $curriculumItemId = (int) $source['curriculum_item_id'];
+    $item = get_curriculum_item_by_id($curriculumItemId);
+    if ($item === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    $sortOrder = (int) $source['sort_order'] + 1;
+    $pdo = db();
+    $pdo->prepare(
+        'UPDATE ktp_topics SET sort_order = sort_order + 1
+         WHERE curriculum_item_id = ? AND sort_order >= ?'
+    )->execute([$curriculumItemId, $sortOrder]);
+
+    $pdo->prepare(
+        'INSERT INTO ktp_topics
+            (curriculum_item_id, title, lesson_type, hours, orientation_hours, deadline_date, ok_codes, pk_codes, control_form, sort_order)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+    )->execute([
+        $curriculumItemId,
+        (string) $source['title'],
+        (string) $source['lesson_type'],
+        (float) $source['hours'],
+        (float) ($source['orientation_hours'] ?? 0),
+        $source['deadline_date'] ?? null,
+        (string) ($source['ok_codes'] ?? ''),
+        (string) ($source['pk_codes'] ?? ''),
+        $source['control_form'] ?? null,
+        $sortOrder,
+    ]);
+
+    $id = (int) $pdo->lastInsertId();
+    $topic = get_ktp_topic_by_id($id);
+    if ($topic === null) {
+        return ['success' => false, 'error' => 'Не удалось скопировать строку.'];
+    }
+
+    $topic['completed'] = false;
+
+    return [
+        'success' => true,
+        'topic' => ktp_topic_payload_for_json($topic, curriculum_item_is_professionality($item)),
+    ];
+}
+
+function save_ktp_row(int $topicId, array $post): array
+{
+    $topic = get_ktp_topic_by_id($topicId);
+    if ($topic === null) {
+        return ['success' => false, 'error' => 'Строка не найдена.'];
+    }
+
+    $item = get_curriculum_item_by_id((int) $topic['curriculum_item_id']);
+    if ($item === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    $lessonType = normalize_ktp_lesson_type((string) ($post['ktp_lesson_type'] ?? $topic['lesson_type']));
+    if (ktp_is_semester_marker_type($lessonType)) {
+        return ['success' => false, 'error' => 'Разделитель семестра нельзя редактировать как обычную строку.'];
+    }
+
+    $title = trim((string) ($post['ktp_title'] ?? ''));
+    if (ktp_is_attestation_type($lessonType)) {
+        $title = ktp_attestation_title($lessonType);
+    }
+
+    $hours = normalize_ktp_hours($post['ktp_hours'] ?? $topic['hours']);
+    $isProfessionality = curriculum_item_is_professionality($item);
+    $meta = ktp_topic_extra_from_post($post, $isProfessionality);
+    $orientation = ktp_orientation_hours_for_topic(
+        $lessonType,
+        (float) $meta['orientation_hours'],
+        $isProfessionality
+    );
+
+    db()->prepare(
+        'UPDATE ktp_topics
+         SET title = ?, lesson_type = ?, hours = ?, orientation_hours = ?, deadline_date = ?,
+             ok_codes = ?, pk_codes = ?, control_form = ?
+         WHERE id = ?'
+    )->execute([
+        $title,
+        $lessonType,
+        $hours,
+        $orientation,
+        $meta['deadline_date'],
+        $meta['ok_codes'],
+        $meta['pk_codes'],
+        $meta['control_form'],
+        $topicId,
+    ]);
+
+    $updated = get_ktp_topic_by_id($topicId);
+    $updated['completed'] = false;
+    $progress = get_ktp_topics_with_progress((int) $topic['curriculum_item_id']);
+    foreach ($progress as $row) {
+        if ((int) $row['id'] === $topicId) {
+            $updated = $row;
+            break;
+        }
+    }
+
+    return [
+        'success' => true,
+        'topic' => ktp_topic_payload_for_json($updated, $isProfessionality),
+    ];
+}
+
+function ensure_ktp_has_starter_row(int $curriculumItemId): void
+{
+    $topics = get_ktp_topics($curriculumItemId);
+    if ($topics !== []) {
+        return;
+    }
+
+    insert_ktp_empty_row($curriculumItemId);
+}
+
 function reorder_ktp_topics(int $curriculumItemId, array $orderedIds): array
 {
     $item = get_curriculum_item_by_id($curriculumItemId);
@@ -1081,4 +1554,180 @@ function build_covered_material_summary(array $lessons): array
         'practice_hours' => round($practiceHours, 1),
         'total_hours' => round($lectureHours + $practiceHours, 1),
     ];
+}
+
+function ktp_view_column_count(): int
+{
+    return 7;
+}
+
+function normalize_ktp_column_widths($input): ?array
+{
+    if (is_string($input)) {
+        $decoded = json_decode($input, true);
+        $input = is_array($decoded) ? $decoded : null;
+    }
+
+    if (!is_array($input)) {
+        return null;
+    }
+
+    $widths = array_map(static fn ($value): float => (float) $value, array_values($input));
+    if (count($widths) !== ktp_view_column_count()) {
+        return null;
+    }
+
+    foreach ($widths as $width) {
+        if (!is_finite($width) || $width <= 0) {
+            return null;
+        }
+    }
+
+    $total = array_sum($widths);
+    if ($total <= 0) {
+        return null;
+    }
+
+    return array_map(static fn (float $width): float => ($width / $total) * 100, $widths);
+}
+
+function get_ktp_column_widths(int $curriculumItemId): ?array
+{
+    if ($curriculumItemId <= 0) {
+        return null;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT column_widths FROM ktp_item_settings WHERE curriculum_item_id = ? LIMIT 1'
+    );
+    $stmt->execute([$curriculumItemId]);
+
+    $raw = $stmt->fetchColumn();
+    if ($raw === false || $raw === null || $raw === '') {
+        return null;
+    }
+
+    return normalize_ktp_column_widths($raw);
+}
+
+function save_ktp_column_widths(int $curriculumItemId, $input): array
+{
+    if ($curriculumItemId <= 0) {
+        return ['success' => false, 'error' => 'Предмет не указан.'];
+    }
+
+    $widths = normalize_ktp_column_widths($input);
+    if ($widths === null) {
+        return ['success' => false, 'error' => 'Некорректные ширины столбцов.'];
+    }
+
+    $json = json_encode($widths, JSON_UNESCAPED_UNICODE);
+    if ($json === false) {
+        return ['success' => false, 'error' => 'Не удалось сохранить ширины столбцов.'];
+    }
+
+    db()->prepare(
+        'INSERT INTO ktp_item_settings (curriculum_item_id, column_widths)
+         VALUES (?, ?)
+         ON DUPLICATE KEY UPDATE column_widths = VALUES(column_widths)'
+    )->execute([$curriculumItemId, $json]);
+
+    return ['success' => true, 'column_widths' => $widths];
+}
+
+function ktp_column_width_attr(?array $widths, int $index): string
+{
+    if ($widths === null || !isset($widths[$index])) {
+        return '';
+    }
+
+    return sprintf(' style="width:%.4f%%"', $widths[$index]);
+}
+
+function clear_ktp_topics(int $curriculumItemId): array
+{
+    if (get_curriculum_item_by_id($curriculumItemId) === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    db()->prepare('DELETE FROM ktp_topics WHERE curriculum_item_id = ?')->execute([$curriculumItemId]);
+
+    return ['success' => true];
+}
+
+function import_ktp_topics_from_rows(int $curriculumItemId, array $rows, bool $replaceExisting = true): array
+{
+    $item = get_curriculum_item_by_id($curriculumItemId);
+    if ($item === null) {
+        return ['success' => false, 'error' => 'Предмет учебного плана не найден.'];
+    }
+
+    if ($rows === []) {
+        return ['success' => false, 'error' => 'Нет строк для импорта.'];
+    }
+
+    $isProfessionality = curriculum_item_is_professionality($item);
+    $pdo = db();
+
+    if ($replaceExisting) {
+        $pdo->prepare('DELETE FROM ktp_topics WHERE curriculum_item_id = ?')->execute([$curriculumItemId]);
+    }
+
+    $stmt = $pdo->prepare(
+        'INSERT INTO ktp_topics
+            (curriculum_item_id, title, lesson_type, hours, orientation_hours, deadline_date, ok_codes, pk_codes, control_form, sort_order)
+         VALUES (?, ?, ?, ?, ?, NULL, ?, ?, NULL, ?)'
+    );
+
+    $sortOrder = 1;
+    $imported = 0;
+
+    try {
+        $pdo->beginTransaction();
+        foreach ($rows as $row) {
+            $title = trim((string) ($row['title'] ?? ''));
+            $lessonType = normalize_ktp_lesson_type((string) ($row['lesson_type'] ?? 'lecture'));
+            if ($title === '' && !ktp_is_semester_marker_type($lessonType)) {
+                continue;
+            }
+            if (ktp_is_attestation_type($lessonType)) {
+                $title = ktp_attestation_title($lessonType);
+            }
+            $hours = ktp_is_semester_marker_type($lessonType)
+                ? 0.0
+                : normalize_ktp_hours($row['hours'] ?? 2);
+            $orientationHours = 0.0;
+            if ($isProfessionality && !ktp_is_semester_marker_type($lessonType)) {
+                $orientationHours = ktp_orientation_hours_for_topic(
+                    $lessonType,
+                    (float) ($row['orientation_hours'] ?? 0),
+                    true
+                );
+            }
+
+            $stmt->execute([
+                $curriculumItemId,
+                $title,
+                $lessonType,
+                $hours,
+                $orientationHours,
+                (string) ($row['ok_codes'] ?? ''),
+                (string) ($row['pk_codes'] ?? ''),
+                $sortOrder,
+            ]);
+            $sortOrder++;
+            $imported++;
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+
+        return ['success' => false, 'error' => 'Не удалось импортировать строки КТП.'];
+    }
+
+    if ($imported === 0) {
+        return ['success' => false, 'error' => 'Не удалось импортировать ни одной строки.'];
+    }
+
+    return ['success' => true, 'imported' => $imported];
 }

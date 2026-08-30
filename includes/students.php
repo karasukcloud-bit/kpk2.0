@@ -43,68 +43,90 @@ function person_last_first_name(string $fullName): string
 
 function get_group_id_for_curator(int $userId): ?int
 {
-    $stmt = db()->prepare('SELECT id FROM study_groups WHERE curator_id = ? LIMIT 1');
-    $stmt->execute([$userId]);
-    $row = $stmt->fetch();
+    $groups = get_groups_for_curator($userId);
 
-    return $row ? (int) $row['id'] : null;
+    return isset($groups[0]) ? (int) $groups[0]['id'] : null;
 }
 
 function get_curator_group(int $userId): ?array
 {
-    $groupId = get_group_id_for_curator($userId);
-    if ($groupId === null) {
-        return null;
-    }
+    $groups = get_groups_for_curator($userId);
 
-    return get_group_by_id($groupId);
+    return $groups[0] ?? null;
 }
 
-function assign_curator_group(int $userId, ?int $groupId): array
+function assign_curator_groups(int $userId, array $groupIds): array
 {
+    $groupIds = array_values(array_unique(array_filter(
+        array_map('intval', $groupIds),
+        static fn (int $id): bool => $id > 0
+    )));
+
+    if (count($groupIds) > 2) {
+        return ['success' => false, 'error' => 'Куратору можно назначить не более 2 групп.'];
+    }
+
+    foreach ($groupIds as $groupId) {
+        $group = get_group_by_id($groupId);
+        if ($group === null) {
+            return ['success' => false, 'error' => 'Группа не найдена.'];
+        }
+
+        $currentCurator = (int) ($group['curator_id'] ?? 0);
+        if ($currentCurator > 0 && $currentCurator !== $userId) {
+            return [
+                'success' => false,
+                'error' => 'Группа ' . $group['number'] . ' уже назначена другому куратору.',
+            ];
+        }
+    }
+
     $pdo = db();
     $pdo->prepare('UPDATE study_groups SET curator_id = NULL WHERE curator_id = ?')
         ->execute([$userId]);
 
-    if ($groupId === null || $groupId === 0) {
-        return ['success' => true];
+    if ($groupIds !== []) {
+        $stmt = $pdo->prepare('UPDATE study_groups SET curator_id = ? WHERE id = ?');
+        foreach ($groupIds as $groupId) {
+            $stmt->execute([$userId, $groupId]);
+        }
     }
-
-    $group = get_group_by_id($groupId);
-    if ($group === null) {
-        return ['success' => false, 'error' => 'Группа не найдена.'];
-    }
-
-    $currentCurator = (int) ($group['curator_id'] ?? 0);
-    if ($currentCurator > 0 && $currentCurator !== $userId) {
-        return ['success' => false, 'error' => 'Эта группа уже назначена другому куратору.'];
-    }
-
-    $stmt = $pdo->prepare('UPDATE study_groups SET curator_id = ? WHERE id = ?');
-    $stmt->execute([$userId, $groupId]);
 
     return ['success' => true];
 }
 
-function sync_curator_group(int $userId, array $staffRoles, ?int $groupId): array
+function assign_curator_group(int $userId, ?int $groupId): array
 {
-    if (!in_array('curator', $staffRoles, true)) {
-        return assign_curator_group($userId, null);
-    }
-
-    if ($groupId === null || $groupId === 0) {
-        return assign_curator_group($userId, null);
-    }
-
-    return assign_curator_group($userId, $groupId);
+    return assign_curator_groups($userId, $groupId ? [$groupId] : []);
 }
 
-function render_curator_group_options(?int $selectedGroupId = null, ?int $forCuratorUserId = null): string
+function sync_curator_groups(int $userId, array $staffRoles, array $groupIds): array
 {
+    if (!in_array('curator', $staffRoles, true)) {
+        return assign_curator_groups($userId, []);
+    }
+
+    return assign_curator_groups($userId, $groupIds);
+}
+
+function sync_curator_group(int $userId, array $staffRoles, ?int $groupId): array
+{
+    return sync_curator_groups($userId, $staffRoles, $groupId ? [$groupId] : []);
+}
+
+function render_curator_group_options(
+    ?int $selectedGroupId = null,
+    ?int $forCuratorUserId = null,
+    ?int $excludeGroupId = null
+): string {
     $html = '<option value="">— Не назначена —</option>';
 
     foreach (get_all_groups() as $group) {
         $id = (int) $group['id'];
+        if ($excludeGroupId !== null && $excludeGroupId > 0 && $id === $excludeGroupId) {
+            continue;
+        }
+
         $curatorId = (int) ($group['curator_id'] ?? 0);
         $taken = $curatorId > 0 && $curatorId !== (int) $forCuratorUserId;
         $selected = $id === (int) $selectedGroupId ? ' selected' : '';
@@ -152,7 +174,7 @@ function render_curator_options(?int $selectedId = null): string
 
 function get_groups_for_curator(?int $userId = null): array
 {
-    if (is_admin()) {
+    if ($userId === null && is_admin()) {
         return get_all_groups();
     }
 
@@ -170,6 +192,36 @@ function get_groups_for_curator(?int $userId = null): array
     $stmt->execute([$userId]);
 
     return $stmt->fetchAll();
+}
+
+/** @return array{groups: array, group_id: int, group: ?array, error: ?string} */
+function resolve_curator_group_context(?int $requestedGroupId = null): array
+{
+    $groups = get_groups_for_curator();
+    $groupId = $requestedGroupId ?? 0;
+
+    if ($groupId === 0 && count($groups) === 1) {
+        $groupId = (int) $groups[0]['id'];
+    }
+
+    $error = null;
+    $group = null;
+
+    if ($groupId > 0) {
+        if (!can_manage_group($groupId)) {
+            $error = 'Нет доступа к выбранной группе.';
+            $groupId = 0;
+        } else {
+            $group = get_group_by_id($groupId);
+        }
+    }
+
+    return [
+        'groups' => $groups,
+        'group_id' => $groupId,
+        'group' => $group,
+        'error' => $error,
+    ];
 }
 
 function can_manage_group(int $groupId): bool
@@ -359,6 +411,50 @@ function normalize_student_residence_type($value): ?string
     return in_array($value, ['family', 'dormitory', 'apartment'], true) ? $value : null;
 }
 
+function student_education_options(): array
+{
+    return [
+        'secondary' => 'Среднее',
+        'secondary_vocational' => 'Среднее профессиональное',
+        'higher' => 'Высшее',
+        'incomplete_higher' => 'Незаконченное высшее',
+    ];
+}
+
+function student_education_label(?string $value): string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '—';
+    }
+
+    return student_education_options()[$value] ?? '—';
+}
+
+function normalize_student_education($value): string
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    return array_key_exists($value, student_education_options()) ? $value : '';
+}
+
+function render_student_education_select(string $name, ?string $selected = null, string $id = ''): void
+{
+    $selected = normalize_student_education($selected ?? '');
+    $idAttr = $id !== '' ? ' id="' . e($id) . '"' : '';
+    ?>
+    <select name="<?= e($name) ?>" class="form-input--select-md"<?= $idAttr ?>>
+        <option value="">— Не указано —</option>
+        <?php foreach (student_education_options() as $value => $label): ?>
+        <option value="<?= e($value) ?>"<?= $selected === $value ? ' selected' : '' ?>><?= e($label) ?></option>
+        <?php endforeach; ?>
+    </select>
+    <?php
+}
+
 function student_dormitory_address(): string
 {
     $org = get_organization();
@@ -486,9 +582,11 @@ function student_payload_from_post(array $post): array
         'mother_name'        => trim((string) ($post['mother_name'] ?? '')),
         'mother_phone'       => trim((string) ($post['mother_phone'] ?? '')),
         'mother_workplace'   => trim((string) ($post['mother_workplace'] ?? '')),
+        'mother_education'   => normalize_student_education($post['mother_education'] ?? ''),
         'father_name'        => trim((string) ($post['father_name'] ?? '')),
         'father_phone'       => trim((string) ($post['father_phone'] ?? '')),
         'father_workplace'   => trim((string) ($post['father_workplace'] ?? '')),
+        'father_education'   => normalize_student_education($post['father_education'] ?? ''),
         'address_region'     => trim((string) ($post['address_region'] ?? '')),
         'address_district'   => trim((string) ($post['address_district'] ?? '')),
         'address_locality'   => trim((string) ($post['address_locality'] ?? '')),
@@ -509,10 +607,12 @@ function student_payload_from_post(array $post): array
         $data['father_name'] = '';
         $data['father_phone'] = '';
         $data['father_workplace'] = '';
+        $data['father_education'] = '';
     } elseif ($familyType === 'no_mother') {
         $data['mother_name'] = '';
         $data['mother_phone'] = '';
         $data['mother_workplace'] = '';
+        $data['mother_education'] = '';
     }
 
     return $data;
@@ -579,12 +679,12 @@ function create_student(int $groupId, array $data): array
         $stmt = $pdo->prepare(
             'INSERT INTO students (
                 group_id, full_name, phone, birth_date, gender, mother_name, mother_phone, mother_workplace,
-                father_name, father_phone, father_workplace,
+                mother_education, father_name, father_phone, father_workplace, father_education,
                 address_region, address_district, address_locality, address_street, address_house,
                 address_registered, address_actual,
                 district, is_low_income, family_type, siblings_under_18, residence_type, is_nonresident,
                 without_parental_care
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $groupId,
@@ -595,9 +695,11 @@ function create_student(int $groupId, array $data): array
             $data['mother_name'],
             $data['mother_phone'],
             (string) ($data['mother_workplace'] ?? ''),
+            (string) ($data['mother_education'] ?? ''),
             $data['father_name'],
             $data['father_phone'],
             (string) ($data['father_workplace'] ?? ''),
+            (string) ($data['father_education'] ?? ''),
             (string) ($data['address_region'] ?? ''),
             (string) ($data['address_district'] ?? ''),
             (string) ($data['address_locality'] ?? ''),
@@ -681,8 +783,8 @@ function update_student(int $id, array $data): array
     $stmt = db()->prepare(
         'UPDATE students SET
             full_name = ?, phone = ?, snils = ?, birth_date = ?, gender = ?,
-            mother_name = ?, mother_phone = ?, mother_workplace = ?,
-            father_name = ?, father_phone = ?, father_workplace = ?,
+            mother_name = ?, mother_phone = ?, mother_workplace = ?, mother_education = ?,
+            father_name = ?, father_phone = ?, father_workplace = ?, father_education = ?,
             address_region = ?, address_district = ?, address_locality = ?,
             address_street = ?, address_house = ?,
             address_registered = ?, address_actual = ?,
@@ -699,9 +801,11 @@ function update_student(int $id, array $data): array
         $data['mother_name'],
         $data['mother_phone'],
         (string) ($data['mother_workplace'] ?? ''),
+        (string) ($data['mother_education'] ?? ''),
         $data['father_name'],
         $data['father_phone'],
         (string) ($data['father_workplace'] ?? ''),
+        (string) ($data['father_education'] ?? ''),
         (string) ($data['address_region'] ?? ''),
         (string) ($data['address_district'] ?? ''),
         (string) ($data['address_locality'] ?? ''),

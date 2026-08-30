@@ -89,12 +89,16 @@ $canRestore = (int) $expelled['is_restored'] === 0;
             <dd><?= e($dash($expelled['mother_phone'] ?? '')) ?></dd>
             <dt>Место работы мамы</dt>
             <dd><?= e($dash($expelled['mother_workplace'] ?? '')) ?></dd>
+            <dt>Образование мамы</dt>
+            <dd><?= e(student_education_label($expelled['mother_education'] ?? null)) ?></dd>
             <dt>ФИО папы</dt>
             <dd><?= e($dash($expelled['father_name'] ?? '')) ?></dd>
             <dt>Телефон папы</dt>
             <dd><?= e($dash($expelled['father_phone'] ?? '')) ?></dd>
             <dt>Место работы папы</dt>
             <dd><?= e($dash($expelled['father_workplace'] ?? '')) ?></dd>
+            <dt>Образование папы</dt>
+            <dd><?= e(student_education_label($expelled['father_education'] ?? null)) ?></dd>
             <dt>Адрес по прописке</dt>
             <dd><?= e(format_student_registered_address($expelled)) ?></dd>
             <dt>Область / край</dt>

@@ -3,7 +3,9 @@
 declare(strict_types=1);
 
 $currentCuratorTab = $currentCuratorTab ?? 'group';
-$curatorGroupId = $curatorGroupId ?? 0;
+$curatorGroupId = (int) ($curatorGroupId ?? 0);
+$curatorGroups = $curatorGroups ?? [];
+$curatorGroupPreserveParams = $curatorGroupPreserveParams ?? [];
 $groupQuery = $curatorGroupId > 0 ? '?group_id=' . $curatorGroupId : '';
 ?>
 <nav class="admin-tabs">
@@ -28,3 +30,6 @@ $groupQuery = $curatorGroupId > 0 ? '?group_id=' . $curatorGroupId : '';
         Архив
     </a>
 </nav>
+<?php if ($curatorGroups !== []): ?>
+    <?php require __DIR__ . '/curator/group_selector.php'; ?>
+<?php endif; ?>

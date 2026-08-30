@@ -147,6 +147,11 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
            value="<?= e($data['mother_workplace'] ?? '') ?>">
 </div>
 
+<div class="form__group" data-parent-field="mother">
+    <label for="mother_education">Образование мамы</label>
+    <?php render_student_education_select('mother_education', $data['mother_education'] ?? '', 'mother_education'); ?>
+</div>
+
 <div class="form__row" data-parent-field="father">
     <div class="form__group">
         <label for="father_name">ФИО папы</label>
@@ -167,6 +172,11 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
     <input type="text" id="father_workplace" name="father_workplace"
            class="form-input--wide"
            value="<?= e($data['father_workplace'] ?? '') ?>">
+</div>
+
+<div class="form__group" data-parent-field="father">
+    <label for="father_education">Образование папы</label>
+    <?php render_student_education_select('father_education', $data['father_education'] ?? '', 'father_education'); ?>
 </div>
 
 <div class="form__group">
