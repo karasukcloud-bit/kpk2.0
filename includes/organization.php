@@ -393,6 +393,85 @@ function get_user_specialty_head(?int $userId = null): ?array
     return get_specialty_by_id($specialtyId);
 }
 
+function get_specialty_head_user_for_specialty(int $specialtyId): ?array
+{
+    if ($specialtyId <= 0) {
+        return null;
+    }
+
+    $stmt = db()->prepare(
+        'SELECT u.id, u.full_name, u.email, u.phone, u.position
+         FROM user_specialty_heads ush
+         INNER JOIN users u ON u.id = ush.user_id
+         WHERE ush.specialty_id = ?
+         LIMIT 1'
+    );
+    $stmt->execute([$specialtyId]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+function resolve_specialty_id_for_item(array $item): int
+{
+    $specialtyId = (int) ($item['group_specialty_id'] ?? $item['specialty_id'] ?? 0);
+    if ($specialtyId > 0) {
+        return $specialtyId;
+    }
+
+    $groupId = (int) ($item['group_id'] ?? 0);
+    if ($groupId > 0) {
+        $group = get_group_by_id($groupId);
+        if ($group !== null) {
+            return (int) ($group['specialty_id'] ?? 0);
+        }
+    }
+
+    $code = trim((string) ($item['specialty_code'] ?? ''));
+    if ($code !== '') {
+        $stmt = db()->prepare('SELECT id FROM specialties WHERE code = ? LIMIT 1');
+        $stmt->execute([$code]);
+        $id = $stmt->fetchColumn();
+        if ($id !== false) {
+            return (int) $id;
+        }
+    }
+
+    return 0;
+}
+
+function validate_specialty_head_roles(array $staffRoles, ?int $specialtyHeadId, ?int $exceptUserId = null): array
+{
+    if (!in_array('specialty_head', $staffRoles, true)) {
+        return ['success' => true];
+    }
+
+    if ($specialtyHeadId === null || $specialtyHeadId <= 0) {
+        return ['success' => false, 'error' => 'Укажите специальность для руководителя специальности.'];
+    }
+
+    if (get_specialty_by_id($specialtyHeadId) === null) {
+        return ['success' => false, 'error' => 'Специальность не найдена.'];
+    }
+
+    $stmt = db()->prepare(
+        'SELECT user_id FROM user_specialty_heads WHERE specialty_id = ? AND user_id <> ? LIMIT 1'
+    );
+    $stmt->execute([$specialtyHeadId, (int) ($exceptUserId ?? 0)]);
+    if ($stmt->fetch()) {
+        return ['success' => false, 'error' => 'Эта специальность уже назначена другому руководителю.'];
+    }
+
+    return ['success' => true];
+}
+
+function get_specialty_head_name_for_specialty(int $specialtyId): string
+{
+    $user = get_specialty_head_user_for_specialty($specialtyId);
+
+    return $user !== null ? trim((string) ($user['full_name'] ?? '')) : '';
+}
+
 function assign_user_specialty_head(int $userId, ?int $specialtyId): array
 {
     $pdo = db();

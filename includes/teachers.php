@@ -90,6 +90,17 @@ function create_teacher(
     ?int $curatorGroupId2 = null,
     ?int $specialtyHeadId = null
 ): array {
+    $rolesCheck = validate_staff_roles($staffRoles);
+    if (!$rolesCheck['success']) {
+        return $rolesCheck;
+    }
+    $staffRoles = $rolesCheck['roles'];
+
+    $specialtyCheck = validate_specialty_head_roles($staffRoles, $specialtyHeadId);
+    if (!$specialtyCheck['success']) {
+        return $specialtyCheck;
+    }
+
     $result = register_user($email, $password, $fullName, 'teacher', $staffRoles, $phone);
     if (!$result['success']) {
         return $result;
@@ -138,6 +149,11 @@ function update_teacher(
         return ['success' => false, 'error' => $rolesCheck['error']];
     }
     $staffRoles = $rolesCheck['roles'];
+
+    $specialtyCheck = validate_specialty_head_roles($staffRoles, $specialtyHeadId);
+    if (!$specialtyCheck['success']) {
+        return $specialtyCheck;
+    }
 
     $fullName = trim($fullName);
     $phone = format_login_phone($phone);

@@ -1443,6 +1443,142 @@ document.addEventListener('DOMContentLoaded', () => {
             summary.textContent = parts.length ? parts.join('; ') : '—';
         };
 
+        let ktpCompClipboard = null;
+
+        const getCompCodesFromRow = (row) => ({
+            ok: Array.from(row.querySelectorAll('[data-ktp-field="ok"]:checked')).map((input) => input.value),
+            pk: Array.from(row.querySelectorAll('[data-ktp-field="pk"]:checked')).map((input) => input.value),
+        });
+
+        const updateCompPasteButtons = () => {
+            const hasClipboard = ktpCompClipboard !== null;
+            ktpRowsEditor.querySelectorAll('[data-ktp-comp-paste], [data-ktp-comp-paste-down]').forEach((button) => {
+                button.disabled = !hasClipboard;
+            });
+        };
+
+        const applyCompCodesToRow = (row, clipboard) => {
+            if (!clipboard || row.classList.contains('ktp-row--semester-marker')) {
+                return false;
+            }
+            const okSet = new Set(clipboard.ok);
+            const pkSet = new Set(clipboard.pk);
+            row.querySelectorAll('[data-ktp-field="ok"]').forEach((input) => {
+                input.checked = okSet.has(input.value);
+            });
+            row.querySelectorAll('[data-ktp-field="pk"]').forEach((input) => {
+                input.checked = pkSet.has(input.value);
+            });
+            updateCompSummary(row);
+            saveRow(row, true);
+            return true;
+        };
+
+        const copyCompFromRow = (row) => {
+            if (row.classList.contains('ktp-row--semester-marker')) {
+                return;
+            }
+            ktpCompClipboard = getCompCodesFromRow(row);
+            updateCompPasteButtons();
+            setStatus('ОК/ПК скопированы');
+        };
+
+        const pasteCompToRowsBelow = (row) => {
+            if (!ktpCompClipboard) {
+                return 0;
+            }
+            let count = 0;
+            let belowCurrent = false;
+            body.querySelectorAll('[data-ktp-row]').forEach((targetRow) => {
+                if (targetRow === row) {
+                    belowCurrent = true;
+                    return;
+                }
+                if (belowCurrent && applyCompCodesToRow(targetRow, ktpCompClipboard)) {
+                    count += 1;
+                }
+            });
+            return count;
+        };
+
+        ktpRowsEditor.addEventListener('click', (event) => {
+            const copyBtn = event.target.closest('[data-ktp-comp-copy]');
+            const pasteBtn = event.target.closest('[data-ktp-comp-paste]');
+            const pasteDownBtn = event.target.closest('[data-ktp-comp-paste-down]');
+            if (!copyBtn && !pasteBtn && !pasteDownBtn) {
+                return;
+            }
+
+            event.preventDefault();
+            event.stopPropagation();
+
+            const row = event.target.closest('[data-ktp-row]');
+            if (!row) {
+                return;
+            }
+
+            if (copyBtn) {
+                copyCompFromRow(row);
+                return;
+            }
+
+            if (!ktpCompClipboard) {
+                return;
+            }
+
+            if (pasteBtn) {
+                if (applyCompCodesToRow(row, ktpCompClipboard)) {
+                    setStatus('ОК/ПК вставлены');
+                }
+                return;
+            }
+
+            if (pasteDownBtn) {
+                const count = pasteCompToRowsBelow(row);
+                if (count > 0) {
+                    setStatus('ОК/ПК вставлены в ' + count + ' ' + (count === 1 ? 'строку' : (count < 5 ? 'строки' : 'строк')) + ' ниже');
+                } else {
+                    setStatus('Нет строк ниже для вставки', true);
+                }
+            }
+        });
+
+        ktpRowsEditor.addEventListener('keydown', (event) => {
+            if (!(event.ctrlKey || event.metaKey) || !event.shiftKey) {
+                return;
+            }
+            const row = event.target.closest('[data-ktp-row]');
+            if (!row || !ktpRowsEditor.contains(row)) {
+                return;
+            }
+            const key = event.key.toLowerCase();
+            if (key === 'c') {
+                event.preventDefault();
+                copyCompFromRow(row);
+            } else if (key === 'v' && ktpCompClipboard) {
+                event.preventDefault();
+                if (event.altKey) {
+                    const count = pasteCompToRowsBelow(row);
+                    if (count > 0) {
+                        setStatus('ОК/ПК вставлены в ' + count + ' строк ниже');
+                    }
+                } else if (applyCompCodesToRow(row, ktpCompClipboard)) {
+                    setStatus('ОК/ПК вставлены');
+                }
+            }
+        });
+
+        ktpRowsEditor.addEventListener('click', (event) => {
+            if (event.target.closest('[data-ktp-comp-copy], [data-ktp-comp-paste], [data-ktp-comp-paste-down]')) {
+                return;
+            }
+            ktpRowsEditor.querySelectorAll('details[data-ktp-comp-picker][open]').forEach((picker) => {
+                if (!picker.contains(event.target)) {
+                    picker.open = false;
+                }
+            });
+        });
+
         const getTitleText = (cell) => (cell ? (cell.textContent || '').replace(/\u00a0/g, ' ').trim() : '');
 
         const setTitleText = (cell, text) => {
@@ -1724,6 +1860,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             body.appendChild(row);
                         }
                         bindRow(row);
+                        updateCompPasteButtons();
                         body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
                         setActiveRow(row);
                         renumberRows();
@@ -1811,6 +1948,7 @@ document.addEventListener('DOMContentLoaded', () => {
                             body.appendChild(row);
                         }
                         bindRow(row);
+                        updateCompPasteButtons();
                         body.dispatchEvent(new CustomEvent('ktp-sortable-bind', { detail: { row } }));
                         setActiveRow(row);
                         renumberRows();

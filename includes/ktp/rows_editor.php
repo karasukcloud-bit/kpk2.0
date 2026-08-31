@@ -140,6 +140,11 @@ $renderRow = static function (
                     </span>
                 </summary>
                 <div class="ktp-comp-picker__panel">
+                    <div class="ktp-comp-picker__actions">
+                        <button type="button" class="btn btn--ghost btn--sm" data-ktp-comp-copy title="Копировать ОК/ПК этой строки">Копировать</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-ktp-comp-paste disabled title="Вставить в эту строку">Вставить</button>
+                        <button type="button" class="btn btn--ghost btn--sm" data-ktp-comp-paste-down disabled title="Вставить во все строки ниже">Вставить ниже</button>
+                    </div>
                     <div class="ktp-comp-picker__group">
                         <strong>ОК</strong>
                         <?php foreach ($okCodesAll as $code): ?>
@@ -187,6 +192,7 @@ $renderRow = static function (
     <?= e($item['academic_year']) ?>.<?php if ($isProfessionality): ?>
     <span class="badge badge--group-label">Профессионалитет</span><?php endif; ?>
     Редактируйте ячейки прямо в таблице. Изменения сохраняются автоматически. Порядок строк меняйте перетаскиванием за ⋮⋮.
+    В колонке «ОК / ПК» можно копировать выбранные коды и вставлять в другие строки (кнопки в выпадающей панели ячейки).
 </p>
 
 <?php if ($success): ?>

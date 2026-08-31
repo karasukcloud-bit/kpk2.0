@@ -6,7 +6,7 @@ require_once __DIR__ . '/../organization.php';
 
 function ktp_document_signatory_name(string $roleKey): string
 {
-    // Роли umr_deputy и specialty_leader будут добавлены позже.
+    // Роль umr_deputy будет добавлена позже.
     return '';
 }
 
@@ -19,7 +19,14 @@ function build_ktp_document_header_context(array $item): array
 
     $teacherName = trim((string) ($item['teacher_name'] ?? ''));
     $umrDeputyName = trim(ktp_document_signatory_name('umr_deputy'));
-    $specialtyLeaderName = trim(ktp_document_signatory_name('specialty_leader'));
+
+    $specialtyId = resolve_specialty_id_for_item($item);
+    $specialtyLeaderName = $specialtyId > 0
+        ? get_specialty_head_name_for_specialty($specialtyId)
+        : '';
+    if ($specialtyLeaderName === '') {
+        $specialtyLeaderName = trim(ktp_document_signatory_name('specialty_leader'));
+    }
 
     return [
         'organization_name' => trim((string) ($org['name'] ?? '')),
@@ -29,7 +36,7 @@ function build_ktp_document_header_context(array $item): array
         'specialty' => $specialty !== '' ? $specialty : '—',
         'teacher_name' => $teacherName !== '' ? $teacherName : 'ххххххх',
         'umr_deputy_name' => $umrDeputyName !== '' ? $umrDeputyName : 'ххххххх',
-        'specialty_leader_name' => $specialtyLeaderName !== '' ? $specialtyLeaderName : 'хххххххх',
+        'specialty_leader_name' => $specialtyLeaderName !== '' ? $specialtyLeaderName : '—',
     ];
 }
 

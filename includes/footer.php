@@ -3,6 +3,6 @@
             <p>&copy; <?= date('Y') ?> Все права защищены</p>
         </footer>
     </div>
-    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20260830j"></script>
+    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20260831b"></script>
 </body>
 </html>

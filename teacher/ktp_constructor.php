@@ -32,7 +32,7 @@ if ($itemId > 0 && $item === null) {
     exit;
 }
 
-if ($itemId > 0 && ($mode === 'manual' || ($mode !== 'rp' && $mode !== 'rows' && $mode !== 'word'))) {
+if ($itemId > 0 && $mode !== 'rows' && $mode !== 'word') {
     $mode = 'rows';
 }
 
@@ -43,23 +43,7 @@ if ($itemId > 0 && $_SERVER['REQUEST_METHOD'] === 'POST') {
         $action = $_POST['action'] ?? '';
         $redirect = 'ktp_constructor.php?item_id=' . $itemId . '&mode=' . urlencode($mode !== '' ? $mode : 'rows');
 
-        if ($action === 'upload_work_program') {
-            $result = save_ktp_work_program($itemId, $_FILES['work_program'] ?? []);
-            if ($result['success']) {
-                flash_set('success', 'Рабочая программа загружена.');
-                header('Location: ' . $redirect);
-                exit;
-            }
-            $error = $result['error'];
-        } elseif ($action === 'delete_work_program') {
-            $result = delete_ktp_work_program($itemId);
-            if ($result['success']) {
-                flash_set('success', 'Рабочая программа удалена.');
-                header('Location: ' . $redirect);
-                exit;
-            }
-            $error = $result['error'];
-        } elseif ($action === 'upload_word_ktp' && $mode === 'word') {
+        if ($action === 'upload_word_ktp' && $mode === 'word') {
             $result = upload_and_parse_ktp_word($itemId, $_FILES['word_program'] ?? []);
             if ($result['success']) {
                 flash_set(
@@ -108,7 +92,6 @@ if ($isTableMode) {
 }
 $topics = $isTableMode ? get_ktp_topics_with_progress($itemId) : [];
 $ktpSummary = $isTableMode ? build_ktp_plan_summary($topics) : [];
-$workProgram = $itemId > 0 && $mode === 'rp' ? get_ktp_work_program($itemId) : null;
 $wordImportPreview = $itemId > 0 && $mode === 'word' ? ktp_word_import_get_preview($itemId) : null;
 $ktpColumnWidths = $itemId > 0 ? get_ktp_column_widths($itemId) : null;
 
@@ -191,62 +174,12 @@ require __DIR__ . '/../includes/header.php';
                     href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=word"
                     class="journal-subtabs__item<?= $mode === 'word' ? ' journal-subtabs__item--active' : '' ?>"
                 >Из Word</a>
-                <a
-                    href="ktp_constructor.php?item_id=<?= $itemId ?>&mode=rp"
-                    class="journal-subtabs__item<?= $mode === 'rp' ? ' journal-subtabs__item--active' : '' ?>"
-                >С загрузкой РП</a>
             </nav>
 
             <?php if ($mode === 'rows'): ?>
                 <?php require __DIR__ . '/../includes/ktp/rows_editor.php'; ?>
-            <?php elseif ($mode === 'word'): ?>
-                <?php require __DIR__ . '/../includes/ktp/word_import_ui.php'; ?>
             <?php else: ?>
-                <?php if ($success): ?>
-                    <div class="alert alert--success"><?= e($success) ?></div>
-                <?php endif; ?>
-                <?php if ($error): ?>
-                    <div class="alert alert--error"><?= e($error) ?></div>
-                <?php endif; ?>
-
-                <p class="text-muted">
-                    Загрузите файл рабочей программы (РП). Поддерживаются PDF, DOC, DOCX, RTF, ODT до 10 МБ.
-                    После загрузки файл сохраняется в системе для дальнейшей работы.
-                </p>
-
-                <?php if ($workProgram !== null): ?>
-                    <dl class="profile-list">
-                        <dt>Текущий файл</dt>
-                        <dd><?= e($workProgram['original_name']) ?></dd>
-                        <dt>Загружен</dt>
-                        <dd>
-                            <?= e(date('d.m.Y H:i', strtotime((string) $workProgram['uploaded_at']))) ?>
-                            <?php if (!empty($workProgram['uploaded_by_name'])): ?>
-                                · <?= e($workProgram['uploaded_by_name']) ?>
-                            <?php endif; ?>
-                        </dd>
-                    </dl>
-                    <form method="post" class="form form--inline" onsubmit="return confirm('Удалить загруженную рабочую программу?');">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="delete_work_program">
-                        <button type="submit" class="btn btn--danger btn--sm">Удалить файл</button>
-                    </form>
-                    <hr class="divider">
-                <?php endif; ?>
-
-                <form method="post" enctype="multipart/form-data" class="form form--medium">
-                    <?= csrf_field() ?>
-                    <input type="hidden" name="action" value="upload_work_program">
-                    <div class="form__group">
-                        <label for="work_program">Файл рабочей программы</label>
-                        <input type="file" id="work_program" name="work_program" accept=".pdf,.doc,.docx,.rtf,.odt" required>
-                    </div>
-                    <div class="form__actions">
-                        <button type="submit" class="btn btn--primary">
-                            <?= $workProgram !== null ? 'Заменить файл' : 'Загрузить РП' ?>
-                        </button>
-                    </div>
-                </form>
+                <?php require __DIR__ . '/../includes/ktp/word_import_ui.php'; ?>
             <?php endif; ?>
         </section>
     <?php endif; ?>

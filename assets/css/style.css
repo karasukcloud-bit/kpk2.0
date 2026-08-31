@@ -2899,6 +2899,26 @@ body.modal-open {
     gap: 0.25rem;
 }
 
+.ktp-comp-picker__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    padding-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
+    border-bottom: 1px solid var(--color-border);
+}
+
+.ktp-comp-picker__actions .btn {
+    padding: 0.2rem 0.45rem;
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.ktp-comp-picker__actions .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
 .ktp-rows-table {
     table-layout: fixed;
     width: 100%;

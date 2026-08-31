@@ -248,7 +248,7 @@ function get_curriculum_item_by_id(int $itemId): ?array
 {
     $stmt = db()->prepare(
         'SELECT ci.*, sub.name AS subject_name, cp.group_id, cp.academic_year,
-                g.number AS group_number, g.is_professionality,
+                g.number AS group_number, g.specialty_id AS group_specialty_id, g.is_professionality,
                 s.code AS specialty_code, s.name AS specialty_name,
                 u.full_name AS teacher_name,
                 u.email AS teacher_email,
