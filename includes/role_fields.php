@@ -7,7 +7,9 @@ $selectedRoles = $selectedRoles ?? [];
 $forCuratorUserId = $forCuratorUserId ?? null;
 $selectedCuratorGroupId = $selectedCuratorGroupId ?? null;
 $selectedCuratorGroupId2 = $selectedCuratorGroupId2 ?? null;
+$selectedSpecialtyHeadId = $selectedSpecialtyHeadId ?? null;
 $showCuratorGroup = in_array('curator', $selectedRoles, true);
+$showSpecialtyHead = in_array('specialty_head', $selectedRoles, true);
 ?>
 <div class="form__group">
     <span class="form__label">Роли в системе</span>
@@ -45,6 +47,14 @@ $showCuratorGroup = in_array('curator', $selectedRoles, true);
             </select>
         </div>
     </div>
+</div>
+
+<div class="form__group specialty-head-field<?= $showSpecialtyHead ? '' : ' specialty-head-field--hidden' ?>" id="specialty_head_field">
+    <label for="specialty_head_id">Специальность</label>
+    <p class="form__hint">Укажите специальность, которой руководит сотрудник. Одна специальность может быть назначена только одному руководителю.</p>
+    <select id="specialty_head_id" name="specialty_head_id">
+        <?= render_specialty_head_options($selectedSpecialtyHeadId, $forCuratorUserId) ?>
+    </select>
 </div>
 
 <script>
@@ -95,10 +105,30 @@ $showCuratorGroup = in_array('curator', $selectedRoles, true);
         initCuratorGroupPair();
     }
 
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', initCuratorRoleFields);
-    } else {
+    function initSpecialtyHeadToggle() {
+        var checkbox = document.querySelector('[data-role-checkbox="specialty_head"]');
+        var field = document.getElementById('specialty_head_field');
+        if (!checkbox || !field) {
+            return;
+        }
+
+        function updateVisibility() {
+            field.classList.toggle('specialty-head-field--hidden', !checkbox.checked);
+        }
+
+        checkbox.addEventListener('change', updateVisibility);
+        updateVisibility();
+    }
+
+    function initRoleFields() {
         initCuratorRoleFields();
+        initSpecialtyHeadToggle();
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', initRoleFields);
+    } else {
+        initRoleFields();
     }
 })();
 </script>

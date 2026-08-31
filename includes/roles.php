@@ -3,15 +3,16 @@
 declare(strict_types=1);
 
 /** Доступные роли сотрудников (можно назначать несколько одновременно). */
-const STAFF_ROLES = ['teacher', 'curator', 'deputy', 'educator'];
+const STAFF_ROLES = ['teacher', 'curator', 'deputy', 'educator', 'specialty_head'];
 
 function staff_role_labels(): array
 {
     return [
-        'teacher'  => 'Преподаватель',
-        'curator'  => 'Куратор',
-        'deputy'   => 'Завуч',
-        'educator' => 'Воспитатель',
+        'teacher'        => 'Преподаватель',
+        'curator'        => 'Куратор',
+        'deputy'         => 'Завуч',
+        'educator'       => 'Воспитатель',
+        'specialty_head' => 'Руководитель специальности',
     ];
 }
 

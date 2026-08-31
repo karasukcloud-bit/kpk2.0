@@ -32,7 +32,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 posted_staff_roles(),
                 posted_curator_group_id(),
                 $_POST['phone'] ?? '',
-                posted_curator_group_id_2()
+                posted_curator_group_id_2(),
+                posted_specialty_head_id()
             );
 
             if ($result['success']) {
@@ -181,6 +182,9 @@ require __DIR__ . '/../includes/header.php';
                 : null;
             $selectedCuratorGroupId2 = $_SERVER['REQUEST_METHOD'] === 'POST'
                 ? posted_curator_group_id_2()
+                : null;
+            $selectedSpecialtyHeadId = $_SERVER['REQUEST_METHOD'] === 'POST'
+                ? posted_specialty_head_id()
                 : null;
             $forCuratorUserId = null;
             require __DIR__ . '/../includes/role_fields.php';

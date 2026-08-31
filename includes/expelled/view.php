@@ -83,21 +83,21 @@ $canRestore = (int) $expelled['is_restored'] === 0;
                     <?php endif; ?>
                 <?php endif; ?>
             </dd>
-            <dt>ФИО мамы</dt>
+            <dt><?= e(student_parent_field_label('mother', 'name')) ?></dt>
             <dd><?= e($dash($expelled['mother_name'] ?? '')) ?></dd>
-            <dt>Телефон мамы</dt>
+            <dt><?= e(student_parent_field_label('mother', 'phone')) ?></dt>
             <dd><?= e($dash($expelled['mother_phone'] ?? '')) ?></dd>
-            <dt>Место работы мамы</dt>
+            <dt><?= e(student_parent_field_label('mother', 'workplace')) ?></dt>
             <dd><?= e($dash($expelled['mother_workplace'] ?? '')) ?></dd>
-            <dt>Образование мамы</dt>
+            <dt><?= e(student_parent_field_label('mother', 'education')) ?></dt>
             <dd><?= e(student_education_label($expelled['mother_education'] ?? null)) ?></dd>
-            <dt>ФИО папы</dt>
+            <dt><?= e(student_parent_field_label('father', 'name')) ?></dt>
             <dd><?= e($dash($expelled['father_name'] ?? '')) ?></dd>
-            <dt>Телефон папы</dt>
+            <dt><?= e(student_parent_field_label('father', 'phone')) ?></dt>
             <dd><?= e($dash($expelled['father_phone'] ?? '')) ?></dd>
-            <dt>Место работы папы</dt>
+            <dt><?= e(student_parent_field_label('father', 'workplace')) ?></dt>
             <dd><?= e($dash($expelled['father_workplace'] ?? '')) ?></dd>
-            <dt>Образование папы</dt>
+            <dt><?= e(student_parent_field_label('father', 'education')) ?></dt>
             <dd><?= e(student_education_label($expelled['father_education'] ?? null)) ?></dd>
             <dt>Адрес по прописке</dt>
             <dd><?= e(format_student_registered_address($expelled)) ?></dd>

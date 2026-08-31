@@ -127,13 +127,13 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 
 <div class="form__row" data-parent-field="mother">
     <div class="form__group">
-        <label for="mother_name">ФИО мамы</label>
+        <label for="mother_name"><?= e(student_parent_field_label('mother', 'name')) ?></label>
         <input type="text" id="mother_name" name="mother_name"
                class="form-input--fio"
                value="<?= e($data['mother_name'] ?? '') ?>">
     </div>
     <div class="form__group">
-        <label for="mother_phone">Телефон мамы</label>
+        <label for="mother_phone"><?= e(student_parent_field_label('mother', 'phone')) ?></label>
         <input type="text" id="mother_phone" name="mother_phone"
                class="form-input--phone"
                value="<?= e($data['mother_phone'] ?? '') ?>">
@@ -141,26 +141,26 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 </div>
 
 <div class="form__group" data-parent-field="mother">
-    <label for="mother_workplace">Место работы мамы</label>
+    <label for="mother_workplace"><?= e(student_parent_field_label('mother', 'workplace')) ?></label>
     <input type="text" id="mother_workplace" name="mother_workplace"
            class="form-input--wide"
            value="<?= e($data['mother_workplace'] ?? '') ?>">
 </div>
 
 <div class="form__group" data-parent-field="mother">
-    <label for="mother_education">Образование мамы</label>
+    <label for="mother_education"><?= e(student_parent_field_label('mother', 'education')) ?></label>
     <?php render_student_education_select('mother_education', $data['mother_education'] ?? '', 'mother_education'); ?>
 </div>
 
 <div class="form__row" data-parent-field="father">
     <div class="form__group">
-        <label for="father_name">ФИО папы</label>
+        <label for="father_name"><?= e(student_parent_field_label('father', 'name')) ?></label>
         <input type="text" id="father_name" name="father_name"
                class="form-input--fio"
                value="<?= e($data['father_name'] ?? '') ?>">
     </div>
     <div class="form__group">
-        <label for="father_phone">Телефон папы</label>
+        <label for="father_phone"><?= e(student_parent_field_label('father', 'phone')) ?></label>
         <input type="text" id="father_phone" name="father_phone"
                class="form-input--phone"
                value="<?= e($data['father_phone'] ?? '') ?>">
@@ -168,14 +168,14 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 </div>
 
 <div class="form__group" data-parent-field="father">
-    <label for="father_workplace">Место работы папы</label>
+    <label for="father_workplace"><?= e(student_parent_field_label('father', 'workplace')) ?></label>
     <input type="text" id="father_workplace" name="father_workplace"
            class="form-input--wide"
            value="<?= e($data['father_workplace'] ?? '') ?>">
 </div>
 
 <div class="form__group" data-parent-field="father">
-    <label for="father_education">Образование папы</label>
+    <label for="father_education"><?= e(student_parent_field_label('father', 'education')) ?></label>
     <?php render_student_education_select('father_education', $data['father_education'] ?? '', 'father_education'); ?>
 </div>
 

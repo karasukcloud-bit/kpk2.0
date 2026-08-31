@@ -368,3 +368,115 @@ function render_specialty_options(array $specialties, int $selectedId = 0): stri
 
     return $html;
 }
+
+function get_user_specialty_head_id(int $userId): ?int
+{
+    $stmt = db()->prepare('SELECT specialty_id FROM user_specialty_heads WHERE user_id = ? LIMIT 1');
+    $stmt->execute([$userId]);
+    $row = $stmt->fetch();
+
+    return $row ? (int) $row['specialty_id'] : null;
+}
+
+function get_user_specialty_head(?int $userId = null): ?array
+{
+    $userId = $userId ?? (int) (current_user()['id'] ?? 0);
+    if ($userId <= 0) {
+        return null;
+    }
+
+    $specialtyId = get_user_specialty_head_id($userId);
+    if ($specialtyId === null) {
+        return null;
+    }
+
+    return get_specialty_by_id($specialtyId);
+}
+
+function assign_user_specialty_head(int $userId, ?int $specialtyId): array
+{
+    $pdo = db();
+    $pdo->prepare('DELETE FROM user_specialty_heads WHERE user_id = ?')->execute([$userId]);
+
+    if ($specialtyId === null || $specialtyId <= 0) {
+        return ['success' => true];
+    }
+
+    if (get_specialty_by_id($specialtyId) === null) {
+        return ['success' => false, 'error' => 'Специальность не найдена.'];
+    }
+
+    $stmt = $pdo->prepare(
+        'SELECT user_id FROM user_specialty_heads WHERE specialty_id = ? AND user_id <> ? LIMIT 1'
+    );
+    $stmt->execute([$specialtyId, $userId]);
+    if ($stmt->fetch()) {
+        return ['success' => false, 'error' => 'Эта специальность уже назначена другому руководителю.'];
+    }
+
+    $pdo->prepare('INSERT INTO user_specialty_heads (user_id, specialty_id) VALUES (?, ?)')
+        ->execute([$userId, $specialtyId]);
+
+    return ['success' => true];
+}
+
+function sync_specialty_head(int $userId, array $staffRoles, ?int $specialtyId): array
+{
+    if (!in_array('specialty_head', $staffRoles, true)) {
+        return assign_user_specialty_head($userId, null);
+    }
+
+    if ($specialtyId === null || $specialtyId <= 0) {
+        return ['success' => false, 'error' => 'Укажите специальность для руководителя специальности.'];
+    }
+
+    return assign_user_specialty_head($userId, $specialtyId);
+}
+
+function render_specialty_head_options(?int $selectedId = null, ?int $forUserId = null): string
+{
+    $html = '<option value="">— Не назначена —</option>';
+    $taken = [];
+
+    $stmt = db()->query('SELECT specialty_id, user_id FROM user_specialty_heads');
+    foreach ($stmt->fetchAll() as $row) {
+        $taken[(int) $row['specialty_id']] = (int) $row['user_id'];
+    }
+
+    foreach (get_all_specialties() as $specialty) {
+        $id = (int) $specialty['id'];
+        $ownerId = $taken[$id] ?? 0;
+        $takenByOther = $ownerId > 0 && $ownerId !== (int) $forUserId;
+        $selected = $id === (int) $selectedId ? ' selected' : '';
+        $disabled = $takenByOther ? ' disabled' : '';
+        $label = $specialty['name'] . ' (' . $specialty['code'] . ')';
+
+        if ($takenByOther) {
+            $stmt = db()->prepare('SELECT full_name FROM users WHERE id = ? LIMIT 1');
+            $stmt->execute([$ownerId]);
+            $headName = trim((string) ($stmt->fetchColumn() ?: ''));
+            if ($headName !== '') {
+                $label .= ' (руководитель: ' . $headName . ')';
+            }
+        }
+
+        $html .= '<option value="' . $id . '"' . $selected . $disabled . '>'
+            . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</option>';
+    }
+
+    return $html;
+}
+
+function format_specialty_head_label(?int $specialtyId): ?string
+{
+    if ($specialtyId === null || $specialtyId <= 0) {
+        return null;
+    }
+
+    $specialty = get_specialty_by_id($specialtyId);
+    if ($specialty === null) {
+        return null;
+    }
+
+    return $specialty['name'] . ' (' . $specialty['code'] . ')';
+}

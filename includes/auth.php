@@ -389,6 +389,26 @@ function require_educator_panel(): void
     }
 }
 
+function is_specialty_head_user(): bool
+{
+    return !is_admin() && in_array('specialty_head', current_user_staff_roles(), true);
+}
+
+function can_use_specialty_head_panel(): bool
+{
+    return !is_student_user() && (is_admin() || in_array('specialty_head', current_user_staff_roles(), true));
+}
+
+function require_specialty_head_panel(): void
+{
+    require_login();
+
+    if (!can_use_specialty_head_panel()) {
+        http_response_code(403);
+        exit('Доступ запрещён. Требуются права руководителя специальности или администратора.');
+    }
+}
+
 function login_user(array $user): void
 {
     session_regenerate_id(true);

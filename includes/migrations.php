@@ -20,7 +20,7 @@ function ensure_user_roles_schema(PDO $pdo): void
     $pdo->exec("
         CREATE TABLE user_roles (
             user_id INT UNSIGNED NOT NULL,
-            role    ENUM('teacher', 'curator', 'deputy', 'educator') NOT NULL,
+            role    ENUM('teacher', 'curator', 'deputy', 'educator', 'specialty_head') NOT NULL,
             PRIMARY KEY (user_id, role),
             CONSTRAINT fk_user_roles_user
                 FOREIGN KEY (user_id) REFERENCES users(id)
@@ -112,6 +112,49 @@ function run_migrations(PDO $pdo): void
     ensure_gia_schema($pdo);
     ensure_study_groups_labels_schema($pdo);
     ensure_ktp_constructor_schema($pdo);
+    ensure_specialty_head_schema($pdo);
+}
+
+function ensure_specialty_head_schema(PDO $pdo): void
+{
+    static $done = false;
+
+    if ($done) {
+        return;
+    }
+
+    $done = true;
+
+    $stmt = $pdo->query("SHOW TABLES LIKE 'user_roles'");
+    if ($stmt->fetch()) {
+        $roleCol = $pdo->query("SHOW COLUMNS FROM user_roles LIKE 'role'")->fetch();
+        $typeDef = (string) ($roleCol['Type'] ?? '');
+        if ($roleCol && stripos($typeDef, 'specialty_head') === false) {
+            $pdo->exec(
+                "ALTER TABLE user_roles
+                 MODIFY role ENUM('teacher', 'curator', 'deputy', 'educator', 'specialty_head') NOT NULL"
+            );
+        }
+    }
+
+    $stmt = $pdo->query("SHOW TABLES LIKE 'user_specialty_heads'");
+    if ($stmt->fetch()) {
+        return;
+    }
+
+    $pdo->exec("
+        CREATE TABLE user_specialty_heads (
+            user_id      INT UNSIGNED NOT NULL PRIMARY KEY,
+            specialty_id INT UNSIGNED NOT NULL,
+            CONSTRAINT fk_user_specialty_heads_user
+                FOREIGN KEY (user_id) REFERENCES users(id)
+                ON DELETE CASCADE,
+            CONSTRAINT fk_user_specialty_heads_specialty
+                FOREIGN KEY (specialty_id) REFERENCES specialties(id)
+                ON DELETE RESTRICT,
+            UNIQUE KEY uq_user_specialty_heads_specialty (specialty_id)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+    ");
 }
 
 function ensure_ktp_constructor_schema(PDO $pdo): void

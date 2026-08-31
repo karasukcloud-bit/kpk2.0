@@ -382,6 +382,32 @@ function student_family_type_label(?string $type): string
     return '—';
 }
 
+function student_parent_field_labels(string $parent): array
+{
+    if ($parent === 'mother') {
+        return [
+            'name' => 'ФИО мамы / лица, её заменяющего',
+            'phone' => 'Телефон мамы / лица, её заменяющего',
+            'workplace' => 'Место работы мамы / лица, её заменяющего',
+            'education' => 'Образование мамы / лица, её заменяющего',
+        ];
+    }
+
+    return [
+        'name' => 'ФИО папы / лица, его заменяющего',
+        'phone' => 'Телефон папы / лица, его заменяющего',
+        'workplace' => 'Место работы папы / лица, его заменяющего',
+        'education' => 'Образование папы / лица, его заменяющего',
+    ];
+}
+
+function student_parent_field_label(string $parent, string $field): string
+{
+    $labels = student_parent_field_labels($parent);
+
+    return $labels[$field] ?? '';
+}
+
 function normalize_student_family_type($value): ?string
 {
     $value = trim((string) $value);

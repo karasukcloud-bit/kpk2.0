@@ -781,6 +781,11 @@ body {
     color: #be185d;
 }
 
+.badge--specialty_head {
+    background: #ecfdf5;
+    color: #047857;
+}
+
 .badge--cabinet {
     background: #eff6ff;
     color: var(--color-primary);
@@ -825,6 +830,10 @@ body {
 }
 
 .curator-group-field--hidden {
+    display: none;
+}
+
+.specialty-head-field--hidden {
     display: none;
 }
 

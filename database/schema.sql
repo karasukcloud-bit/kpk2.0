@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 CREATE TABLE IF NOT EXISTS user_roles (
     user_id INT UNSIGNED NOT NULL,
-    role    ENUM('teacher', 'curator', 'deputy', 'educator') NOT NULL,
+    role    ENUM('teacher', 'curator', 'deputy', 'educator', 'specialty_head') NOT NULL,
     PRIMARY KEY (user_id, role),
     CONSTRAINT fk_user_roles_user
         FOREIGN KEY (user_id) REFERENCES users(id)
@@ -48,6 +48,18 @@ CREATE TABLE IF NOT EXISTS specialties (
     code       VARCHAR(50) NOT NULL UNIQUE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS user_specialty_heads (
+    user_id      INT UNSIGNED NOT NULL PRIMARY KEY,
+    specialty_id INT UNSIGNED NOT NULL,
+    CONSTRAINT fk_user_specialty_heads_user
+        FOREIGN KEY (user_id) REFERENCES users(id)
+        ON DELETE CASCADE,
+    CONSTRAINT fk_user_specialty_heads_specialty
+        FOREIGN KEY (specialty_id) REFERENCES specialties(id)
+        ON DELETE RESTRICT,
+    UNIQUE KEY uq_user_specialty_heads_specialty (specialty_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS study_groups (

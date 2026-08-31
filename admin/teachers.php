@@ -69,6 +69,7 @@ require __DIR__ . '/../includes/header.php';
                             <th>Телефон</th>
                             <th>Роли</th>
                             <th>Курируемые группы</th>
+                            <th>Специальность</th>
                             <th class="table__check-col" title="Отметка об отправке логина и пароля">Данные отправлены</th>
                             <th class="table__status-col">Статус</th>
                             <th>Дата регистрации</th>
@@ -87,6 +88,7 @@ require __DIR__ . '/../includes/header.php';
                             <td><?= e(($teacher['phone'] ?? '') !== '' ? $teacher['phone'] : '—') ?></td>
                             <td class="roles-cell"><?= render_staff_roles_badges($teacher['staff_roles'] ?? []) ?></td>
                             <td><?= e($teacher['curator_group_number'] ?? '—') ?></td>
+                            <td><?= e($teacher['specialty_head_label'] ?? '—') ?></td>
                             <td class="table__check-col" onclick="event.stopPropagation()">
                                 <label class="checkbox-label checkbox-label--table" title="Регистрационные данные отправлены">
                                     <input

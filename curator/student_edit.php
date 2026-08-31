@@ -159,21 +159,21 @@ $studentAvatar = normalize_avatar_value((string) ($account['avatar'] ?? 'icon:pe
                 <dd><?= e(format_student_birth_date(isset($student['birth_date']) ? (string) $student['birth_date'] : null)) ?></dd>
                 <dt>Пол</dt>
                 <dd><?= e(student_gender_label(isset($student['gender']) ? (string) $student['gender'] : null)) ?></dd>
-                <dt>ФИО мамы</dt>
+                <dt><?= e(student_parent_field_label('mother', 'name')) ?></dt>
                 <dd><?= e($displayOrDash($student['mother_name'] ?? '')) ?></dd>
-                <dt>Телефон мамы</dt>
+                <dt><?= e(student_parent_field_label('mother', 'phone')) ?></dt>
                 <dd><?= e($displayOrDash($student['mother_phone'] ?? '')) ?></dd>
-                <dt>Место работы мамы</dt>
+                <dt><?= e(student_parent_field_label('mother', 'workplace')) ?></dt>
                 <dd><?= e($displayOrDash($student['mother_workplace'] ?? '')) ?></dd>
-                <dt>Образование мамы</dt>
+                <dt><?= e(student_parent_field_label('mother', 'education')) ?></dt>
                 <dd><?= e(student_education_label($student['mother_education'] ?? null)) ?></dd>
-                <dt>ФИО папы</dt>
+                <dt><?= e(student_parent_field_label('father', 'name')) ?></dt>
                 <dd><?= e($displayOrDash($student['father_name'] ?? '')) ?></dd>
-                <dt>Телефон папы</dt>
+                <dt><?= e(student_parent_field_label('father', 'phone')) ?></dt>
                 <dd><?= e($displayOrDash($student['father_phone'] ?? '')) ?></dd>
-                <dt>Место работы папы</dt>
+                <dt><?= e(student_parent_field_label('father', 'workplace')) ?></dt>
                 <dd><?= e($displayOrDash($student['father_workplace'] ?? '')) ?></dd>
-                <dt>Образование папы</dt>
+                <dt><?= e(student_parent_field_label('father', 'education')) ?></dt>
                 <dd><?= e(student_education_label($student['father_education'] ?? null)) ?></dd>
                 <dt>Адрес по прописке</dt>
                 <dd><?= e(format_student_registered_address($student)) ?></dd>

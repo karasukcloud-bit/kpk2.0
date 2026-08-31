@@ -33,6 +33,10 @@ function get_all_teachers(): array
         if ($teacher['curator_group_number'] === '') {
             $teacher['curator_group_number'] = null;
         }
+        $teacher['specialty_head_id'] = in_array('specialty_head', $teacher['staff_roles'], true)
+            ? get_user_specialty_head_id((int) $teacher['id'])
+            : null;
+        $teacher['specialty_head_label'] = format_specialty_head_label($teacher['specialty_head_id']);
     }
     unset($teacher);
 
@@ -68,6 +72,10 @@ function get_teacher_by_id(int $id): ?array
     if ($teacher['curator_group_number'] === '') {
         $teacher['curator_group_number'] = null;
     }
+    $teacher['specialty_head_id'] = in_array('specialty_head', $teacher['staff_roles'], true)
+        ? get_user_specialty_head_id($id)
+        : null;
+    $teacher['specialty_head_label'] = format_specialty_head_label($teacher['specialty_head_id']);
 
     return $teacher;
 }
@@ -79,7 +87,8 @@ function create_teacher(
     array $staffRoles,
     ?int $curatorGroupId = null,
     string $phone = '',
-    ?int $curatorGroupId2 = null
+    ?int $curatorGroupId2 = null,
+    ?int $specialtyHeadId = null
 ): array {
     $result = register_user($email, $password, $fullName, 'teacher', $staffRoles, $phone);
     if (!$result['success']) {
@@ -95,6 +104,14 @@ function create_teacher(
         return $groupResult;
     }
 
+    $specialtyResult = sync_specialty_head($userId, $staffRoles, $specialtyHeadId);
+    if (!$specialtyResult['success']) {
+        assign_curator_group($userId, null);
+        $stmt = db()->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
+        $stmt->execute([$userId]);
+        return $specialtyResult;
+    }
+
     return $result;
 }
 
@@ -107,7 +124,8 @@ function update_teacher(
     ?string $password = null,
     ?int $curatorGroupId = null,
     string $phone = '',
-    ?int $curatorGroupId2 = null
+    ?int $curatorGroupId2 = null,
+    ?int $specialtyHeadId = null
 ): array {
     $teacher = get_teacher_by_id($id);
 
@@ -178,6 +196,11 @@ function update_teacher(
         return $groupResult;
     }
 
+    $specialtyResult = sync_specialty_head($id, $staffRoles, $specialtyHeadId);
+    if (!$specialtyResult['success']) {
+        return $specialtyResult;
+    }
+
     return ['success' => true];
 }
 
@@ -237,6 +260,7 @@ function delete_teacher(int $id): array
     }
 
     assign_curator_group($id, null);
+    assign_user_specialty_head($id, null);
 
     $stmt = db()->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
     $stmt->execute([$id]);
@@ -297,6 +321,13 @@ function posted_curator_group_id_2(): ?int
 function posted_curator_group_ids(): array
 {
     return curator_group_ids_from_values(posted_curator_group_id(), posted_curator_group_id_2());
+}
+
+function posted_specialty_head_id(): ?int
+{
+    $value = (int) ($_POST['specialty_head_id'] ?? 0);
+
+    return $value > 0 ? $value : null;
 }
 
 function curator_group_ids_from_values(?int $groupId, ?int $groupId2 = null): array
