@@ -8,7 +8,7 @@ declare(strict_types=1);
  */
 return [
     'host'     => 'localhost',
-    'dbname'   => 'kpk_attendance',
+    'dbname'   => 'spo_progress',
     'charset'  => 'utf8mb4',
     'username' => 'root',
     'password' => '',
