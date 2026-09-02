@@ -4063,37 +4063,76 @@ code {
 }
 
 .educator-group-attendance-page .educator-attendance-print-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
     margin: 1rem 0;
+}
+
+.educator-group-attendance-page .educator-print-mode {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-muted);
 }
 
 .educator-group-attendance-page .educator-print-only {
     display: none;
 }
 
+.educator-group-attendance-page .educator-attendance-print-split {
+    display: none;
+}
+
+.educator-group-attendance-page .educator-group-attendance-print-org {
+    margin: 0 0 0.5rem;
+    text-align: center;
+    font-size: 12pt;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
 .educator-group-attendance-page .educator-attendance-print-header h2 {
     margin: 0 0 0.35rem;
+    text-align: center;
 }
 
 .educator-group-attendance-page .educator-attendance-print-header p {
     margin: 0 0 1rem;
+    text-align: center;
 }
 
 @media print {
-    .educator-group-attendance-page .header,
-    .educator-group-attendance-page .footer,
-    .educator-group-attendance-page .admin-tabs,
-    .educator-group-attendance-page .educator-no-print,
-    .educator-group-attendance-page .panel__header {
+    body:has(.educator-group-attendance-page) .header,
+    body:has(.educator-group-attendance-page) .footer,
+    body:has(.educator-group-attendance-page) .educator-no-print {
         display: none !important;
     }
 
-    .educator-group-attendance-page .page,
-    .educator-group-attendance-page .dashboard,
-    .educator-group-attendance-page .panel {
+    body:has(.educator-group-attendance-page) .page {
+        min-height: 0;
+        display: block;
         box-shadow: none;
         border: none;
-        padding: 0;
-        margin: 0;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.educator-group-attendance-page) .main {
+        display: block;
+        max-width: none;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.educator-group-attendance-page) .dashboard,
+    body:has(.educator-group-attendance-page) .panel {
+        box-shadow: none;
+        border: none;
+        padding: 0 !important;
+        margin: 0 !important;
     }
 
     .educator-group-attendance-page .educator-print-only {
@@ -4104,14 +4143,27 @@ code {
         display: none !important;
     }
 
+    .educator-group-attendance-page .table-wrap {
+        overflow: visible;
+        margin: 0;
+    }
+
+    .educator-group-attendance-page .educator-attendance-print-header {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
     .educator-group-attendance-page .attendance-table {
         font-size: 9px;
         min-width: 0;
+        width: 100%;
+        border-collapse: collapse;
     }
 
     .educator-group-attendance-page .attendance-table th,
     .educator-group-attendance-page .attendance-table td {
         padding: 0.2rem 0.25rem;
+        border: 1px solid #000;
     }
 
     .educator-group-attendance-page .attendance-table__date-col {
@@ -4123,12 +4175,28 @@ code {
         width: auto;
         min-width: 28px;
         max-width: none;
+        text-align: center;
+        vertical-align: middle;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
+    }
+
+    .educator-group-attendance-page .attendance-table__cell {
+        text-align: center;
+        vertical-align: middle;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
     }
 
     .educator-group-attendance-page .attendance-student-title {
+        display: inline-block;
         font-size: 8px;
         writing-mode: vertical-rl;
         transform: rotate(180deg);
+        text-align: center;
+        margin: 0 auto;
+        max-height: none;
+        overflow: visible;
     }
 
     .educator-group-attendance-page .attendance-cell__reason {
@@ -4138,6 +4206,515 @@ code {
     .educator-group-attendance-page .attendance-summary {
         break-inside: avoid;
         font-size: 11px;
+    }
+
+    .educator-group-attendance-page .attendance-cell--excused,
+    .educator-group-attendance-page .attendance-cell--unexcused {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .is-print-split-source {
+        display: none !important;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .educator-attendance-print-split {
+        display: block !important;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .educator-attendance-print-sheet--break {
+        break-after: page;
+        page-break-after: always;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet {
+        width: auto;
+        min-width: 0;
+        table-layout: fixed;
+        font-size: 12px;
+        border-collapse: collapse;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet th,
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet td {
+        padding: 0.35rem 0.4rem;
+        border: 1px solid #000;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-table__date-col {
+        min-width: 90px;
+        width: 90px;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-table__student-col {
+        min-width: 52px;
+        width: 52px;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-table__cell {
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-student-title {
+        display: inline-block;
+        font-size: 11px;
+        font-weight: 600;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        text-align: center;
+        margin: 0 auto;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-cell__counts {
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-table--print-sheet .attendance-cell__reason {
+        font-size: 9px;
+    }
+
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-legend,
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-unexcused-list,
+    body.educator-print-multisheet .educator-group-attendance-page .attendance-summary {
+        display: none !important;
+    }
+
+    @page {
+        size: landscape;
+        margin: 10mm;
+    }
+}
+
+.educator-daily-attendance-page .journal-subtabs {
+    margin-bottom: 0;
+}
+
+.educator-daily-attendance-page .eda-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.educator-daily-attendance-page .eda-date-tabs {
+    flex: 1 1 auto;
+    margin: 0;
+}
+
+.educator-daily-attendance-page .eda-hint {
+    margin: 0 0 0.85rem;
+}
+
+.educator-daily-attendance-page .educator-print-only {
+    display: none;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-print-org {
+    margin: 0 0 0.5rem;
+    text-align: center;
+    font-size: 12pt;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.educator-daily-attendance-page .educator-attendance-print-header h2 {
+    margin: 0 0 1rem;
+    text-align: center;
+    font-size: 14pt;
+    font-weight: 700;
+}
+
+.educator-daily-attendance-page .eda-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem 1.25rem;
+    margin: 0 0 0.85rem;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+}
+
+.educator-daily-attendance-page .eda-legend__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.educator-daily-attendance-page .eda-legend__swatch {
+    width: 0.9rem;
+    height: 0.9rem;
+    border-radius: 4px;
+    background: #dcfce7;
+    border: 1px solid #86efac;
+    box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.educator-daily-attendance-page .eda-legend__dot {
+    width: 0.55rem;
+    height: 0.55rem;
+    border-radius: 50%;
+}
+
+.educator-daily-attendance-page .eda-legend__dot--unexcused {
+    background: #ef4444;
+}
+
+.educator-daily-attendance-page .eda-table-wrap {
+    border: 1px solid var(--color-border);
+    border-radius: 12px;
+    background: var(--color-surface);
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
+    overflow: auto;
+    max-height: min(72vh, 860px);
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table {
+    width: 100%;
+    border-collapse: separate;
+    border-spacing: 0;
+    margin: 0;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table thead th {
+    position: sticky;
+    top: 0;
+    z-index: 3;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    text-transform: none;
+    white-space: normal;
+    line-height: 1.3;
+    vertical-align: bottom;
+    border-bottom: 1px solid var(--color-border);
+    padding: 0.7rem 0.65rem;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table .eda-th-label {
+    display: block;
+    max-width: 7.5rem;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table tbody td {
+    padding: 0.55rem 0.65rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+    font-size: 0.875rem;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table tbody tr:hover td {
+    background: #f8fafc;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__row--marked:hover td {
+    background: #f0fdf4;
+}
+
+.educator-daily-attendance-page .eda-col-group,
+.educator-daily-attendance-page .educator-daily-attendance-table__group {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    min-width: 5.5rem;
+    background: var(--color-surface);
+    white-space: nowrap;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table thead .eda-col-group {
+    z-index: 4;
+    background: #f8fafc;
+}
+
+.educator-daily-attendance-page .eda-col-curator {
+    min-width: 9rem;
+    max-width: 12rem;
+    white-space: nowrap;
+}
+
+.educator-daily-attendance-page .eda-curator-name {
+    display: inline-block;
+    max-width: 11rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: 0.8125rem;
+    color: #334155;
+}
+
+.educator-daily-attendance-page .eda-col-curator--marked {
+    background: #f0fdf4;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__row--marked:hover .eda-col-curator {
+    background: #f0fdf4;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__group {
+    background: var(--color-surface);
+}
+
+.educator-daily-attendance-page .eda-group-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.educator-daily-attendance-page .eda-group-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 2.75rem;
+    padding: 0.2rem 0.5rem;
+    border-radius: 999px;
+    background: #e2e8f0;
+    color: #334155;
+    font-weight: 700;
+    font-size: 0.8125rem;
+    letter-spacing: 0.02em;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__group--marked {
+    background: #dcfce7 !important;
+    box-shadow: inset 4px 0 0 #22c55e;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__group--marked .eda-group-badge {
+    background: #bbf7d0;
+    color: #166534;
+}
+
+.educator-daily-attendance-page .eda-group-status {
+    color: #16a34a;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.educator-daily-attendance-page .eda-col-reason {
+    text-align: center;
+    min-width: 4.5rem;
+}
+
+.educator-daily-attendance-page .eda-col-reason--filled {
+    background: #eff6ff;
+}
+
+.educator-daily-attendance-page .eda-col-unexcused {
+    text-align: center;
+    min-width: 7rem;
+    font-weight: 600;
+}
+
+.educator-daily-attendance-page .eda-col-unexcused--filled {
+    background: #fef2f2;
+}
+
+.educator-daily-attendance-page .eda-col-students {
+    min-width: 16rem;
+}
+
+.educator-daily-attendance-page .eda-cell-empty {
+    color: #cbd5e1;
+}
+
+.educator-daily-attendance-page .eda-cell-value {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.6rem;
+    font-variant-numeric: tabular-nums;
+    font-weight: 600;
+    color: #1e40af;
+}
+
+.educator-daily-attendance-page .eda-unexcused-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.75rem;
+    padding: 0.15rem 0.45rem;
+    border-radius: 999px;
+    background: #fee2e2;
+    color: #b91c1c;
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.educator-daily-attendance-page .eda-students {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.educator-daily-attendance-page .eda-student-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    max-width: 100%;
+    padding: 0.2rem 0.45rem 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: #fff1f2;
+    border: 1px solid #fecdd3;
+    color: #9f1239;
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
+.educator-daily-attendance-page .eda-student-chip__name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.educator-daily-attendance-page .eda-student-chip__count {
+    flex-shrink: 0;
+    min-width: 1.15rem;
+    padding: 0.05rem 0.3rem;
+    border-radius: 999px;
+    background: #be123c;
+    color: #fff;
+    font-weight: 700;
+    font-size: 0.6875rem;
+    text-align: center;
+}
+
+.educator-daily-attendance-page .eda-students-print {
+    display: none;
+}
+
+.educator-daily-attendance-page .educator-attendance-table__students {
+    min-width: 220px;
+    max-width: none;
+    white-space: normal;
+}
+
+@media (max-width: 900px) {
+    .educator-daily-attendance-page .eda-toolbar {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .educator-daily-attendance-page .eda-table-wrap {
+        max-height: none;
+    }
+}
+
+@media print {
+    body:has(.educator-daily-attendance-page) .header,
+    body:has(.educator-daily-attendance-page) .footer,
+    body:has(.educator-daily-attendance-page) .educator-no-print {
+        display: none !important;
+    }
+
+    body:has(.educator-daily-attendance-page) .page {
+        min-height: 0;
+        display: block;
+        box-shadow: none;
+        border: none;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.educator-daily-attendance-page) .main {
+        display: block;
+        max-width: none;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.educator-daily-attendance-page) .dashboard,
+    body:has(.educator-daily-attendance-page) .panel {
+        box-shadow: none;
+        border: none;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .educator-daily-attendance-page .eda-table-wrap {
+        overflow: visible;
+        margin: 0;
+        max-height: none;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+    }
+
+    .educator-daily-attendance-page .educator-print-only {
+        display: block !important;
+    }
+
+    .educator-daily-attendance-page .eda-students {
+        display: none !important;
+    }
+
+    .educator-daily-attendance-page .eda-students-print {
+        display: inline !important;
+    }
+
+    .educator-daily-attendance-page .educator-attendance-print-header {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .educator-daily-attendance-page .educator-daily-attendance-print-area {
+        break-inside: auto;
+        page-break-inside: auto;
+        break-before: auto;
+        page-break-before: auto;
+    }
+
+    .educator-daily-attendance-page .educator-daily-attendance-table {
+        font-size: 10px;
+        page-break-before: avoid;
+        break-before: avoid;
+    }
+
+    .educator-daily-attendance-page .educator-daily-attendance-table thead th,
+    .educator-daily-attendance-page .educator-daily-attendance-table tbody td {
+        position: static;
+        padding: 0.25rem 0.35rem;
+        background: transparent !important;
+    }
+
+    .educator-daily-attendance-page .educator-daily-attendance-table thead th {
+        background: #f2f2f2 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .educator-daily-attendance-page .educator-daily-attendance-table__group--marked {
+        background: #dcfce7 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    .educator-daily-attendance-page .eda-col-reason--filled,
+    .educator-daily-attendance-page .eda-col-unexcused--filled {
+        background: transparent !important;
+    }
+
+    .educator-daily-attendance-page .eda-group-badge {
+        background: transparent;
+        padding: 0;
+        min-width: 0;
+        border-radius: 0;
+    }
+
+    .educator-daily-attendance-page .eda-unexcused-badge {
+        background: transparent;
+        color: #000;
+        padding: 0;
+        min-width: 0;
     }
 
     @page {

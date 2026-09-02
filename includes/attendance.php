@@ -612,6 +612,159 @@ function format_educator_unexcused_students_list(array $students): string
     return implode(', ', $parts);
 }
 
+function resolve_academic_year_for_date(string $date): ?string
+{
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {
+        return null;
+    }
+
+    $year = (int) substr($date, 0, 4);
+    $month = (int) substr($date, 5, 2);
+
+    if ($month >= 9) {
+        return sprintf('%d-%d', $year, $year + 1);
+    }
+
+    return sprintf('%d-%d', $year - 1, $year);
+}
+
+function get_educator_daily_attendance_date_options(int $days = 7): array
+{
+    $days = max(1, $days);
+    $options = [];
+    $today = new DateTimeImmutable('today');
+
+    for ($offset = $days - 1; $offset >= 0; $offset--) {
+        $date = $today->modify('-' . $offset . ' days');
+        $value = $date->format('Y-m-d');
+        $options[] = [
+            'value' => $value,
+            'label' => format_attendance_date($value),
+            'is_today' => $offset === 0,
+        ];
+    }
+
+    return $options;
+}
+
+function resolve_educator_daily_attendance_date(?string $requested, int $days = 7): string
+{
+    $options = get_educator_daily_attendance_date_options($days);
+    $allowed = array_column($options, 'value');
+    $requested = trim((string) $requested);
+
+    if ($requested !== '' && in_array($requested, $allowed, true)) {
+        return $requested;
+    }
+
+    return $allowed !== [] ? (string) end($allowed) : date('Y-m-d');
+}
+
+function build_educator_daily_attendance_report(string $date): array
+{
+    require_once __DIR__ . '/organization.php';
+
+    $reasons = get_attendance_reasons(true);
+    $reasonIds = array_map(static fn (array $reason): int => (int) $reason['id'], $reasons);
+
+    $rows = [];
+    foreach (get_all_groups() as $group) {
+        $groupId = (int) $group['id'];
+        $reasonTotals = [];
+        foreach ($reasonIds as $reasonId) {
+            $reasonTotals[$reasonId] = 0;
+        }
+
+        $rows[$groupId] = [
+            'group_id' => $groupId,
+            'group_number' => (string) $group['number'],
+            'curator_name' => trim((string) ($group['curator_name'] ?? '')),
+            'reason_totals' => $reasonTotals,
+            'unexcused' => 0,
+            'unexcused_students' => [],
+            'has_absences' => false,
+        ];
+    }
+
+    $markedStmt = db()->prepare(
+        'SELECT DISTINCT group_id
+         FROM attendance_days
+         WHERE attendance_date = ?'
+    );
+    $markedStmt->execute([$date]);
+    foreach ($markedStmt->fetchAll() as $marked) {
+        $groupId = (int) $marked['group_id'];
+        if (isset($rows[$groupId])) {
+            $rows[$groupId]['has_absences'] = true;
+        }
+    }
+
+    $stmt = db()->prepare(
+        'SELECT ad.group_id, ae.student_id, ae.excused_lessons, ae.unexcused_lessons,
+                ae.reason_id, s.full_name
+         FROM attendance_days ad
+         INNER JOIN attendance_entries ae ON ae.attendance_day_id = ad.id
+         INNER JOIN students s ON s.id = ae.student_id
+         WHERE ad.attendance_date = ?'
+    );
+    $stmt->execute([$date]);
+
+    foreach ($stmt->fetchAll() as $entry) {
+        $groupId = (int) $entry['group_id'];
+        if (!isset($rows[$groupId])) {
+            continue;
+        }
+
+        $excused = (int) $entry['excused_lessons'];
+        $unexcused = (int) $entry['unexcused_lessons'];
+        $reasonId = $entry['reason_id'] !== null ? (int) $entry['reason_id'] : null;
+
+        if ($excused > 0 && $reasonId !== null) {
+            if (!array_key_exists($reasonId, $rows[$groupId]['reason_totals'])) {
+                $rows[$groupId]['reason_totals'][$reasonId] = 0;
+            }
+            $rows[$groupId]['reason_totals'][$reasonId] += $excused;
+        }
+
+        if ($unexcused <= 0) {
+            continue;
+        }
+
+        $rows[$groupId]['unexcused'] += $unexcused;
+        $studentId = (int) $entry['student_id'];
+        if (!isset($rows[$groupId]['unexcused_students'][$studentId])) {
+            $rows[$groupId]['unexcused_students'][$studentId] = [
+                'full_name' => person_last_first_name((string) $entry['full_name']),
+                'count' => 0,
+            ];
+        }
+        $rows[$groupId]['unexcused_students'][$studentId]['count'] += $unexcused;
+    }
+
+    $reportRows = [];
+    foreach ($rows as $row) {
+        $students = array_values($row['unexcused_students']);
+        usort(
+            $students,
+            static fn (array $a, array $b): int => strcmp($a['full_name'], $b['full_name'])
+        );
+        $row['unexcused_students'] = $students;
+        $reportRows[] = $row;
+    }
+
+    usort(
+        $reportRows,
+        static fn (array $a, array $b): int => strnatcasecmp($a['group_number'], $b['group_number'])
+    );
+
+    return [
+        'date' => $date,
+        'academic_year' => resolve_academic_year_for_date($date) ?? get_default_academic_year(),
+        'reasons' => $reasons,
+        'rows' => $reportRows,
+    ];
+}
+
 function build_attendance_year_chart_data(string $academicYear): array
 {
     $months = get_academic_year_months($academicYear);

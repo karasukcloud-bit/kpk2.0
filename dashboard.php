@@ -65,9 +65,9 @@ require __DIR__ . '/includes/header.php';
         <?php endif; ?>
 
         <?php if (can_use_educator_panel()): ?>
-        <a href="educator/attendance.php" class="card card--link card--educator">
+        <a href="educator/daily_attendance.php" class="card card--link card--educator">
             <h2>Панель воспитателя</h2>
-            <p>Раздел в разработке.</p>
+            <p>Сводка пропусков, пропуски по дням и информация по студентам.</p>
             <span class="badge badge--educator">Открыть</span>
         </a>
         <?php endif; ?>
