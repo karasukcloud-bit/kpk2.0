@@ -18,6 +18,18 @@ function e(?string $value): string
     return htmlspecialchars($value ?? '', ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
+function app_version(): string
+{
+    static $version = null;
+
+    if ($version === null) {
+        $config = require __DIR__ . '/../config/app.php';
+        $version = (string) ($config['version'] ?? '1.0');
+    }
+
+    return $version;
+}
+
 require_once __DIR__ . '/avatars.php';
 
 function user_first_middle_name(string $fullName): string

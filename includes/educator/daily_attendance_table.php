@@ -50,7 +50,7 @@ $formatCell = static function (int $value): string {
                 $unexcused = (int) ($row['unexcused'] ?? 0);
                 $students = $row['unexcused_students'] ?? [];
                 $curatorName = trim((string) ($row['curator_name'] ?? ''));
-                $curatorDisplay = $curatorName !== '' ? person_last_first_name($curatorName) : '—';
+                $curatorDisplay = $curatorName !== '' ? $curatorName : '—';
                 ?>
                 <tr class="<?= $groupHasAbsences ? 'educator-daily-attendance-table__row--marked' : 'educator-daily-attendance-table__row--empty' ?>">
                     <td class="educator-daily-attendance-table__group<?= $groupHasAbsences ? ' educator-daily-attendance-table__group--marked' : '' ?>">

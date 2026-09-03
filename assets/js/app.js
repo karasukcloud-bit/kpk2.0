@@ -344,6 +344,14 @@ document.addEventListener('DOMContentLoaded', () => {
         attendanceCancel.addEventListener('click', hideAttendanceForm);
     }
 
+    attendanceForm?.addEventListener('blur', (event) => {
+        const input = event.target.closest('.attendance-input-num');
+        if (!input || input.value.trim() !== '') {
+            return;
+        }
+        input.value = '0';
+    }, true);
+
     const initTableColHover = (table) => {
         let activeCol = -1;
 
@@ -2937,4 +2945,48 @@ document.addEventListener('DOMContentLoaded', () => {
             window.print();
         });
     });
+
+    const header = document.querySelector('.header');
+    const menuBtn = header?.querySelector('.header__menu-btn');
+    const menuCloseBtn = header?.querySelector('.header__nav-close');
+    const headerNav = header?.querySelector('.header__nav');
+    const headerOverlay = header?.querySelector('.header__overlay');
+
+    if (header && menuBtn && headerNav) {
+        const closeHeaderMenu = () => {
+            header.classList.remove('header--menu-open');
+            menuBtn.setAttribute('aria-expanded', 'false');
+            document.body.classList.remove('body--nav-open');
+        };
+
+        const openHeaderMenu = () => {
+            header.classList.add('header--menu-open');
+            menuBtn.setAttribute('aria-expanded', 'true');
+            document.body.classList.add('body--nav-open');
+        };
+
+        menuBtn.addEventListener('click', () => {
+            if (!header.classList.contains('header--menu-open')) {
+                openHeaderMenu();
+            }
+        });
+
+        menuCloseBtn?.addEventListener('click', closeHeaderMenu);
+        headerOverlay?.addEventListener('click', closeHeaderMenu);
+        headerNav.querySelectorAll('a').forEach((link) => {
+            link.addEventListener('click', closeHeaderMenu);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeHeaderMenu();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (window.innerWidth > 900) {
+                closeHeaderMenu();
+            }
+        });
+    }
 });

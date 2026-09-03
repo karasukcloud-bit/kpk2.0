@@ -40,69 +40,95 @@
             require_once __DIR__ . '/notifications.php';
             $headerUnreadCount = get_unread_notifications_count((int) $headerUser['id']);
             ?>
-            <nav class="header__nav">
-                <?php if (is_admin()): ?>
-                <a
-                    href="<?= e($appBase) ?>admin/teachers.php"
-                    class="btn btn--ghost btn--sm<?= $activePanel === 'admin' ? ' is-active' : '' ?>"
-                >Админ панель</a>
-                <?php endif; ?>
-                <?php if (can_use_curator_panel()): ?>
-                <a
-                    href="<?= e($appBase) ?>curator/group.php"
-                    class="btn btn--ghost btn--sm<?= $activePanel === 'curator' ? ' is-active' : '' ?>"
-                >Панель куратора</a>
-                <?php endif; ?>
-                <?php if (can_use_teacher_panel()): ?>
-                <a
-                    href="<?= e($appBase) ?>teacher/subjects.php"
-                    class="btn btn--ghost btn--sm<?= $activePanel === 'teacher' ? ' is-active' : '' ?>"
-                >Панель преподавателя</a>
-                <?php endif; ?>
-                <?php if (can_use_deputy_panel()): ?>
-                <a
-                    href="<?= e($appBase) ?>deputy/curriculum.php"
-                    class="btn btn--ghost btn--sm<?= $activePanel === 'deputy' ? ' is-active' : '' ?>"
-                >Панель завуча</a>
-                <?php endif; ?>
-                <?php if (can_use_educator_panel()): ?>
-                <a
-                    href="<?= e($appBase) ?>educator/attendance.php"
-                    class="btn btn--ghost btn--sm<?= $activePanel === 'educator' ? ' is-active' : '' ?>"
-                >Панель воспитателя</a>
-                <?php endif; ?>
-                <a
-                    href="<?= e($appBase) ?>notifications.php"
-                    class="header__notify-btn<?= basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'notifications.php' ? ' is-active' : '' ?>"
-                    title="Уведомления"
-                >
-                    <span class="header__notify-icon" aria-hidden="true">🔔</span>
-                    <?php if ($headerUnreadCount > 0): ?>
-                    <span class="header__notify-badge"><?= $headerUnreadCount > 99 ? '99+' : (int) $headerUnreadCount ?></span>
-                    <?php endif; ?>
-                </a>
-                <div class="header__account">
-                    <a
-                        href="<?= e($appBase) ?><?= is_student_user() ? 'student/cabinet.php' : 'cabinet.php' ?>"
-                        class="header__cabinet-tab<?= ($activePanel === 'cabinet' || $activePanel === 'student') ? ' header__cabinet-tab--active' : '' ?>"
-                        title="Личный кабинет"
+            <button
+                type="button"
+                class="header__menu-btn"
+                aria-label="Меню"
+                aria-expanded="false"
+                aria-controls="headerNav"
+            >
+                <span class="header__menu-icon" aria-hidden="true"></span>
+            </button>
+            <div class="header__overlay" aria-hidden="true"></div>
+            <nav class="header__nav" id="headerNav">
+                <div class="header__nav-head">
+                    <h2 class="header__nav-title">Меню</h2>
+                    <button
+                        type="button"
+                        class="header__nav-close"
+                        aria-label="Закрыть меню"
                     >
-                        <span class="header__user-name"><?= e($headerName) ?></span>
-                        <?= render_user_avatar($headerAvatar, 'user-avatar--header', $basePath) ?>
+                        <span class="header__nav-close-icon" aria-hidden="true"></span>
+                    </button>
+                </div>
+                <div class="header__nav-body">
+                <div class="header__panels">
+                    <?php if (is_admin()): ?>
+                    <a
+                        href="<?= e($appBase) ?>admin/teachers.php"
+                        class="btn btn--ghost btn--sm<?= $activePanel === 'admin' ? ' is-active' : '' ?>"
+                    >Админ панель</a>
+                    <?php endif; ?>
+                    <?php if (can_use_curator_panel()): ?>
+                    <a
+                        href="<?= e($appBase) ?>curator/group.php"
+                        class="btn btn--ghost btn--sm<?= $activePanel === 'curator' ? ' is-active' : '' ?>"
+                    >Панель куратора</a>
+                    <?php endif; ?>
+                    <?php if (can_use_teacher_panel()): ?>
+                    <a
+                        href="<?= e($appBase) ?>teacher/subjects.php"
+                        class="btn btn--ghost btn--sm<?= $activePanel === 'teacher' ? ' is-active' : '' ?>"
+                    >Панель преподавателя</a>
+                    <?php endif; ?>
+                    <?php if (can_use_deputy_panel()): ?>
+                    <a
+                        href="<?= e($appBase) ?>deputy/curriculum.php"
+                        class="btn btn--ghost btn--sm<?= $activePanel === 'deputy' ? ' is-active' : '' ?>"
+                    >Панель завуча</a>
+                    <?php endif; ?>
+                    <?php if (can_use_educator_panel()): ?>
+                    <a
+                        href="<?= e($appBase) ?>educator/attendance.php"
+                        class="btn btn--ghost btn--sm<?= $activePanel === 'educator' ? ' is-active' : '' ?>"
+                    >Панель воспитателя</a>
+                    <?php endif; ?>
+                </div>
+                <div class="header__actions">
+                    <a
+                        href="<?= e($appBase) ?>notifications.php"
+                        class="header__notify-btn<?= basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'notifications.php' ? ' is-active' : '' ?>"
+                        title="Уведомления"
+                    >
+                        <span class="header__notify-icon" aria-hidden="true">🔔</span>
+                        <?php if ($headerUnreadCount > 0): ?>
+                        <span class="header__notify-badge"><?= $headerUnreadCount > 99 ? '99+' : (int) $headerUnreadCount ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <div class="header__account">
+                        <a
+                            href="<?= e($appBase) ?><?= is_student_user() ? 'student/cabinet.php' : 'cabinet.php' ?>"
+                            class="header__cabinet-tab<?= ($activePanel === 'cabinet' || $activePanel === 'student') ? ' header__cabinet-tab--active' : '' ?>"
+                            title="Личный кабинет"
+                        >
+                            <span class="header__user-name"><?= e($headerName) ?></span>
+                            <?= render_user_avatar($headerAvatar, 'user-avatar--header', $basePath) ?>
+                        </a>
+                    </div>
+                    <a
+                        href="<?= e($basePath) ?>logout.php"
+                        class="header__logout-btn"
+                        title="Выйти"
+                        aria-label="Выйти"
+                    >
+                        <svg class="header__logout-icon" viewBox="0 0 24 24" aria-hidden="true">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M16 17l5-5-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                            <path d="M21 12H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
                     </a>
                 </div>
-                <a
-                    href="<?= e($basePath) ?>logout.php"
-                    class="header__logout-btn"
-                    title="Выйти"
-                    aria-label="Выйти"
-                >
-                    <svg class="header__logout-icon" viewBox="0 0 24 24" aria-hidden="true">
-                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M16 17l5-5-5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M21 12H9" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                    </svg>
-                </a>
+                </div>
             </nav>
             <?php endif; ?>
         </header>
