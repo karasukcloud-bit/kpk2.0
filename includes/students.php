@@ -440,7 +440,9 @@ function normalize_student_residence_type($value): ?string
 function student_education_options(): array
 {
     return [
+        'general' => 'Общее',
         'secondary' => 'Среднее',
+        'secondary_special' => 'Среднее специальное',
         'secondary_vocational' => 'Среднее профессиональное',
         'higher' => 'Высшее',
         'incomplete_higher' => 'Незаконченное высшее',
