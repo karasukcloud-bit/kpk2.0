@@ -8,7 +8,7 @@ require_once __DIR__ . '/students.php';
 
 function curator_show_student_auth_data(): bool
 {
-    return false;
+    return is_admin();
 }
 
 function transliterate_to_login(string $text): string

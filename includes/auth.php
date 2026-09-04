@@ -664,31 +664,53 @@ function register_user(
     return ['success' => true, 'user_id' => $userId];
 }
 
-function authenticate_user(string $login, string $password, string $loginType = 'phone'): array
+function resolve_login_user(string $login, string $loginType = 'phone'): ?array
 {
     $login = trim($login);
-    $user = null;
     $loginType = $loginType === 'email' ? 'email' : 'phone';
 
     if ($loginType === 'phone') {
         if (!is_valid_login_phone($login)) {
-            return ['success' => false, 'error' => 'Неверный телефон или пароль.'];
+            return null;
         }
-        $user = find_user_by_phone($login);
-    } else {
-        if (!is_real_user_email($login)) {
-            return ['success' => false, 'error' => 'Неверный email или пароль.'];
-        }
-        $user = find_user_by_email(mb_strtolower($login));
+
+        return find_user_by_phone($login);
     }
 
+    $loginLower = mb_strtolower($login);
+
+    if (preg_match('/@student\.local$/i', $loginLower)) {
+        $user = find_user_by_email($loginLower);
+
+        return ($user !== null && ($user['role'] ?? '') === 'student') ? $user : null;
+    }
+
+    if (is_real_user_email($loginLower)) {
+        return find_user_by_email($loginLower);
+    }
+
+    // Логин студента без домена (как показывают в карточке): smirnov.danil
+    if ($loginLower !== '' && preg_match('/^[a-z0-9][a-z0-9._-]*$/i', $loginLower)) {
+        $user = find_user_by_email($loginLower . '@student.local');
+
+        return ($user !== null && ($user['role'] ?? '') === 'student') ? $user : null;
+    }
+
+    return null;
+}
+
+function authenticate_user(string $login, string $password, string $loginType = 'phone'): array
+{
+    $login = trim($login);
+    $loginType = $loginType === 'email' ? 'email' : 'phone';
+    $authError = $loginType === 'email'
+        ? 'Неверный email или пароль.'
+        : 'Неверный телефон или пароль.';
+
+    $user = resolve_login_user($login, $loginType);
+
     if ($user === null) {
-        return [
-            'success' => false,
-            'error' => $loginType === 'email'
-                ? 'Неверный email или пароль.'
-                : 'Неверный телефон или пароль.',
-        ];
+        return ['success' => false, 'error' => $authError];
     }
 
     if (!(int) $user['is_active']) {
@@ -696,7 +718,7 @@ function authenticate_user(string $login, string $password, string $loginType = 
     }
 
     if (!password_verify($password, $user['password_hash'])) {
-        return ['success' => false, 'error' => 'Неверный телефон или пароль.'];
+        return ['success' => false, 'error' => $authError];
     }
 
     if (password_needs_rehash($user['password_hash'], PASSWORD_DEFAULT)) {

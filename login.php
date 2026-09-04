@@ -77,7 +77,7 @@ require __DIR__ . '/includes/header.php';
                     data-login-type
                     <?= $loginType === 'email' ? 'checked' : '' ?>
                 >
-                <span>E-mail</span>
+                <span>E-mail / логин</span>
             </label>
         </div>
 
@@ -98,18 +98,18 @@ require __DIR__ . '/includes/header.php';
         </div>
 
         <div class="form__group" data-login-email-group<?= $loginType === 'phone' ? ' hidden' : '' ?>>
-            <label for="email">E-mail</label>
+            <label for="email">E-mail или логин студента</label>
             <input
-                type="email"
+                type="text"
                 id="email"
                 name="email"
                 data-login-email
-                autocomplete="email"
+                autocomplete="username"
                 value="<?= e($loginEmail) ?>"
-                placeholder="name@example.com"
+                placeholder="name@example.com или smirnov.danil"
                 <?= $loginType === 'email' ? 'required' : '' ?>
             >
-            <p class="text-muted form-hint">Используйте email, указанный в личном кабинете.</p>
+            <p class="text-muted form-hint">Сотрудники — email; студенты — логин из карточки (без @student.local).</p>
         </div>
 
         <div class="form__group">
