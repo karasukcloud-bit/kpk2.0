@@ -8,7 +8,10 @@
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.svg" type="image/svg+xml">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.png" type="image/png" sizes="32x32">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon-16.png" type="image/png" sizes="16x16">
+    <link rel="shortcut icon" href="<?= e($basePath) ?>assets/img/favicon.ico">
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
+    <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
+    <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
     <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css">
 </head>
 <body>
@@ -19,13 +22,15 @@
                 <span class="header__logo">
                     <img
                         class="header__logo-img"
-                        src="<?= e($basePath) ?>assets/img/logo-icon.svg"
-                        alt="СПО-ПРОГРЕСС"
+                        src="<?= e($basePath) ?>assets/img/logo-icon.png"
+                        alt=""
                         width="56"
                         height="56"
                     >
                 </span>
-                <span class="header__title">СПО-ПРОГРЕСС</span>
+                <span class="header__title" aria-label="СПО-ПРОГРЕСС">
+                    <span class="header__title-spo">СПО-</span><span class="header__title-progress">ПРОГРЕСС</span>
+                </span>
             </a>
             <?php if (is_logged_in()): ?>
             <?php

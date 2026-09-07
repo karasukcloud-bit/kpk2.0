@@ -42,8 +42,19 @@ require __DIR__ . '/includes/header.php';
 
 <div class="auth-card">
     <div class="auth-card__header">
+        <div class="auth-card__brand" aria-label="СПО-ПРОГРЕСС">
+            <img
+                class="auth-card__brand-logo"
+                src="<?= e($basePath ?? '') ?>assets/img/logo-icon.png"
+                alt=""
+                width="48"
+                height="48"
+            >
+            <span class="auth-card__brand-title">
+                <span class="auth-card__brand-spo">СПО-</span><span class="auth-card__brand-progress">ПРОГРЕСС</span>
+            </span>
+        </div>
         <h1>Вход в систему</h1>
-        <p>СПО-ПРОГРЕСС</p>
         <p>ГАПОУ НСО "Карасукский педагогический колледж"</p>
     </div>
 
