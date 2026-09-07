@@ -76,6 +76,7 @@ require __DIR__ . '/../includes/header.php';
                                     <th>ФИО</th>
                                     <th>Телефон</th>
                                     <th>Дата рождения</th>
+                                    <th>Данные</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -86,12 +87,17 @@ require __DIR__ . '/../includes/header.php';
                                     <td><?= e($student['full_name']) ?></td>
                                     <td><?= e($student['phone'] ?: '—') ?></td>
                                     <td><?= e(format_student_birth_date($student['birth_date'] ?? null)) ?></td>
+                                    <td><?= student_profile_completeness_badge($student) ?></td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
-                    <p class="text-muted table-hint">Нажмите на строку, чтобы открыть карточку студента.</p>
+                    <p class="text-muted table-hint">
+                        Нажмите на строку, чтобы открыть карточку студента.
+                        «Заполнено» — указаны все необходимые данные с учётом состава семьи;
+                        флаги «иногородний», «малообеспеченная семья» и подобные не обязательны.
+                    </p>
                 <?php endif; ?>
             <?php endif; ?>
         </section>

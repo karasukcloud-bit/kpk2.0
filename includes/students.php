@@ -408,6 +408,75 @@ function student_parent_field_label(string $parent, string $field): string
     return $labels[$field] ?? '';
 }
 
+function student_profile_field_filled($value): bool
+{
+    return trim((string) $value) !== '';
+}
+
+function student_profile_parent_complete(array $student, string $parent): bool
+{
+    $prefix = $parent === 'mother' ? 'mother_' : 'father_';
+
+    foreach (['name', 'phone', 'workplace', 'education'] as $field) {
+        if (!student_profile_field_filled($student[$prefix . $field] ?? '')) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+/**
+ * Все ли логически обязательные данные студента заполнены.
+ * Флаги «иногородний», «малообеспеченная семья», «без попечительства» не обязательны.
+ * Данные родителя не требуются, если по составу семьи этот родитель отсутствует.
+ */
+function is_student_profile_complete(array $student): bool
+{
+    if (!student_profile_field_filled($student['full_name'] ?? '')) {
+        return false;
+    }
+
+    foreach (['phone', 'snils', 'birth_date', 'gender', 'family_type', 'residence_type', 'address_actual'] as $key) {
+        if (!student_profile_field_filled($student[$key] ?? '')) {
+            return false;
+        }
+    }
+
+    $hasStructuredAddress = student_profile_field_filled($student['address_region'] ?? '')
+        && student_profile_field_filled($student['address_locality'] ?? '')
+        && student_profile_field_filled($student['address_street'] ?? '')
+        && student_profile_field_filled($student['address_house'] ?? '');
+    $hasLegacyAddress = student_profile_field_filled($student['address_registered'] ?? '');
+    if (!$hasStructuredAddress && !$hasLegacyAddress) {
+        return false;
+    }
+
+    $familyType = normalize_student_family_type($student['family_type'] ?? '');
+    if ($familyType === null) {
+        return false;
+    }
+
+    if ($familyType !== 'no_mother' && !student_profile_parent_complete($student, 'mother')) {
+        return false;
+    }
+
+    if ($familyType !== 'no_father' && !student_profile_parent_complete($student, 'father')) {
+        return false;
+    }
+
+    return true;
+}
+
+function student_profile_completeness_badge(array $student): string
+{
+    if (is_student_profile_complete($student)) {
+        return '<span class="badge badge--student-complete" title="Заполнены все необходимые данные">Заполнено</span>';
+    }
+
+    return '<span class="badge badge--student-incomplete" title="Заполнены не все необходимые данные">Не заполнено</span>';
+}
+
 function normalize_student_family_type($value): ?string
 {
     $value = trim((string) $value);
@@ -603,7 +672,7 @@ function student_payload_from_post(array $post): array
         'first_name'         => $firstName,
         'middle_name'        => $middleName,
         'full_name'          => compose_person_full_name($lastName, $firstName, $middleName),
-        'phone'              => trim((string) ($post['phone'] ?? '')),
+        'phone'              => format_login_phone(trim((string) ($post['phone'] ?? ''))),
         'snils'              => $snilsRaw,
         'birth_date'         => $birthRaw,
         'gender'             => trim((string) ($post['gender'] ?? '')),

@@ -2647,6 +2647,20 @@ body.modal-open {
     color: #991b1b;
 }
 
+.badge--student-complete {
+    background: #dcfce7;
+    color: #166534;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.badge--student-incomplete {
+    background: #ffedd5;
+    color: #9a3412;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
 .gradebook-status-count {
     margin-left: 0.35rem;
     font-size: 0.8rem;

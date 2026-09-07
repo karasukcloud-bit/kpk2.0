@@ -19,6 +19,7 @@ $semester1Report = build_educator_attendance_report($year, null, '1');
 $semester2Report = build_educator_attendance_report($year, null, '2');
 $yearReport = build_educator_attendance_report($year);
 $chartData = build_attendance_year_chart_data($year);
+$perStudentChartData = build_attendance_year_per_student_chart_data($year);
 $compareCharts = build_attendance_three_years_comparison_set($year);
 $compareYearsLabel = implode(', ', array_column($compareCharts['total']['series'], 'year'));
 $reasonAnalysis = build_attendance_reason_analysis($year, $yearReport);
@@ -86,6 +87,14 @@ require __DIR__ . '/../includes/header.php';
     </section>
 
     <section class="panel">
+        <h2>Динамика пропусков на студента за учебный год</h2>
+        <p class="text-muted">Среднее число пропусков на одного студента по всем группам по месяцам.</p>
+        <div class="educator-attendance-chart-wrap">
+            <canvas id="educator-attendance-per-student-chart" aria-label="График пропусков на студента за учебный год"></canvas>
+        </div>
+    </section>
+
+    <section class="panel">
         <h2>Сравнение пропусков на студента за 3 учебных года</h2>
         <p class="text-muted">Среднее по всем группам по месяцам: <?= e($compareYearsLabel) ?>.</p>
         <h3 class="subsection-title">Всего на студента</h3>
@@ -108,59 +117,97 @@ require __DIR__ . '/../includes/header.php';
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
 (() => {
-    const chartNode = document.getElementById('educator-attendance-chart');
-    if (!chartNode || typeof Chart === 'undefined') {
+    if (typeof Chart === 'undefined') {
         return;
     }
 
-    const chartData = <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>;
-    new Chart(chartNode, {
-        type: 'line',
-        data: {
-            labels: chartData.map((item) => item.label),
-            datasets: [
-                {
-                    label: 'Всего пропусков',
-                    data: chartData.map((item) => item.total),
-                    borderColor: '#1565c0',
-                    backgroundColor: 'rgba(21, 101, 192, 0.12)',
-                    tension: 0.25,
-                    fill: true,
-                },
-                {
-                    label: 'Уважительные',
-                    data: chartData.map((item) => item.excused),
-                    borderColor: '#2e7d32',
-                    backgroundColor: 'transparent',
-                    tension: 0.25,
-                },
-                {
-                    label: 'Неуважительные',
-                    data: chartData.map((item) => item.unexcused),
-                    borderColor: '#c62828',
-                    backgroundColor: 'transparent',
-                    tension: 0.25,
-                },
-            ],
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                legend: {
-                    position: 'bottom',
-                },
+    const renderYearDynamicsChart = (canvasId, chartData, options = {}) => {
+        const chartNode = document.getElementById(canvasId);
+        if (!chartNode || !chartData) {
+            return;
+        }
+
+        const valueKeys = options.valueKeys || {
+            total: 'total',
+            excused: 'excused',
+            unexcused: 'unexcused',
+        };
+        const labels = options.labels || {
+            total: 'Всего пропусков',
+            excused: 'Уважительные',
+            unexcused: 'Неуважительные',
+        };
+
+        new Chart(chartNode, {
+            type: 'line',
+            data: {
+                labels: chartData.map((item) => item.label),
+                datasets: [
+                    {
+                        label: labels.total,
+                        data: chartData.map((item) => item[valueKeys.total]),
+                        borderColor: '#1565c0',
+                        backgroundColor: 'rgba(21, 101, 192, 0.12)',
+                        tension: 0.25,
+                        fill: true,
+                    },
+                    {
+                        label: labels.excused,
+                        data: chartData.map((item) => item[valueKeys.excused]),
+                        borderColor: '#2e7d32',
+                        backgroundColor: 'transparent',
+                        tension: 0.25,
+                    },
+                    {
+                        label: labels.unexcused,
+                        data: chartData.map((item) => item[valueKeys.unexcused]),
+                        borderColor: '#c62828',
+                        backgroundColor: 'transparent',
+                        tension: 0.25,
+                    },
+                ],
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        precision: 0,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: {
+                    legend: {
+                        position: 'bottom',
+                    },
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            precision: options.precision ?? 0,
+                        },
                     },
                 },
             },
-        },
-    });
+        });
+    };
+
+    renderYearDynamicsChart(
+        'educator-attendance-chart',
+        <?= json_encode($chartData, JSON_UNESCAPED_UNICODE) ?>
+    );
+    renderYearDynamicsChart(
+        'educator-attendance-per-student-chart',
+        <?= json_encode($perStudentChartData, JSON_UNESCAPED_UNICODE) ?>,
+        {
+            valueKeys: {
+                total: 'per_student_total',
+                excused: 'per_student_excused',
+                unexcused: 'per_student_unexcused',
+            },
+            labels: {
+                total: 'Всего на студента',
+                excused: 'Уважительные на студента',
+                unexcused: 'Неуважительные на студента',
+            },
+            precision: 1,
+        }
+    );
 })();
 
 (() => {

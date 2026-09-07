@@ -58,10 +58,18 @@ if ($nameParts['last_name'] === '' && $nameParts['first_name'] === '') {
 
 <div class="form__group">
     <label for="phone">Телефон студента</label>
-    <input type="text" id="phone" name="phone"
-           class="form-input--phone"
-           value="<?= e($data['phone'] ?? '') ?>"
-           placeholder="+7 (___) ___-__-__">
+    <input
+        type="tel"
+        id="phone"
+        name="phone"
+        class="form-input--phone"
+        data-phone-login
+        inputmode="tel"
+        autocomplete="tel"
+        maxlength="12"
+        value="<?= e(format_login_phone((string) ($data['phone'] ?? ''))) ?>"
+        placeholder="+79001234567"
+    >
 </div>
 
 <div class="form__group">

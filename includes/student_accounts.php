@@ -8,7 +8,14 @@ require_once __DIR__ . '/students.php';
 
 function curator_show_student_auth_data(): bool
 {
-    return is_admin();
+    static $enabled = null;
+
+    if ($enabled === null) {
+        $config = require __DIR__ . '/../config/app.php';
+        $enabled = !empty($config['show_student_auth_data']);
+    }
+
+    return $enabled;
 }
 
 function transliterate_to_login(string $text): string
