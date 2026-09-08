@@ -41,9 +41,15 @@ require __DIR__ . '/../includes/header.php';
                 ><?= e($option['label']) ?><?= !empty($option['is_today']) ? ' · сегодня' : '' ?></a>
                 <?php endforeach; ?>
             </nav>
-            <button type="button" class="btn btn--secondary" id="educator-daily-attendance-print-btn">
-                Печать
-            </button>
+            <div class="eda-toolbar__actions">
+                <button type="button" class="btn btn--secondary" id="educator-daily-attendance-print-btn">
+                    Печать
+                </button>
+                <a
+                    href="daily_attendance_pdf.php?date=<?= e($selectedDate) ?>"
+                    class="btn btn--primary"
+                >Экспорт в PDF</a>
+            </div>
         </div>
 
         <div class="educator-daily-attendance-print-area">
