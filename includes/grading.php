@@ -141,6 +141,66 @@ function format_grading_number(float $value, int $decimals = 1): string
     return $formatted === '' ? '0' : $formatted;
 }
 
+function journal_lessons_without_attestation(array $lessons): array
+{
+    return array_values(array_filter(
+        $lessons,
+        static fn (array $lesson): bool => (string) ($lesson['grade_type'] ?? 'current') !== 'attestation'
+    ));
+}
+
+/**
+ * Оценки студента за колонки «Промежуточная аттестация» (2–5).
+ * @return list<float>
+ */
+function collect_attestation_marks(array $lessons, array $studentGrades): array
+{
+    $marks = [];
+
+    foreach ($lessons as $lesson) {
+        if ((string) ($lesson['grade_type'] ?? '') !== 'attestation') {
+            continue;
+        }
+
+        $lessonId = (int) $lesson['id'];
+        $mark = (string) (($studentGrades[$lessonId] ?? [])['mark'] ?? '');
+        if (!in_array($mark, ['2', '3', '4', '5'], true)) {
+            continue;
+        }
+
+        $marks[] = (float) $mark;
+    }
+
+    return $marks;
+}
+
+/**
+ * Итоговая оценка с учётом промежуточной аттестации.
+ * Без оценок п/а — базовая. При 2 за п/а — итоговая 2.
+ * Иначе среднее арифметическое п/а и базовой итоговой (с округлением до целого: 4.5 → 5).
+ */
+function apply_attestation_to_final_grade(?float $baseGrade, array $attestationMarks): ?float
+{
+    if ($attestationMarks === []) {
+        return $baseGrade;
+    }
+
+    foreach ($attestationMarks as $mark) {
+        if ((int) $mark === 2) {
+            return 2.0;
+        }
+    }
+
+    $attestationAvg = array_sum($attestationMarks) / count($attestationMarks);
+    if ($baseGrade === null) {
+        return (float) (int) round($attestationAvg, 0, PHP_ROUND_HALF_UP);
+    }
+
+    $average = ($baseGrade + $attestationAvg) / 2;
+
+    return (float) (int) round($average, 0, PHP_ROUND_HALF_UP);
+}
+
 function calculate_traditional_total(array $lessons, array $studentGrades): array
 {
     $values = [];
@@ -269,15 +329,31 @@ function build_journal_totals(array $students, array $lessons, array $grades, ?a
 {
     $config = $config ?? get_grading_config();
     $totals = [];
+    $baseLessons = journal_lessons_without_attestation($lessons);
 
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
         $studentGrades = $grades[$studentId] ?? [];
+        $attestationMarks = collect_attestation_marks($lessons, $studentGrades);
 
         if ($config['system'] === 'brs') {
-            $result = calculate_brs_total($lessons, $studentGrades, $config['brs']);
+            $result = calculate_brs_total($baseLessons, $studentGrades, $config['brs']);
+            $baseGrade = $result['grade'] !== null ? (float) $result['grade'] : null;
+            $finalGrade = apply_attestation_to_final_grade($baseGrade, $attestationMarks);
+            $result['grade'] = $finalGrade;
+            if ($finalGrade !== null && $result['points'] !== null) {
+                $result['display'] = format_grading_number((float) $result['points'], 1)
+                    . ' → ' . format_grading_number($finalGrade, 1);
+            } elseif ($finalGrade !== null) {
+                $result['display'] = format_grading_number($finalGrade, 1);
+            }
         } else {
-            $result = calculate_traditional_total($lessons, $studentGrades);
+            $result = calculate_traditional_total($baseLessons, $studentGrades);
+            $baseGrade = $result['average'] !== null ? (float) $result['average'] : null;
+            $finalGrade = apply_attestation_to_final_grade($baseGrade, $attestationMarks);
+            $result['average'] = $finalGrade;
+            $result['grade'] = $finalGrade;
+            $result['display'] = $finalGrade !== null ? format_grading_number($finalGrade, 1) : '';
         }
 
         $totals[$studentId] = [
@@ -296,17 +372,22 @@ function build_journal_totals(array $students, array $lessons, array $grades, ?a
 function render_journal_total_html(string $system, array $result): string
 {
     if ($system === 'brs') {
-        if ($result['grade'] === null || $result['points'] === null) {
+        if ($result['grade'] === null) {
             return '';
         }
 
-        $grade = (int) $result['grade'];
-        $points = htmlspecialchars(format_grading_number((float) $result['points'], 1), ENT_QUOTES, 'UTF-8');
+        $gradeValue = (float) $result['grade'];
+        $gradeClass = max(2, min(5, (int) round($gradeValue)));
+        $gradeLabel = htmlspecialchars(format_grading_number($gradeValue, 1), ENT_QUOTES, 'UTF-8');
+        $html = '<div class="journal-total">'
+            . '<span class="journal-total__grade journal-total__grade--' . $gradeClass . '">' . $gradeLabel . '</span>';
 
-        return '<span class="journal-total">'
-            . '<span class="journal-total__grade journal-total__grade--' . $grade . '">' . $grade . '</span>'
-            . '<span class="journal-total__points">' . $points . '</span>'
-            . '</span>';
+        if ($result['points'] !== null) {
+            $points = htmlspecialchars(format_grading_number((float) $result['points'], 1), ENT_QUOTES, 'UTF-8');
+            $html .= '<span class="journal-total__points">' . $points . '</span>';
+        }
+
+        return $html . '</div>';
     }
 
     if ($result['average'] === null) {
@@ -317,7 +398,7 @@ function render_journal_total_html(string $system, array $result): string
     $gradeClass = max(2, min(5, (int) round($average)));
     $label = htmlspecialchars(format_grading_number($average, 1), ENT_QUOTES, 'UTF-8');
 
-    return '<span class="journal-total">'
+    return '<div class="journal-total">'
         . '<span class="journal-total__grade journal-total__grade--' . $gradeClass . '">' . $label . '</span>'
-        . '</span>';
+        . '</div>';
 }

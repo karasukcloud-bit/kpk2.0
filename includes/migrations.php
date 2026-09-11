@@ -1290,7 +1290,7 @@ function ensure_ktp_schema(PDO $pdo): void
         $pdo->exec(
             'ALTER TABLE journal_lessons
              ADD ktp_topic_id INT UNSIGNED NULL DEFAULT NULL AFTER lesson_date,
-             ADD grade_type ENUM(\'current\', \'control\') NOT NULL DEFAULT \'current\' AFTER ktp_topic_id'
+             ADD grade_type ENUM(\'current\', \'control\', \'attestation\') NOT NULL DEFAULT \'current\' AFTER ktp_topic_id'
         );
         $pdo->exec(
             'ALTER TABLE journal_lessons
@@ -1298,6 +1298,17 @@ function ensure_ktp_schema(PDO $pdo): void
              FOREIGN KEY (ktp_topic_id) REFERENCES ktp_topics(id)
              ON DELETE SET NULL'
         );
+    }
+
+    $gradeTypeCol = $pdo->query("SHOW COLUMNS FROM journal_lessons LIKE 'grade_type'")->fetch();
+    if ($gradeTypeCol) {
+        $typeDef = (string) ($gradeTypeCol['Type'] ?? '');
+        if (stripos($typeDef, 'attestation') === false) {
+            $pdo->exec(
+                "ALTER TABLE journal_lessons
+                 MODIFY grade_type ENUM('current', 'control', 'attestation') NOT NULL DEFAULT 'current'"
+            );
+        }
     }
 
     $uniqueKey = $pdo->query("SHOW INDEX FROM journal_lessons WHERE Key_name = 'uq_journal_item_date'")->fetch();

@@ -201,6 +201,9 @@ function journal_grade_type_label(string $type): string
     if ($type === 'control') {
         return 'Контрольная';
     }
+    if ($type === 'attestation') {
+        return 'Промежуточная аттестация';
+    }
 
     return 'Текущая';
 }
@@ -210,13 +213,28 @@ function journal_grade_type_short(string $type): string
     if ($type === 'control') {
         return 'к/р';
     }
+    if ($type === 'attestation') {
+        return 'п/а';
+    }
 
     return 'тек';
 }
 
 function normalize_journal_grade_type(string $type): string
 {
-    return $type === 'control' ? 'control' : 'current';
+    if ($type === 'control') {
+        return 'control';
+    }
+    if ($type === 'attestation') {
+        return 'attestation';
+    }
+
+    return 'current';
+}
+
+function is_journal_weighted_control_type(string $type): bool
+{
+    return $type === 'control' || $type === 'attestation';
 }
 
 function get_journal_grades(int $curriculumItemId): array

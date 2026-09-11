@@ -178,16 +178,18 @@ function resolve_journal_final_grade_for_gradebook(array $total): ?int
             return null;
         }
 
-        $grade = (int) $total['grade'];
+        $grade = (int) round((float) $total['grade']);
 
         return in_array($grade, GRADE_VALUES, true) ? $grade : null;
     }
 
-    if ($total['average'] === null) {
+    if ($total['average'] === null && ($total['grade'] === null || $total['grade'] === '')) {
         return null;
     }
 
-    return max(2, min(5, (int) round((float) $total['average'])));
+    $value = $total['average'] ?? $total['grade'];
+
+    return max(2, min(5, (int) round((float) $value)));
 }
 
 /**

@@ -130,7 +130,16 @@ require __DIR__ . '/../includes/header.php';
                                     </div>
                                 </th>
                                 <?php endforeach; ?>
-                                <th class="journal-table__total-col"><?= $isBrs ? 'Баллы' : 'Итого' ?></th>
+                                <th class="journal-table__total-col">
+                                    <?php if ($isBrs): ?>
+                                    <span class="journal-total-head">
+                                        <span class="journal-total-head__main">Оценка</span>
+                                        <span class="journal-total-head__sub">баллы</span>
+                                    </span>
+                                    <?php else: ?>
+                                    Итого
+                                    <?php endif; ?>
+                                </th>
                             </tr>
                         </thead>
                         <tbody>
@@ -145,7 +154,7 @@ require __DIR__ . '/../includes/header.php';
                                 $entry = $ownGrades[$lessonId] ?? empty_journal_entry();
                                 $mark = (string) ($entry['mark'] ?? '');
                                 ?>
-                                <td class="journal-table__cell<?= $index % 2 === 1 ? ' journal-table__cell--alt' : '' ?><?= $gradeType === 'control' ? ' journal-table__cell--control' : '' ?>">
+                                <td class="journal-table__cell<?= $index % 2 === 1 ? ' journal-table__cell--alt' : '' ?><?= is_journal_weighted_control_type($gradeType) ? ' journal-table__cell--' . e($gradeType) : '' ?>">
                                     <?= e(render_journal_mark_label($mark)) ?>
                                 </td>
                                 <?php endforeach; ?>

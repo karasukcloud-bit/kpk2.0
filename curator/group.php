@@ -32,7 +32,12 @@ require __DIR__ . '/../includes/header.php';
                 <p class="text-muted">Список студентов закреплённой группы</p>
             </div>
             <?php if ($group): ?>
-            <a href="student_create.php?group_id=<?= $groupId ?>" class="btn btn--primary">+ Добавить студента</a>
+            <div class="panel__header-actions">
+                <?php if (!empty($students)): ?>
+                <a href="group_export_word.php?group_id=<?= $groupId ?>" class="btn btn--ghost">Экспорт в Word</a>
+                <?php endif; ?>
+                <a href="student_create.php?group_id=<?= $groupId ?>" class="btn btn--primary">+ Добавить студента</a>
+            </div>
             <?php endif; ?>
         </div>
 

@@ -1128,6 +1128,13 @@ body {
     margin-bottom: 1.25rem;
 }
 
+.panel__header-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
 .panel__header h1 {
     margin: 0 0 0.5rem;
 }
@@ -1692,6 +1699,11 @@ body {
     scrollbar-gutter: stable;
 }
 
+.journal-table__lesson-col--focus {
+    box-shadow: inset 0 0 0 2px #2563eb;
+    background: #eff6ff;
+}
+
 .journal-table-wrap.is-dragging {
     cursor: grabbing;
     user-select: none;
@@ -1809,22 +1821,30 @@ body {
 }
 
 .journal-table__lesson-col--control,
-.journal-table__cell--control {
+.journal-table__cell--control,
+.journal-table__lesson-col--attestation,
+.journal-table__cell--attestation {
     background: #fff7ed;
 }
 
 .journal-table__lesson-col--control.journal-table__lesson-col--alt,
-.journal-table__cell--control.journal-table__cell--alt {
+.journal-table__cell--control.journal-table__cell--alt,
+.journal-table__lesson-col--attestation.journal-table__lesson-col--alt,
+.journal-table__cell--attestation.journal-table__cell--alt {
     background: #ffedd5;
 }
 
 .journal-table .journal-table__cell--control.is-col-hover,
 .journal-table .journal-table__lesson-col--control.is-col-hover,
-.journal-table tbody tr:hover > .journal-table__cell--control {
+.journal-table tbody tr:hover > .journal-table__cell--control,
+.journal-table .journal-table__cell--attestation.is-col-hover,
+.journal-table .journal-table__lesson-col--attestation.is-col-hover,
+.journal-table tbody tr:hover > .journal-table__cell--attestation {
     background: #ffedd5 !important;
 }
 
-.journal-table tbody tr:hover > .journal-table__cell--control.is-col-hover {
+.journal-table tbody tr:hover > .journal-table__cell--control.is-col-hover,
+.journal-table tbody tr:hover > .journal-table__cell--attestation.is-col-hover {
     background: #fed7aa !important;
 }
 
@@ -1868,6 +1888,11 @@ body {
 
 .journal-lesson-type--control {
     background: #c2410c;
+    color: #fff;
+}
+
+.journal-lesson-type--attestation {
+    background: #7c3aed;
     color: #fff;
 }
 
@@ -2065,6 +2090,9 @@ body {
     background: linear-gradient(180deg, #ecfeff 0%, #cffafe 100%);
     box-shadow: -6px 0 12px -8px rgba(15, 23, 42, 0.28);
     vertical-align: middle;
+    white-space: normal;
+    padding-left: 0.4rem;
+    padding-right: 0.4rem;
 }
 
 .journal-table thead .journal-table__total-col {
@@ -2076,18 +2104,52 @@ body {
     color: #0e7490;
 }
 
-.journal-total {
+.journal-total-head {
     display: inline-flex;
     flex-direction: column;
     align-items: center;
-    justify-content: center;
     gap: 0.1rem;
     line-height: 1.15;
+    letter-spacing: normal;
+    text-transform: none;
+}
+
+.journal-total-head__main {
+    font-weight: 700;
+    font-size: 0.78rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #0e7490;
+}
+
+.journal-total-head__sub {
+    font-weight: 400;
+    font-size: 0.68rem;
+    color: #64748b;
+    letter-spacing: 0;
+    text-transform: none;
+}
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    font-weight: 800;
+    color: #0e7490;
+}
+
+.journal-total {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.15rem;
+    line-height: 1.1;
+    width: 100%;
 }
 
 .journal-total__grade {
+    display: block;
     font-weight: 800;
     font-size: 1.15rem;
+    line-height: 1.1;
 }
 
 .journal-total__grade--2 {
@@ -2107,8 +2169,10 @@ body {
 }
 
 .journal-total__points {
+    display: block;
     font-weight: 400;
-    font-size: 0.75rem;
+    font-size: 0.72rem;
+    line-height: 1.1;
     color: #64748b;
 }
 

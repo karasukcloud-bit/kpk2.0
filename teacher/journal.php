@@ -117,11 +117,15 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null) {
                 $successMessage = 'Изменения сохранены.';
             }
             flash_set('success', $successMessage);
-            header('Location: ' . $journalUrl([
+            $redirectParams = [
                 'group_id' => $groupId,
                 'item_id' => $itemId,
                 'tab' => $activeTab,
-            ]));
+            ];
+            if ($action === 'add_lesson' && !empty($result['lesson_id'])) {
+                $redirectParams['focus_lesson'] = (int) $result['lesson_id'];
+            }
+            header('Location: ' . $journalUrl($redirectParams));
             exit;
         }
 
@@ -141,6 +145,7 @@ $coveredSummary = $assignment ? build_covered_material_summary($lessons) : null;
 $gradingConfig = get_grading_config();
 $isBrs = $gradingConfig['system'] === 'brs';
 $success = flash_get('success');
+$focusLessonId = isset($_GET['focus_lesson']) ? (int) $_GET['focus_lesson'] : 0;
 
 $pageTitle = 'Электронный журнал — Панель преподавателя';
 $showHeader = true;
@@ -352,6 +357,7 @@ require __DIR__ . '/../includes/header.php';
                         data-grading-system="<?= e($gradingConfig['system']) ?>"
                         data-save-url="grade_save.php"
                         data-csrf="<?= e(csrf_token()) ?>"
+                        <?= $focusLessonId > 0 ? ' data-focus-lesson="' . (int) $focusLessonId . '"' : '' ?>
                     >
                         <div class="table-wrap journal-table-wrap">
                             <table class="table journal-table">
@@ -360,7 +366,10 @@ require __DIR__ . '/../includes/header.php';
                                         <th class="journal-table__student-col">Студенты</th>
                                         <?php foreach ($lessons as $index => $lesson): ?>
                                         <?php $gradeType = (string) ($lesson['grade_type'] ?? 'current'); ?>
-                                        <th class="journal-table__lesson-col journal-table__lesson-col--<?= e($gradeType) ?><?= $index % 2 === 1 ? ' journal-table__lesson-col--alt' : '' ?>">
+                                        <th
+                                            class="journal-table__lesson-col journal-table__lesson-col--<?= e($gradeType) ?><?= $index % 2 === 1 ? ' journal-table__lesson-col--alt' : '' ?>"
+                                            data-journal-lesson-col="<?= (int) $lesson['id'] ?>"
+                                        >
                                             <div class="journal-lesson-head">
                                                 <div class="journal-lesson-meta">
                                                     <span class="journal-lesson-date"><?= e(format_journal_date($lesson['lesson_date'])) ?></span>
@@ -401,7 +410,16 @@ require __DIR__ . '/../includes/header.php';
                                             </div>
                                         </th>
                                         <?php endforeach; ?>
-                                        <th class="journal-table__total-col"><?= $isBrs ? 'Баллы' : 'Итого' ?></th>
+                                        <th class="journal-table__total-col">
+                                            <?php if ($isBrs): ?>
+                                            <span class="journal-total-head">
+                                                <span class="journal-total-head__main">Оценка</span>
+                                                <span class="journal-total-head__sub">баллы</span>
+                                            </span>
+                                            <?php else: ?>
+                                            Итого
+                                            <?php endif; ?>
+                                        </th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -425,7 +443,7 @@ require __DIR__ . '/../includes/header.php';
                                         $hasLate = $canLate && !empty($entry['late']);
                                         ?>
                                         <td
-                                            class="journal-table__cell<?= $index % 2 === 1 ? ' journal-table__cell--alt' : '' ?><?= $gradeType === 'control' ? ' journal-table__cell--control' : '' ?>"
+                                            class="journal-table__cell<?= $index % 2 === 1 ? ' journal-table__cell--alt' : '' ?><?= is_journal_weighted_control_type($gradeType) ? ' journal-table__cell--' . e($gradeType) : '' ?>"
                                             data-journal-cell
                                             data-student-id="<?= $studentId ?>"
                                             data-lesson-id="<?= $lessonId ?>"
@@ -493,10 +511,14 @@ require __DIR__ . '/../includes/header.php';
                         <p class="journal-status text-muted" data-journal-status>
                             <?php if ($isBrs): ?>
                                 БРС: оценки 2–5 или Н. Итого — сумма баллов (макс. 100) и оценка по шкале.
+                                При наличии оценки за промежуточную аттестацию: 2 → итоговая 2;
+                                3–5 → среднее арифметическое этой оценки и итога без п/а.
                                 О — при присутствии; А — при оценке 2–5. Пересчёт сразу после изменения.
                             <?php else: ?>
                                 Традиционная система: оценки 2–5, итог — средний балл.
                                 Пропуски (Н) в среднем не учитываются.
+                                При наличии оценки за промежуточную аттестацию: 2 → итоговая 2;
+                                3–5 → среднее арифметическое этой оценки и итога без п/а.
                             <?php endif; ?>
                         </p>
                     </div>
@@ -625,6 +647,7 @@ require __DIR__ . '/../includes/header.php';
                 <select id="modal_grade_type" name="grade_type" data-lesson-grade-type>
                     <option value="current">Текущая</option>
                     <option value="control">Контрольная</option>
+                    <option value="attestation">Промежуточная аттестация</option>
                 </select>
             </div>
 

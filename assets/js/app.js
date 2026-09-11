@@ -408,6 +408,39 @@ document.addEventListener('DOMContentLoaded', () => {
         const saveUrl = journal.dataset.saveUrl;
         const csrfToken = journal.dataset.csrf;
         const statusNode = journal.querySelector('[data-journal-status]');
+        const focusLessonId = journal.dataset.focusLesson || '';
+        const wrap = journal.querySelector('.journal-table-wrap');
+        const lessonCols = journal.querySelectorAll('[data-journal-lesson-col]');
+        const focusCol = focusLessonId
+            ? journal.querySelector(`[data-journal-lesson-col="${focusLessonId}"]`)
+            : (lessonCols.length > 0 ? lessonCols[lessonCols.length - 1] : null);
+
+        if (focusCol && wrap) {
+            const scrollToLessonCol = () => {
+                const wrapRect = wrap.getBoundingClientRect();
+                const colRect = focusCol.getBoundingClientRect();
+                const targetLeft = wrap.scrollLeft + (colRect.left - wrapRect.left)
+                    - (wrap.clientWidth / 2) + (colRect.width / 2);
+                wrap.scrollTo({
+                    left: Math.max(0, targetLeft),
+                    behavior: focusLessonId ? 'smooth' : 'auto',
+                });
+                if (focusLessonId) {
+                    focusCol.classList.add('journal-table__lesson-col--focus');
+                    window.setTimeout(() => {
+                        focusCol.classList.remove('journal-table__lesson-col--focus');
+                    }, 1800);
+                }
+            };
+
+            requestAnimationFrame(scrollToLessonCol);
+
+            if (focusLessonId && window.history && window.history.replaceState) {
+                const url = new URL(window.location.href);
+                url.searchParams.delete('focus_lesson');
+                window.history.replaceState({}, '', url.pathname + url.search + url.hash);
+            }
+        }
 
         const setStatus = (message, state = '') => {
             if (!statusNode) {
