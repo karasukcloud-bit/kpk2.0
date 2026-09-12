@@ -17,7 +17,6 @@
     --font: 'Segoe UI', system-ui, -apple-system, sans-serif;
 }
 
-test OK
 
 *,
 *::before,
@@ -1153,6 +1152,9 @@ body {
 }
 
 .admin-tabs__item {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
     padding: 0.625rem 1rem;
     text-decoration: none;
     color: var(--color-muted);
@@ -1161,6 +1163,30 @@ body {
     border-bottom: 2px solid transparent;
     margin-bottom: -1px;
     transition: color 0.15s, border-color 0.15s;
+}
+
+.admin-tabs__icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    width: 1.05rem;
+    height: 1.05rem;
+    opacity: 0.72;
+    transition: opacity 0.15s, transform 0.15s;
+}
+
+.admin-tabs__icon svg {
+    width: 100%;
+    height: 100%;
+    display: block;
+}
+
+.admin-tabs__item:hover .admin-tabs__icon,
+.admin-tabs__item--active .admin-tabs__icon {
+    opacity: 1;
+}
+
+.admin-tabs__item--active .admin-tabs__icon {
+    transform: translateY(-0.5px);
 }
 
 .admin-tabs__item:hover {
@@ -2131,11 +2157,6 @@ body {
     letter-spacing: 0;
     text-transform: none;
 }
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    font-weight: 800;
-    color: #0e7490;
-}
 
 .journal-total {
     display: flex;
@@ -3008,6 +3029,7 @@ body.modal-open {
     flex: 0 0 auto;
     text-align: center;
     -moz-appearance: textfield;
+    appearance: textfield;
 }
 
 .ktp-inline-input--num::-webkit-outer-spin-button,
