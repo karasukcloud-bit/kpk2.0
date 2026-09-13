@@ -13,6 +13,12 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'grades' ? ' admin-tabs__item--active' : '' ?>">
         Электронные ведомости
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="manual_brs_gradebook.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
+        Ведомости (ручное БРС)
+    </a>
+    <?php endif; ?>
     <a href="record_books.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'record_books' ? ' admin-tabs__item--active' : '' ?>">
         Зачётные книжки

@@ -42,6 +42,12 @@ require __DIR__ . '/../includes/header.php';
             Период ведомости: учебный год <?= e($year) ?> · <?= e(semester_label($semester)) ?>.
             Оценки подставляются из электронного журнала.
         </p>
+        <?php
+        $periodHint = gradebook_period_mismatch_hint($period);
+        if ($periodHint):
+        ?>
+            <div class="alert alert--error"><?= e($periodHint) ?></div>
+        <?php endif; ?>
 
         <?php if ($groups === []): ?>
             <p class="text-muted">Группы пока не добавлены.</p>

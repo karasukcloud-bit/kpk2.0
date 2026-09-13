@@ -364,21 +364,45 @@ function get_group_curriculum_subjects(int $groupId, string $academicYear, ?stri
         return [];
     }
 
-    $items = get_curriculum_items((int) $plan['id']);
+    require_once __DIR__ . '/organization.php';
+    require_once __DIR__ . '/curriculum_modules.php';
 
-    if ($semester === null) {
-        return enrich_curriculum_items($items, $plan);
+    $course = get_group_course($groupId);
+    $items = get_curriculum_items((int) $plan['id'], 'subject');
+
+    if ($semester !== null) {
+        if (!validate_semester($semester)) {
+            return [];
+        }
+        $items = array_values(array_filter(
+            $items,
+            static function (array $item) use ($semester): bool {
+                return $item['semester'] === $semester || $item['semester'] === 'both';
+            }
+        ));
+
+        foreach (get_group_mdk_for_period($groupId, $course, $semester) as $mdk) {
+            $mdkPlanId = (int) ($mdk['curriculum_plan_id'] ?? 0);
+            if ($mdkPlanId !== (int) $plan['id']) {
+                continue;
+            }
+            $items[] = $mdk;
+        }
+    } else {
+        foreach (get_group_mdk_for_period($groupId, $course, null) as $mdk) {
+            $mdkPlanId = (int) ($mdk['curriculum_plan_id'] ?? 0);
+            if ($mdkPlanId !== (int) $plan['id']) {
+                continue;
+            }
+            $items[] = $mdk;
+        }
     }
 
-    if (!validate_semester($semester)) {
-        return [];
-    }
-
-    $filtered = array_filter($items, static function (array $item) use ($semester): bool {
-        return $item['semester'] === $semester || $item['semester'] === 'both';
+    usort($items, static function (array $a, array $b): int {
+        return strcmp((string) ($a['subject_name'] ?? ''), (string) ($b['subject_name'] ?? ''));
     });
 
-    return enrich_curriculum_items(array_values($filtered), $plan);
+    return enrich_curriculum_items($items, $plan);
 }
 
 function enrich_curriculum_items(array $items, array $plan): array

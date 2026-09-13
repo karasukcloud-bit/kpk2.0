@@ -17,4 +17,10 @@ $currentTeacherTab = $currentTeacherTab ?? 'journal';
        class="admin-tabs__item<?= $currentTeacherTab === 'journal' ? ' admin-tabs__item--active' : '' ?>">
         Электронный журнал
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="<?= e(app_base_path()) ?>teacher/manual_brs.php"
+       class="admin-tabs__item<?= $currentTeacherTab === 'manual_brs' ? ' admin-tabs__item--active' : '' ?>">
+        Ручное БРС
+    </a>
+    <?php endif; ?>
 </nav>

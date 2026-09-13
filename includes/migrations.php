@@ -114,6 +114,14 @@ function run_migrations(PDO $pdo): void
     ensure_ktp_constructor_schema($pdo);
     ensure_specialty_head_schema($pdo);
     ensure_curriculum_modules_schema($pdo);
+
+    $manualBrsBootstrap = __DIR__ . '/../modules/manual_brs/bootstrap.php';
+    if (is_file($manualBrsBootstrap)) {
+        require_once $manualBrsBootstrap;
+        if (function_exists('manual_brs_ensure_schema')) {
+            manual_brs_ensure_schema($pdo);
+        }
+    }
 }
 
 function ensure_specialty_head_schema(PDO $pdo): void

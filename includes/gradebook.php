@@ -51,6 +51,22 @@ function get_active_gradebook_period(): array
     ];
 }
 
+/** Подсказка, если период ведомости отличается от текущего учебного года. */
+function gradebook_period_mismatch_hint(?array $period = null): ?string
+{
+    $period = $period ?? get_active_gradebook_period();
+    $defaultYear = get_default_academic_year();
+    if ($period['academic_year'] === $defaultYear) {
+        return null;
+    }
+
+    return 'Период ведомости: ' . $period['academic_year'] . ' · '
+        . semester_label($period['semester'])
+        . '. Текущий учебный год: ' . $defaultYear
+        . '. Предметы берутся из учебного плана периода ведомости (не из текущего года). '
+        . 'Сменить период можно в разделе «Информация» администратора.';
+}
+
 function normalize_gradebook_semester(string $semester): string
 {
     return in_array($semester, ['1', '2'], true) ? $semester : '1';
@@ -321,10 +337,15 @@ function save_grade_entry(int $studentId, int $curriculumItemId, string $grade):
 function build_gradebook_summary(array $students, array $subjects, array $grades): array
 {
     $totalStudents = count($students);
+    $subjectCount = count($subjects);
+    $expectedGrades = $totalStudents * $subjectCount;
+
     if ($totalStudents === 0 || $subjects === []) {
         return [
             'total_students' => $totalStudents,
             'assessed_students' => 0,
+            'filled_grades' => 0,
+            'expected_grades' => $expectedGrades,
             'absolute_count' => 0,
             'quality_count' => 0,
             'absolute_percent' => 0.0,
@@ -337,6 +358,7 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
     }
 
     $assessedStudents = 0;
+    $filledGrades = 0;
     $absoluteCount = 0;
     $qualityCount = 0;
     $oneTwoCount = 0;
@@ -354,6 +376,7 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
             if (isset($studentGrades[$itemId])) {
                 $grade = (int) $studentGrades[$itemId];
                 $values[] = $grade;
+                $filledGrades++;
                 if ($grade === 2) {
                     $twos++;
                 } elseif ($grade === 3) {
@@ -388,6 +411,8 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
         return [
             'total_students' => $totalStudents,
             'assessed_students' => 0,
+            'filled_grades' => $filledGrades,
+            'expected_grades' => $expectedGrades,
             'absolute_count' => 0,
             'quality_count' => 0,
             'absolute_percent' => 0.0,
@@ -402,6 +427,8 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
     return [
         'total_students' => $totalStudents,
         'assessed_students' => $assessedStudents,
+        'filled_grades' => $filledGrades,
+        'expected_grades' => $expectedGrades,
         'absolute_count' => $absoluteCount,
         'quality_count' => $qualityCount,
         'absolute_percent' => round($absoluteCount / $assessedStudents * 100, 1),

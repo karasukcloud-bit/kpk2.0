@@ -32,6 +32,7 @@ $grades = get_gradebook_grades_from_journal($groupId, $year, $semester);
 $summary = build_gradebook_summary($students, $subjects, $grades);
 $studentLists = build_gradebook_student_lists($students, $subjects, $grades);
 $gradingConfig = get_grading_config();
+$periodHint = gradebook_period_mismatch_hint($period);
 
 $pageTitle = 'Ведомость группы ' . $group['number'] . ' — Панель завуча';
 $showHeader = true;
@@ -57,6 +58,9 @@ require __DIR__ . '/../includes/header.php';
     </section>
 
     <section class="panel">
+        <?php if ($periodHint): ?>
+            <div class="alert alert--error"><?= e($periodHint) ?></div>
+        <?php endif; ?>
         <?php if ($subjects === []): ?>
             <p class="text-muted">
                 Для этого периода нет предметов в учебном плане группы.
@@ -167,8 +171,8 @@ require __DIR__ . '/../includes/header.php';
     <section class="panel panel--info">
         <h2>Сводная информация</h2>
         <dl class="profile-list">
-            <dt>Оценённых студентов</dt>
-            <dd><?= (int) $summary['assessed_students'] ?> из <?= (int) $summary['total_students'] ?></dd>
+            <dt>Выставлено оценок</dt>
+            <dd><?= (int) ($summary['filled_grades'] ?? 0) ?> из <?= (int) ($summary['expected_grades'] ?? 0) ?></dd>
             <dt>Успеваемость абсолютная</dt>
             <dd><?= e((string) $summary['absolute_percent']) ?>%</dd>
             <dt>Успеваемость качественная</dt>

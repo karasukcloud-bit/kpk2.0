@@ -2,67 +2,69 @@
 
 declare(strict_types=1);
 
-require_once __DIR__ . '/../archive.php';
-require_once __DIR__ . '/../organization.php';
-require_once __DIR__ . '/../students.php';
-require_once __DIR__ . '/../curriculum.php';
-require_once __DIR__ . '/../gradebook.php';
-require_once __DIR__ . '/../pdf.php';
+require_once __DIR__ . '/../../../includes/pdf.php';
 
-const ARCHIVE_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 9;
+const MANUAL_BRS_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 9;
 
-function archive_gradebook_pdf_build_document(int $archiveId, int $groupId): ?array
-{
-    $archive = get_archive_period_by_id($archiveId);
-    if ($archive === null || $archive['archive_type'] !== 'gradebook') {
-        return null;
-    }
-
-    $group = get_archive_gradebook_group($archiveId, $groupId);
+function manual_brs_gradebook_pdf_build_document(
+    int $groupId,
+    string $academicYear,
+    string $semester
+): ?array {
+    $group = get_group_by_id($groupId);
     if ($group === null) {
         return null;
     }
 
-    $sheet = get_archive_gradebook_sheet($archiveId, $groupId);
-    if ($sheet['students'] === [] || $sheet['subjects'] === []) {
+    $students = get_students_by_group($groupId);
+    $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
+    if ($students === [] || $subjects === []) {
         return null;
     }
 
-    $studentsForSummary = array_map(
-        static fn (array $student): array => ['id' => (int) $student['student_id']] + $student,
-        $sheet['students']
-    );
-    $summary = build_gradebook_summary($studentsForSummary, $sheet['subjects'], $sheet['grades']);
+    $grades = manual_brs_get_gradebook_grades($groupId, $academicYear, $semester);
+    $summary = build_gradebook_summary($students, $subjects, $grades);
+    $isControlWeek = manual_brs_is_control_week($groupId, $academicYear, $semester, $subjects);
 
     return [
-        'archive' => $archive,
         'org' => get_organization(),
         'group' => $group,
-        'sheet' => $sheet,
+        'academic_year' => $academicYear,
+        'semester' => $semester,
+        'students' => $students,
+        'subjects' => $subjects,
+        'grades' => $grades,
         'summary' => $summary,
+        'is_control_week' => $isControlWeek,
+        'title' => manual_brs_gradebook_title(
+            (string) $group['number'],
+            $semester,
+            $academicYear
+        ),
     ];
 }
 
-function archive_gradebook_pdf_filename(array $document): string
+function manual_brs_gradebook_pdf_filename(array $document): string
 {
-    $group = preg_replace('/[^\p{L}\p{N}\-_]+/u', '_', (string) $document['group']['group_number']) ?: 'group';
-    $year = str_replace('/', '-', (string) $document['archive']['academic_year']);
-    $semester = (string) $document['archive']['semester'];
+    $group = preg_replace('/[^\p{L}\p{N}\-_]+/u', '_', (string) $document['group']['number']) ?: 'group';
+    $year = str_replace('/', '-', (string) $document['academic_year']);
+    $semester = (string) $document['semester'];
+    $suffix = !empty($document['is_control_week']) ? '_control' : '';
 
-    return 'gradebook_' . $group . '_' . $year . '_sem' . $semester . '.pdf';
+    return 'manual_brs_gradebook_' . $group . '_' . $year . '_sem' . $semester . $suffix . '.pdf';
 }
 
-function stream_archive_gradebook_pdf(int $archiveId, int $groupId): void
+function stream_manual_brs_gradebook_pdf(int $groupId, string $academicYear, string $semester): void
 {
-    $document = archive_gradebook_pdf_build_document($archiveId, $groupId);
+    $document = manual_brs_gradebook_pdf_build_document($groupId, $academicYear, $semester);
     if ($document === null) {
         http_response_code(404);
         exit('Ведомость для экспорта не найдена.');
     }
 
-    $html = archive_gradebook_pdf_render_html($document);
+    $html = manual_brs_gradebook_pdf_render_html($document);
     $pdf = render_html_to_pdf($html, 'landscape');
-    $filename = archive_gradebook_pdf_filename($document);
+    $filename = manual_brs_gradebook_pdf_filename($document);
 
     header('Content-Type: application/pdf');
     header('Content-Disposition: attachment; filename="' . $filename . '"');
@@ -73,96 +75,109 @@ function stream_archive_gradebook_pdf(int $archiveId, int $groupId): void
     exit;
 }
 
-function archive_gradebook_pdf_styles(): string
+function manual_brs_gradebook_pdf_styles(): string
 {
     return <<<'CSS'
 @page landscape { size: A4 landscape; margin: 10mm 8mm 12mm; }
 
 body {
     font-family: DejaVu Sans, sans-serif;
-    font-size: 9pt;
+    font-size: 10px;
     color: #111;
-    line-height: 1.35;
 }
 
-.pdf-page { page-break-after: always; page: landscape; }
-.pdf-page:last-child { page-break-after: auto; }
+.pdf-page {
+    page-break-after: always;
+}
+
+.pdf-page:last-child {
+    page-break-after: auto;
+}
 
 .pdf-header-title {
-    font-size: 14pt;
-    font-weight: bold;
-    margin: 0 0 3mm;
+    margin: 0 0 4px;
+    font-size: 14px;
     text-align: center;
 }
+
 .pdf-header-meta {
-    font-size: 9pt;
+    margin: 0 0 3px;
+    text-align: center;
     color: #333;
-    margin: 0 0 1.5mm;
+}
+
+.pdf-header-subtitle {
+    margin: 2px 0 8px;
     text-align: center;
+    font-weight: 700;
+    font-size: 12px;
 }
-.pdf-header-meta--curator {
-    margin-bottom: 5mm;
-}
+
 .pdf-meta {
-    font-size: 8.5pt;
-    color: #444;
-    margin: 0 0 4mm;
-    text-align: center;
+    margin: 0 0 6px;
+    color: #555;
 }
+
 .pdf-stats {
     width: 100%;
-    margin: 0 0 5mm;
-    font-size: 8.5pt;
     border-collapse: collapse;
+    margin: 0 0 10px;
 }
+
 .pdf-stats td {
-    padding: 2mm 3mm;
-    text-align: center;
-    border: 0.5pt solid #333;
-    vertical-align: middle;
+    width: 33.33%;
+    vertical-align: top;
+    padding: 4px 6px;
+    border: 1px solid #ccc;
 }
+
 .pdf-stats__label {
     display: block;
-    font-size: 7.5pt;
     color: #555;
-    margin-bottom: 0.5mm;
+    font-size: 9px;
 }
+
 .pdf-stats__value {
     display: block;
-    font-size: 10pt;
-    font-weight: bold;
+    font-weight: 700;
+    font-size: 12px;
+    margin-top: 2px;
 }
 
 .pdf-table {
     width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
-    font-size: 7.5pt;
 }
+
 .pdf-table th,
 .pdf-table td {
-    border: 0.5pt solid #333;
-    padding: 1.2mm 1mm;
+    border: 1px solid #333;
+    padding: 3px 4px;
     vertical-align: middle;
+}
+
+.pdf-table th {
+    font-size: 8px;
+    font-weight: 700;
+    text-align: center;
     word-wrap: break-word;
 }
-.pdf-table th {
-    background: #f0f0f0;
-    font-weight: bold;
-    text-align: center;
-}
+
 .pdf-table__student {
-    width: 28mm;
+    width: 140px;
     text-align: left;
-    font-size: 7pt;
+    font-size: 9px;
 }
+
 .pdf-table__grade {
     text-align: center;
+    font-weight: 700;
 }
 CSS;
 }
 
-function archive_gradebook_pdf_render_stats(array $summary): string
+function manual_brs_gradebook_pdf_render_stats(array $summary): string
 {
     $filled = (int) ($summary['filled_grades'] ?? 0);
     $expected = (int) ($summary['expected_grades'] ?? 0);
@@ -186,25 +201,23 @@ function archive_gradebook_pdf_render_stats(array $summary): string
     return $html;
 }
 
-function archive_gradebook_pdf_render_html(array $document): string
+function manual_brs_gradebook_pdf_render_html(array $document): string
 {
-    $archive = $document['archive'];
     $group = $document['group'];
-    $sheet = $document['sheet'];
+    $students = $document['students'];
+    $subjects = $document['subjects'];
+    $grades = $document['grades'];
     $summary = $document['summary'];
     $orgName = trim((string) ($document['org']['name'] ?? ''));
-    $groupNumber = e((string) $group['group_number']);
-    $year = e((string) $archive['academic_year']);
-    $semester = e(semester_label((string) $archive['semester']));
+    $groupNumber = e((string) $group['number']);
+    $title = e((string) $document['title']);
     $specialty = trim((string) ($group['specialty_name'] ?? ''));
     $curator = trim((string) ($group['curator_name'] ?? ''));
+    $isControlWeek = !empty($document['is_control_week']);
 
-    $students = $sheet['students'];
-    $subjects = $sheet['subjects'];
-    $grades = $sheet['grades'];
-    $subjectChunks = array_chunk($subjects, ARCHIVE_GRADEBOOK_PDF_SUBJECTS_PER_PAGE);
+    $subjectChunks = array_chunk($subjects, MANUAL_BRS_GRADEBOOK_PDF_SUBJECTS_PER_PAGE);
     $html = '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><style>';
-    $html .= archive_gradebook_pdf_styles();
+    $html .= manual_brs_gradebook_pdf_styles();
     $html .= '</style></head><body>';
 
     foreach ($subjectChunks as $chunkIndex => $subjectChunk) {
@@ -216,19 +229,19 @@ function archive_gradebook_pdf_render_html(array $document): string
             if ($orgName !== '') {
                 $html .= '<p class="pdf-header-meta">' . e($orgName) . '</p>';
             }
-            $html .= '<h1 class="pdf-header-title">Ведомость успеваемости учебной группы № '
-                . $groupNumber . ' за ' . $year . ' учебный год</h1>';
-            $html .= '<p class="pdf-header-meta">' . $semester;
+            $html .= '<h1 class="pdf-header-title">' . $title . '</h1>';
+            if ($isControlWeek) {
+                $html .= '<p class="pdf-header-subtitle">Контрольная неделя</p>';
+            }
             if ($specialty !== '') {
-                $html .= ' · ' . e($specialty);
+                $html .= '<p class="pdf-header-meta">' . e($specialty) . '</p>';
             }
-            $html .= '</p>';
             if ($curator !== '') {
-                $html .= '<p class="pdf-header-meta pdf-header-meta--curator">Куратор: ' . e($curator) . '</p>';
+                $html .= '<p class="pdf-header-meta">Куратор: ' . e($curator) . '</p>';
             }
-            $html .= archive_gradebook_pdf_render_stats($summary);
+            $html .= manual_brs_gradebook_pdf_render_stats($summary);
         } else {
-            $html .= '<p class="pdf-meta">Ведомость успеваемости · группа № ' . $groupNumber
+            $html .= '<p class="pdf-meta">' . $title
                 . ' · стр. ' . $pageNum . ' из ' . $pageTotal . '</p>';
         }
 
@@ -244,7 +257,7 @@ function archive_gradebook_pdf_render_html(array $document): string
         $html .= '</tr></thead><tbody>';
 
         foreach ($students as $student) {
-            $studentId = (int) $student['student_id'];
+            $studentId = (int) $student['id'];
             $html .= '<tr><td class="pdf-table__student">'
                 . e(person_last_first_name((string) $student['full_name'])) . '</td>';
             foreach ($subjectChunk as $subject) {

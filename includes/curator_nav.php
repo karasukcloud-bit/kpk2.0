@@ -39,6 +39,13 @@ $curatorTabIcon = static function (string $name): string {
         <?= $curatorTabIcon('grades') ?>
         Электронная ведомость
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="manual_brs_gradebook.php<?= $groupQuery ?>"
+       class="admin-tabs__item<?= $currentCuratorTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
+        <?= $curatorTabIcon('grades') ?>
+        Ведомость (ручное БРС)
+    </a>
+    <?php endif; ?>
     <a href="report.php<?= $groupQuery ?>"
        class="admin-tabs__item<?= $currentCuratorTab === 'report' ? ' admin-tabs__item--active' : '' ?>">
         <?= $curatorTabIcon('report') ?>
