@@ -2669,6 +2669,236 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    const curriculumModuleModal = document.querySelector('[data-curriculum-module-modal]');
+    if (curriculumModuleModal) {
+        const moduleIdInput = curriculumModuleModal.querySelector('[data-curriculum-module-id]');
+        const moduleNumberSelect = curriculumModuleModal.querySelector('[data-curriculum-module-number]');
+        const moduleTitleInput = curriculumModuleModal.querySelector('[data-curriculum-module-title]');
+
+        const rebuildModuleNumberOptions = (currentId, currentNumber) => {
+            if (!moduleNumberSelect) {
+                return;
+            }
+            const taken = {};
+            document.querySelectorAll('[data-curriculum-module-edit-open]').forEach((btn) => {
+                const id = btn.getAttribute('data-module-id') || '';
+                const num = btn.getAttribute('data-module-number') || '';
+                if (id && num) {
+                    taken[num] = id;
+                }
+            });
+            const previous = String(currentNumber || moduleNumberSelect.value || '1');
+            moduleNumberSelect.innerHTML = '';
+            for (let n = 1; n <= 15; n += 1) {
+                const key = String(n);
+                if (taken[key] && taken[key] !== String(currentId)) {
+                    continue;
+                }
+                const option = document.createElement('option');
+                option.value = key;
+                option.textContent = 'ПМ ' + (n < 10 ? '0' + n : String(n));
+                if (key === previous) {
+                    option.selected = true;
+                }
+                moduleNumberSelect.appendChild(option);
+            }
+            if (!moduleNumberSelect.value && moduleNumberSelect.options.length) {
+                moduleNumberSelect.selectedIndex = 0;
+            }
+        };
+
+        const openCurriculumModule = (button) => {
+            const moduleId = button.getAttribute('data-module-id') || '';
+            const moduleNumber = button.getAttribute('data-module-number') || '1';
+            const moduleTitle = button.getAttribute('data-module-title') || '';
+            if (moduleIdInput) {
+                moduleIdInput.value = moduleId;
+            }
+            if (moduleTitleInput) {
+                moduleTitleInput.value = moduleTitle;
+            }
+            rebuildModuleNumberOptions(moduleId, moduleNumber);
+            curriculumModuleModal.removeAttribute('hidden');
+            document.body.classList.add('modal-open');
+            if (moduleTitleInput) {
+                moduleTitleInput.focus();
+            }
+        };
+
+        const closeCurriculumModule = () => {
+            curriculumModuleModal.setAttribute('hidden', '');
+            document.body.classList.remove('modal-open');
+        };
+
+        document.querySelectorAll('[data-curriculum-module-edit-open]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openCurriculumModule(button);
+            });
+        });
+
+        curriculumModuleModal.querySelectorAll('[data-curriculum-module-close]').forEach((node) => {
+            node.addEventListener('click', closeCurriculumModule);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !curriculumModuleModal.hasAttribute('hidden')) {
+                closeCurriculumModule();
+            }
+        });
+    }
+
+    const curriculumMdkModal = document.querySelector('[data-curriculum-mdk-modal]');
+    if (curriculumMdkModal) {
+        const mdkIdInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-id]');
+        const mdkModuleIdInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-module-id]');
+        const mdkIndexInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-index]');
+        const mdkCodeInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-code]');
+        const mdkCodeLabel = curriculumMdkModal.querySelector('[data-curriculum-mdk-code-label]');
+        const mdkTitleInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-title]');
+        const mdkStartSelect = curriculumMdkModal.querySelector('[data-curriculum-mdk-start]');
+        const mdkEndSelect = curriculumMdkModal.querySelector('[data-curriculum-mdk-end]');
+        const mdkTeacherSelect = curriculumMdkModal.querySelector('[data-curriculum-mdk-teacher]');
+        const mdkRedirectInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-redirect]');
+
+        const openCurriculumMdk = (button) => {
+            if (mdkIdInput) {
+                mdkIdInput.value = button.getAttribute('data-item-id') || '';
+            }
+            if (mdkModuleIdInput) {
+                mdkModuleIdInput.value = button.getAttribute('data-module-id') || '';
+            }
+            if (mdkIndexInput) {
+                mdkIndexInput.value = button.getAttribute('data-component-index') || '1';
+            }
+            const code = button.getAttribute('data-mdk-code') || '';
+            if (mdkCodeInput) {
+                mdkCodeInput.value = code;
+            }
+            if (mdkCodeLabel) {
+                mdkCodeLabel.textContent = code || '—';
+            }
+            if (mdkTitleInput) {
+                mdkTitleInput.value = button.getAttribute('data-component-title') || '';
+            }
+            if (mdkStartSelect) {
+                mdkStartSelect.value = button.getAttribute('data-start-abs') || '1';
+            }
+            if (mdkEndSelect) {
+                mdkEndSelect.value = button.getAttribute('data-end-abs') || '1';
+            }
+            if (mdkTeacherSelect) {
+                const teacherId = button.getAttribute('data-teacher-id') || '';
+                mdkTeacherSelect.value = teacherId === '0' ? '' : teacherId;
+            }
+            if (mdkRedirectInput) {
+                mdkRedirectInput.value = button.getAttribute('data-redirect-tab') || 'modules';
+            }
+            curriculumMdkModal.removeAttribute('hidden');
+            document.body.classList.add('modal-open');
+            if (mdkTitleInput) {
+                mdkTitleInput.focus();
+            }
+        };
+
+        const closeCurriculumMdk = () => {
+            curriculumMdkModal.setAttribute('hidden', '');
+            document.body.classList.remove('modal-open');
+        };
+
+        document.querySelectorAll('[data-curriculum-mdk-edit-open]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openCurriculumMdk(button);
+            });
+        });
+
+        curriculumMdkModal.querySelectorAll('[data-curriculum-mdk-close]').forEach((node) => {
+            node.addEventListener('click', closeCurriculumMdk);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !curriculumMdkModal.hasAttribute('hidden')) {
+                closeCurriculumMdk();
+            }
+        });
+    }
+
+    const curriculumPracticeModal = document.querySelector('[data-curriculum-practice-modal]');
+    if (curriculumPracticeModal) {
+        const practiceIdInput = curriculumPracticeModal.querySelector('[data-curriculum-practice-id]');
+        const practiceModuleIdInput = curriculumPracticeModal.querySelector('[data-curriculum-practice-module-id]');
+        const practiceCodeInput = curriculumPracticeModal.querySelector('[data-curriculum-practice-code]');
+        const practiceCodeLabel = curriculumPracticeModal.querySelector('[data-curriculum-practice-code-label]');
+        const practiceKindInput = curriculumPracticeModal.querySelector('[data-curriculum-practice-kind]');
+        const practiceTitleInput = curriculumPracticeModal.querySelector('[data-curriculum-practice-title]');
+        const practiceStartSelect = curriculumPracticeModal.querySelector('[data-curriculum-practice-start]');
+        const practiceEndSelect = curriculumPracticeModal.querySelector('[data-curriculum-practice-end]');
+        const practiceTeacherSelect = curriculumPracticeModal.querySelector('[data-curriculum-practice-teacher]');
+
+        const openCurriculumPractice = (button) => {
+            if (practiceIdInput) {
+                practiceIdInput.value = button.getAttribute('data-item-id') || '';
+            }
+            if (practiceModuleIdInput) {
+                practiceModuleIdInput.value = button.getAttribute('data-module-id') || '';
+            }
+            const code = button.getAttribute('data-practice-code') || '';
+            if (practiceCodeInput) {
+                practiceCodeInput.value = code;
+            }
+            if (practiceCodeLabel) {
+                practiceCodeLabel.textContent = code || '—';
+            }
+            if (practiceKindInput) {
+                practiceKindInput.value = button.getAttribute('data-practice-kind') || 'up';
+            }
+            if (practiceTitleInput) {
+                practiceTitleInput.value = button.getAttribute('data-component-title') || '';
+            }
+            if (practiceStartSelect) {
+                practiceStartSelect.value = button.getAttribute('data-start-abs') || '1';
+            }
+            if (practiceEndSelect) {
+                practiceEndSelect.value = button.getAttribute('data-end-abs') || '1';
+            }
+            if (practiceTeacherSelect) {
+                const teacherId = button.getAttribute('data-teacher-id') || '';
+                practiceTeacherSelect.value = teacherId === '0' ? '' : teacherId;
+            }
+            curriculumPracticeModal.removeAttribute('hidden');
+            document.body.classList.add('modal-open');
+            if (practiceTitleInput) {
+                practiceTitleInput.focus();
+            }
+        };
+
+        const closeCurriculumPractice = () => {
+            curriculumPracticeModal.setAttribute('hidden', '');
+            document.body.classList.remove('modal-open');
+        };
+
+        document.querySelectorAll('[data-curriculum-practice-edit-open]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                openCurriculumPractice(button);
+            });
+        });
+
+        curriculumPracticeModal.querySelectorAll('[data-curriculum-practice-close]').forEach((node) => {
+            node.addEventListener('click', closeCurriculumPractice);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !curriculumPracticeModal.hasAttribute('hidden')) {
+                closeCurriculumPractice();
+            }
+        });
+    }
+
     const archiveEditModal = document.querySelector('[data-archive-edit-modal]');
     if (archiveEditModal) {
         const studentInput = archiveEditModal.querySelector('[data-archive-edit-student]');

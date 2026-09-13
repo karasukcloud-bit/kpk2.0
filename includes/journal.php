@@ -10,6 +10,7 @@ require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/ktp.php';
 require_once __DIR__ . '/grading.php';
 require_once __DIR__ . '/activity_log.php';
+require_once __DIR__ . '/curriculum_modules.php';
 
 function get_journal_assignments_for_user(
     ?int $userId = null,
@@ -19,13 +20,18 @@ function get_journal_assignments_for_user(
     $academicYear = normalize_academic_year($academicYear ?? get_default_academic_year())
         ?? get_default_academic_year();
 
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+
     $sql = 'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
                    sub.name AS subject_name,
                    g.id AS group_id, g.number AS group_number,
                    sp.name AS specialty_name,
                    cp.academic_year,
-                   u.full_name AS teacher_name
-            FROM curriculum_items ci
+                   u.full_name AS teacher_name';
+    if ($typeCol) {
+        $sql .= ', ci.item_type, ci.start_abs_semester, ci.end_abs_semester';
+    }
+    $sql .= ' FROM curriculum_items ci
             INNER JOIN subjects sub ON sub.id = ci.subject_id
             INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
             INNER JOIN study_groups g ON g.id = cp.group_id
@@ -34,18 +40,93 @@ function get_journal_assignments_for_user(
             WHERE cp.academic_year = ?';
     $params = [$academicYear];
 
+    if ($typeCol) {
+        $sql .= " AND (ci.item_type = 'subject' OR ci.item_type = '' OR ci.item_type IS NULL)";
+    }
+
     if ($semester !== null && in_array($semester, ['1', '2'], true)) {
         $sql .= " AND (ci.semester = ? OR ci.semester = 'both')";
         $params[] = $semester;
     }
 
-    // Журнал доступен всем преподавателям (замещения): без фильтра по teacher_id
     $sql .= ' ORDER BY g.number ASC, sub.name ASC, ci.semester ASC';
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
+    $rows = $stmt->fetchAll();
 
-    return $stmt->fetchAll();
+    if ($typeCol) {
+        $mdkRows = get_journal_mdk_assignments($academicYear, $semester);
+        $seen = [];
+        foreach ($rows as $row) {
+            $seen[(int) $row['curriculum_item_id']] = true;
+        }
+        foreach ($mdkRows as $mdk) {
+            $id = (int) $mdk['curriculum_item_id'];
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $seen[$id] = true;
+            $rows[] = $mdk;
+        }
+        usort($rows, static function (array $a, array $b): int {
+            $g = strcmp((string) $a['group_number'], (string) $b['group_number']);
+            if ($g !== 0) {
+                return $g;
+            }
+
+            return strcmp((string) $a['subject_name'], (string) $b['subject_name']);
+        });
+    }
+
+    return $rows;
+}
+
+function get_journal_mdk_assignments(string $academicYear, ?string $semester = null): array
+{
+    $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    $courseSelect = $courseCol ? ', g.course AS group_course' : ', 1 AS group_course';
+
+    $stmt = db()->prepare(
+        'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
+                ci.item_type, ci.start_abs_semester, ci.end_abs_semester,
+                sub.name AS subject_name,
+                g.id AS group_id, g.number AS group_number' . $courseSelect . ',
+                sp.name AS specialty_name,
+                ? AS academic_year,
+                u.full_name AS teacher_name
+         FROM curriculum_items ci
+         INNER JOIN subjects sub ON sub.id = ci.subject_id
+         INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
+         INNER JOIN study_groups g ON g.id = cp.group_id
+         INNER JOIN specialties sp ON sp.id = g.specialty_id
+         LEFT JOIN users u ON u.id = ci.teacher_id
+         WHERE ci.item_type = \'mdk\''
+    );
+    $stmt->execute([$academicYear]);
+    $all = $stmt->fetchAll();
+    $result = [];
+
+    foreach ($all as $row) {
+        $course = get_group_course([
+            'id' => (int) $row['group_id'],
+            'number' => (string) $row['group_number'],
+            'course' => $row['group_course'] ?? null,
+        ]);
+        if ($semester !== null && in_array($semester, ['1', '2'], true)) {
+            if (!curriculum_item_covers_course_semester($row, $course, $semester)) {
+                continue;
+            }
+        } elseif (
+            !curriculum_item_covers_course_semester($row, $course, '1')
+            && !curriculum_item_covers_course_semester($row, $course, '2')
+        ) {
+            continue;
+        }
+        $result[] = $row;
+    }
+
+    return $result;
 }
 
 function group_journal_assignments_by_group(array $assignments): array
@@ -119,13 +200,18 @@ function get_student_journal_subjects(int $groupId, ?string $academicYear = null
     $academicYear = normalize_academic_year($academicYear ?? get_default_academic_year())
         ?? get_default_academic_year();
 
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+
     $sql = 'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
                    sub.name AS subject_name,
                    g.id AS group_id, g.number AS group_number,
                    sp.name AS specialty_name,
                    cp.academic_year,
-                   u.full_name AS teacher_name
-            FROM curriculum_items ci
+                   u.full_name AS teacher_name';
+    if ($typeCol) {
+        $sql .= ', ci.item_type, ci.start_abs_semester, ci.end_abs_semester';
+    }
+    $sql .= ' FROM curriculum_items ci
             INNER JOIN subjects sub ON sub.id = ci.subject_id
             INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
             INNER JOIN study_groups g ON g.id = cp.group_id
@@ -133,6 +219,10 @@ function get_student_journal_subjects(int $groupId, ?string $academicYear = null
             LEFT JOIN users u ON u.id = ci.teacher_id
             WHERE cp.academic_year = ? AND g.id = ?';
     $params = [$academicYear, $groupId];
+
+    if ($typeCol) {
+        $sql .= " AND (ci.item_type = 'subject' OR ci.item_type = '' OR ci.item_type IS NULL)";
+    }
 
     if ($semester !== null && in_array($semester, ['1', '2'], true)) {
         $sql .= " AND (ci.semester = ? OR ci.semester = 'both')";
@@ -143,8 +233,32 @@ function get_student_journal_subjects(int $groupId, ?string $academicYear = null
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
+    $rows = $stmt->fetchAll();
 
-    return $stmt->fetchAll();
+    if ($typeCol) {
+        $group = get_group_by_id($groupId);
+        $course = get_group_course($group);
+        $mdk = get_group_mdk_for_period($groupId, $course, $semester);
+        $seen = [];
+        foreach ($rows as $row) {
+            $seen[(int) $row['curriculum_item_id']] = true;
+        }
+        foreach ($mdk as $item) {
+            $id = (int) $item['curriculum_item_id'];
+            if (isset($seen[$id])) {
+                continue;
+            }
+            $item['specialty_name'] = $item['specialty_name'] ?? ($group['specialty_name'] ?? '');
+            $item['academic_year'] = $academicYear;
+            $rows[] = $item;
+            $seen[$id] = true;
+        }
+        usort($rows, static function (array $a, array $b): int {
+            return strcmp((string) $a['subject_name'], (string) $b['subject_name']);
+        });
+    }
+
+    return $rows;
 }
 
 function get_journal_grades_for_student(int $curriculumItemId, int $studentId): array

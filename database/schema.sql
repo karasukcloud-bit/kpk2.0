@@ -69,6 +69,8 @@ CREATE TABLE IF NOT EXISTS study_groups (
     curator_id           INT UNSIGNED NULL DEFAULT NULL,
     is_professionality   TINYINT(1) NOT NULL DEFAULT 0,
     is_general_education TINYINT(1) NOT NULL DEFAULT 0,
+    program_semesters    TINYINT UNSIGNED NOT NULL DEFAULT 6,
+    course               TINYINT UNSIGNED NOT NULL DEFAULT 1,
     created_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at           DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_study_groups_specialty
@@ -190,16 +192,38 @@ CREATE TABLE IF NOT EXISTS curriculum_plans (
         ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
+CREATE TABLE IF NOT EXISTS curriculum_modules (
+    id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    group_id   INT UNSIGNED NOT NULL,
+    number     TINYINT UNSIGNED NOT NULL,
+    title      VARCHAR(255) NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_curriculum_modules_group_number (group_id, number),
+    KEY idx_curriculum_modules_group (group_id),
+    CONSTRAINT fk_curriculum_modules_group
+        FOREIGN KEY (group_id) REFERENCES study_groups(id)
+        ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
 CREATE TABLE IF NOT EXISTS curriculum_items (
     id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     curriculum_plan_id INT UNSIGNED NOT NULL,
     subject_id         INT UNSIGNED NOT NULL,
+    item_type          ENUM('subject', 'mdk', 'practice') NOT NULL DEFAULT 'subject',
+    module_id          INT UNSIGNED NULL DEFAULT NULL,
+    practice_kind      ENUM('up', 'pp', 'pdp') NULL DEFAULT NULL,
+    component_index    TINYINT UNSIGNED NULL DEFAULT NULL,
+    start_abs_semester TINYINT UNSIGNED NULL DEFAULT NULL,
+    end_abs_semester   TINYINT UNSIGNED NULL DEFAULT NULL,
     teacher_id         INT UNSIGNED NULL DEFAULT NULL,
     semester           ENUM('1', '2', 'both') NOT NULL,
     sort_order         INT UNSIGNED NOT NULL DEFAULT 1,
     created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     UNIQUE KEY uq_curriculum_plan_subject (curriculum_plan_id, subject_id),
+    KEY idx_curriculum_items_module (module_id),
+    KEY idx_curriculum_items_type (item_type),
     CONSTRAINT fk_curriculum_items_plan
         FOREIGN KEY (curriculum_plan_id) REFERENCES curriculum_plans(id)
         ON DELETE CASCADE,
@@ -208,7 +232,10 @@ CREATE TABLE IF NOT EXISTS curriculum_items (
         ON DELETE RESTRICT,
     CONSTRAINT fk_curriculum_items_teacher
         FOREIGN KEY (teacher_id) REFERENCES users(id)
-        ON DELETE SET NULL
+        ON DELETE SET NULL,
+    CONSTRAINT fk_curriculum_items_module
+        FOREIGN KEY (module_id) REFERENCES curriculum_modules(id)
+        ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ktp_topics (

@@ -1119,6 +1119,17 @@ function promote_group(int $groupId, string $newNumber, string $academicYear): a
         $stmt = $pdo->prepare('UPDATE study_groups SET number = ? WHERE id = ?');
         $stmt->execute([$newNumber, $groupId]);
 
+        $courseCol = $pdo->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+        if ($courseCol) {
+            $nextCourse = min(4, max(1, (int) ($group['course'] ?? 1) + 1));
+            $maxByProgram = (int) floor(((int) ($group['program_semesters'] ?? 6)) / 2);
+            if ($maxByProgram >= 1) {
+                $nextCourse = min($nextCourse, $maxByProgram);
+            }
+            $stmt = $pdo->prepare('UPDATE study_groups SET course = ? WHERE id = ?');
+            $stmt->execute([$nextCourse, $groupId]);
+        }
+
         $pdo->commit();
     } catch (Throwable $e) {
         $pdo->rollBack();

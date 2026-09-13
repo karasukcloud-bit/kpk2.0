@@ -41,7 +41,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             (int) ($_POST['specialty_id'] ?? 0),
             (int) ($_POST['curator_id'] ?? 0) ?: null,
             $labels['is_professionality'],
-            $labels['is_general_education']
+            $labels['is_general_education'],
+            (int) ($_POST['course'] ?? 1),
+            (int) ($_POST['program_semesters'] ?? 6)
         );
 
         if ($result['success']) {
@@ -98,6 +100,25 @@ $success = flash_get('success');
                 <label for="number">Номер группы</label>
                 <input type="text" id="number" name="number" required
                        value="<?= e($_POST['number'] ?? $group['number']) ?>">
+            </div>
+
+            <div class="form__row">
+                <div class="form__group">
+                    <label for="course">Курс</label>
+                    <select id="course" name="course" required>
+                        <?= render_group_course_options(
+                            (int) ($_POST['course'] ?? get_group_course($group))
+                        ) ?>
+                    </select>
+                </div>
+                <div class="form__group">
+                    <label for="program_semesters">Срок обучения</label>
+                    <select id="program_semesters" name="program_semesters">
+                        <?php $editProg = (int) ($_POST['program_semesters'] ?? ($group['program_semesters'] ?? 6)); ?>
+                        <option value="6"<?= $editProg === 6 ? ' selected' : '' ?>>3 курса (6 семестров)</option>
+                        <option value="8"<?= $editProg === 8 ? ' selected' : '' ?>>4 курса (8 семестров)</option>
+                    </select>
+                </div>
             </div>
 
             <div class="form__group">

@@ -113,6 +113,7 @@ function run_migrations(PDO $pdo): void
     ensure_study_groups_labels_schema($pdo);
     ensure_ktp_constructor_schema($pdo);
     ensure_specialty_head_schema($pdo);
+    ensure_curriculum_modules_schema($pdo);
 }
 
 function ensure_specialty_head_schema(PDO $pdo): void
@@ -1795,5 +1796,199 @@ function ensure_gia_schema(PDO $pdo): void
                     ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+}
+
+function ensure_curriculum_modules_schema(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    $progCol = $pdo->query("SHOW COLUMNS FROM study_groups LIKE 'program_semesters'")->fetch();
+    if (!$progCol) {
+        $pdo->exec(
+            'ALTER TABLE study_groups
+             ADD program_semesters TINYINT UNSIGNED NOT NULL DEFAULT 6
+             AFTER is_general_education'
+        );
+    }
+
+    $courseCol = $pdo->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    if (!$courseCol) {
+        $pdo->exec(
+            'ALTER TABLE study_groups
+             ADD course TINYINT UNSIGNED NOT NULL DEFAULT 1
+             AFTER program_semesters'
+        );
+        // Разовая эвристика для уже существующих групп; дальше курс задаётся явно.
+        $groups = $pdo->query('SELECT id, number FROM study_groups')->fetchAll(PDO::FETCH_ASSOC);
+        $upd = $pdo->prepare('UPDATE study_groups SET course = ? WHERE id = ?');
+        foreach ($groups as $g) {
+            $number = (string) ($g['number'] ?? '');
+            $course = 1;
+            if (preg_match('/^(.*?)(\d)(\d{2})(.*)$/u', $number, $m)) {
+                $course = max(1, min(4, (int) $m[2]));
+            } elseif (preg_match('/(\d)/u', $number, $m)) {
+                $course = max(1, min(4, (int) $m[1]));
+            }
+            $upd->execute([$course, (int) $g['id']]);
+        }
+    }
+
+    if (!$pdo->query("SHOW TABLES LIKE 'curriculum_modules'")->fetch()) {
+        $pdo->exec(
+            "CREATE TABLE curriculum_modules (
+                id         INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                group_id   INT UNSIGNED NOT NULL,
+                number     TINYINT UNSIGNED NOT NULL,
+                title      VARCHAR(255) NOT NULL DEFAULT '',
+                created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_curriculum_modules_group_number (group_id, number),
+                KEY idx_curriculum_modules_group (group_id),
+                CONSTRAINT fk_curriculum_modules_group
+                    FOREIGN KEY (group_id) REFERENCES study_groups(id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci"
+        );
+    } else {
+        $hasNumber = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'number'")->fetch();
+        $hasModuleNumber = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'module_number'")->fetch();
+        if (!$hasNumber && $hasModuleNumber) {
+            $pdo->exec(
+                'ALTER TABLE curriculum_modules
+                 CHANGE module_number number TINYINT UNSIGNED NOT NULL'
+            );
+        } elseif (!$hasNumber) {
+            $pdo->exec(
+                'ALTER TABLE curriculum_modules
+                 ADD number TINYINT UNSIGNED NOT NULL DEFAULT 1 AFTER group_id'
+            );
+        }
+
+        $hasTitle = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'title'")->fetch();
+        if (!$hasTitle) {
+            $pdo->exec(
+                "ALTER TABLE curriculum_modules
+                 ADD title VARCHAR(255) NOT NULL DEFAULT '' AFTER number"
+            );
+        }
+
+        $hasUpdated = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'updated_at'")->fetch();
+        if (!$hasUpdated) {
+            $pdo->exec(
+                'ALTER TABLE curriculum_modules
+                 ADD updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+                 ON UPDATE CURRENT_TIMESTAMP'
+            );
+        }
+
+        $hasGroupId = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'group_id'")->fetch();
+        if (!$hasGroupId) {
+            $pdo->exec(
+                'ALTER TABLE curriculum_modules
+                 ADD group_id INT UNSIGNED NULL DEFAULT NULL AFTER id'
+            );
+            // Backfill from plan if possible
+            $hasPlan = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'curriculum_plan_id'")->fetch();
+            if ($hasPlan) {
+                $pdo->exec(
+                    'UPDATE curriculum_modules m
+                     INNER JOIN curriculum_plans cp ON cp.id = m.curriculum_plan_id
+                     SET m.group_id = cp.group_id
+                     WHERE m.group_id IS NULL'
+                );
+            }
+        }
+
+        $planCol = $pdo->query("SHOW COLUMNS FROM curriculum_modules LIKE 'curriculum_plan_id'")->fetch();
+        if ($planCol && strtoupper((string) ($planCol['Null'] ?? '')) === 'NO') {
+            $pdo->exec(
+                'ALTER TABLE curriculum_modules
+                 MODIFY curriculum_plan_id INT UNSIGNED NULL DEFAULT NULL'
+            );
+        }
+    }
+
+    $columns = [
+        'item_type' => "ADD item_type ENUM('subject', 'mdk', 'practice') NOT NULL DEFAULT 'subject' AFTER subject_id",
+        'module_id' => 'ADD module_id INT UNSIGNED NULL DEFAULT NULL AFTER item_type',
+        'practice_kind' => "ADD practice_kind ENUM('up', 'pp', 'pdp') NULL DEFAULT NULL AFTER module_id",
+        'component_index' => 'ADD component_index TINYINT UNSIGNED NULL DEFAULT NULL AFTER practice_kind',
+        'start_abs_semester' => 'ADD start_abs_semester TINYINT UNSIGNED NULL DEFAULT NULL AFTER component_index',
+        'end_abs_semester' => 'ADD end_abs_semester TINYINT UNSIGNED NULL DEFAULT NULL AFTER start_abs_semester',
+    ];
+
+    foreach ($columns as $name => $ddl) {
+        $exists = $pdo->query("SHOW COLUMNS FROM curriculum_items LIKE " . $pdo->quote($name))->fetch();
+        if (!$exists) {
+            $pdo->exec('ALTER TABLE curriculum_items ' . $ddl);
+        }
+    }
+
+    $practiceKindCol = $pdo->query("SHOW COLUMNS FROM curriculum_items LIKE 'practice_kind'")->fetch(PDO::FETCH_ASSOC);
+    if ($practiceKindCol) {
+        $type = (string) ($practiceKindCol['Type'] ?? '');
+        if (strpos($type, "'up'") === false) {
+            $pdo->exec(
+                "ALTER TABLE curriculum_items
+                 MODIFY practice_kind ENUM(
+                     'educational', 'industrial', 'prediploma',
+                     'up', 'pp', 'pdp'
+                 ) NULL DEFAULT NULL"
+            );
+            $pdo->exec(
+                "UPDATE curriculum_items SET practice_kind = 'up' WHERE practice_kind = 'educational'"
+            );
+            $pdo->exec(
+                "UPDATE curriculum_items SET practice_kind = 'pp' WHERE practice_kind = 'industrial'"
+            );
+            $pdo->exec(
+                "UPDATE curriculum_items SET practice_kind = 'pdp' WHERE practice_kind = 'prediploma'"
+            );
+            $pdo->exec(
+                "ALTER TABLE curriculum_items
+                 MODIFY practice_kind ENUM('up', 'pp', 'pdp') NULL DEFAULT NULL"
+            );
+        }
+    }
+
+    foreach (['duration', 'span', 'start_course', 'start_semester', 'mdk_index'] as $legacyCol) {
+        $col = $pdo->query("SHOW COLUMNS FROM curriculum_items LIKE " . $pdo->quote($legacyCol))->fetch(PDO::FETCH_ASSOC);
+        if ($col && strtoupper((string) ($col['Null'] ?? '')) === 'NO') {
+            $pdo->exec('ALTER TABLE curriculum_items MODIFY `' . $legacyCol . '` ' . $col['Type'] . ' NULL DEFAULT NULL');
+        }
+    }
+
+    $indexes = $pdo->query('SHOW INDEX FROM curriculum_items')->fetchAll();
+    $indexNames = array_column($indexes, 'Key_name');
+    if (!in_array('idx_curriculum_items_module', $indexNames, true)) {
+        $pdo->exec('ALTER TABLE curriculum_items ADD KEY idx_curriculum_items_module (module_id)');
+    }
+    if (!in_array('idx_curriculum_items_type', $indexNames, true)) {
+        $pdo->exec('ALTER TABLE curriculum_items ADD KEY idx_curriculum_items_type (item_type)');
+    }
+
+    $fkExists = false;
+    foreach ($pdo->query(
+        "SELECT CONSTRAINT_NAME FROM information_schema.TABLE_CONSTRAINTS
+         WHERE TABLE_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'curriculum_items'
+           AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+           AND CONSTRAINT_NAME = 'fk_curriculum_items_module'"
+    ) as $row) {
+        $fkExists = true;
+        break;
+    }
+    if (!$fkExists && $pdo->query("SHOW TABLES LIKE 'curriculum_modules'")->fetch()) {
+        $pdo->exec(
+            'ALTER TABLE curriculum_items
+             ADD CONSTRAINT fk_curriculum_items_module
+             FOREIGN KEY (module_id) REFERENCES curriculum_modules(id)
+             ON DELETE CASCADE'
+        );
     }
 }

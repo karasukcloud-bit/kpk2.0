@@ -43,7 +43,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) ($_POST['specialty_id'] ?? 0),
                 null,
                 $labels['is_professionality'],
-                $labels['is_general_education']
+                $labels['is_general_education'],
+                (int) ($_POST['course'] ?? 1),
+                (int) ($_POST['program_semesters'] ?? 6)
             );
         } elseif ($action === 'add_attendance_reason') {
             $result = create_attendance_reason($_POST['reason_name'] ?? '');
@@ -548,6 +550,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                         <tr>
                             <th>№</th>
                             <th>Номер группы</th>
+                            <th>Курс</th>
                             <th>Специальность</th>
                             <th>Код</th>
                             <th>Куратор</th>
@@ -569,6 +572,7 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                         <tr data-search-row data-search-text="<?= e($groupSearchText) ?>">
                             <td data-search-num><?= $index + 1 ?></td>
                             <td><strong><?= e($group['number']) ?></strong></td>
+                            <td><?= (int) get_group_course($group) ?></td>
                             <td><?= e($group['specialty_name']) ?></td>
                             <td><code><?= e($group['specialty_code']) ?></code></td>
                             <td><?= e($group['curator_name'] ?? '—') ?></td>
@@ -598,6 +602,14 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                            placeholder="П-21">
                 </div>
                 <div class="form__group">
+                    <label for="group_course">Курс</label>
+                    <select id="group_course" name="course" required>
+                        <?= render_group_course_options(
+                            (int) (($_POST['action'] ?? '') === 'add_group' ? ($_POST['course'] ?? 1) : 1)
+                        ) ?>
+                    </select>
+                </div>
+                <div class="form__group">
                     <label for="group_specialty">Специальность</label>
                     <select id="group_specialty" name="specialty_id" required>
                         <?= render_specialty_options(
@@ -606,6 +618,16 @@ $gradingSystemLabel = $gradingConfig['system'] === 'brs'
                         ) ?>
                     </select>
                 </div>
+            </div>
+            <div class="form__group">
+                <label for="group_program_semesters">Срок обучения</label>
+                <select id="group_program_semesters" name="program_semesters">
+                    <?php
+                    $addProg = (int) (($_POST['action'] ?? '') === 'add_group' ? ($_POST['program_semesters'] ?? 6) : 6);
+                    ?>
+                    <option value="6"<?= $addProg === 6 ? ' selected' : '' ?>>3 курса (6 семестров)</option>
+                    <option value="8"<?= $addProg === 8 ? ' selected' : '' ?>>4 курса (8 семестров)</option>
+                </select>
             </div>
             <?php
             $addGroupLabels = ($_POST['action'] ?? '') === 'add_group'

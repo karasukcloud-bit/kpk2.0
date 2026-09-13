@@ -154,9 +154,19 @@ function find_specialty_by_code(string $code): ?array
 
 function get_all_groups(): array
 {
+    $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    $progCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'program_semesters'")->fetch();
+    $extra = '';
+    if ($courseCol) {
+        $extra .= ', g.course';
+    }
+    if ($progCol) {
+        $extra .= ', g.program_semesters';
+    }
+
     $stmt = db()->query(
         'SELECT g.id, g.number, g.specialty_id, g.curator_id,
-                g.is_professionality, g.is_general_education, g.created_at,
+                g.is_professionality, g.is_general_education, g.created_at' . $extra . ',
                 s.name AS specialty_name, s.code AS specialty_code,
                 u.full_name AS curator_name
          FROM study_groups g
@@ -185,12 +195,54 @@ function get_group_by_id(int $id): ?array
     return $row ?: null;
 }
 
+/** Текущий курс группы из явного поля study_groups.course (1–4). */
+function get_group_course(int|array|null $groupOrId): int
+{
+    if (is_array($groupOrId)) {
+        $group = $groupOrId;
+    } elseif (is_int($groupOrId) && $groupOrId > 0) {
+        $group = get_group_by_id($groupOrId);
+    } else {
+        $group = null;
+    }
+
+    if ($group === null) {
+        return 1;
+    }
+
+    $course = (int) ($group['course'] ?? 0);
+    if ($course >= 1 && $course <= 4) {
+        return $course;
+    }
+
+    return 1;
+}
+
+function normalize_group_course(int $course): int
+{
+    return max(1, min(4, $course));
+}
+
+function render_group_course_options(int $selected = 1, int $maxCourse = 4): string
+{
+    $html = '';
+    $selected = normalize_group_course($selected);
+    for ($c = 1; $c <= $maxCourse; $c++) {
+        $isSelected = $c === $selected ? ' selected' : '';
+        $html .= '<option value="' . $c . '"' . $isSelected . '>' . $c . ' курс</option>';
+    }
+
+    return $html;
+}
+
 function create_group(
     string $number,
     int $specialtyId,
     ?int $curatorId = null,
     bool $isProfessionality = false,
-    bool $isGeneralEducation = false
+    bool $isGeneralEducation = false,
+    int $course = 1,
+    int $programSemesters = 6
 ): array {
     $number = trim($number);
 
@@ -206,18 +258,41 @@ function create_group(
         return ['success' => false, 'error' => 'Группа с таким номером уже существует.'];
     }
 
-    $stmt = db()->prepare(
-        'INSERT INTO study_groups
-         (number, specialty_id, curator_id, is_professionality, is_general_education)
-         VALUES (?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
-        $number,
-        $specialtyId,
-        $curatorId ?: null,
-        $isProfessionality ? 1 : 0,
-        $isGeneralEducation ? 1 : 0,
-    ]);
+    $course = max(1, min(4, $course));
+    $programSemesters = in_array($programSemesters, [6, 8], true) ? $programSemesters : 6;
+
+    $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    $progCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'program_semesters'")->fetch();
+
+    if ($courseCol && $progCol) {
+        $stmt = db()->prepare(
+            'INSERT INTO study_groups
+             (number, specialty_id, curator_id, is_professionality, is_general_education, program_semesters, course)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $number,
+            $specialtyId,
+            $curatorId ?: null,
+            $isProfessionality ? 1 : 0,
+            $isGeneralEducation ? 1 : 0,
+            $programSemesters,
+            $course,
+        ]);
+    } else {
+        $stmt = db()->prepare(
+            'INSERT INTO study_groups
+             (number, specialty_id, curator_id, is_professionality, is_general_education)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $number,
+            $specialtyId,
+            $curatorId ?: null,
+            $isProfessionality ? 1 : 0,
+            $isGeneralEducation ? 1 : 0,
+        ]);
+    }
 
     return ['success' => true, 'id' => (int) db()->lastInsertId()];
 }
@@ -228,7 +303,9 @@ function update_group(
     int $specialtyId,
     ?int $curatorId = null,
     bool $isProfessionality = false,
-    bool $isGeneralEducation = false
+    bool $isGeneralEducation = false,
+    ?int $course = null,
+    ?int $programSemesters = null
 ): array {
     $group = get_group_by_id($id);
     if ($group === null) {
@@ -250,20 +327,51 @@ function update_group(
         return ['success' => false, 'error' => 'Группа с таким номером уже существует.'];
     }
 
-    $stmt = db()->prepare(
-        'UPDATE study_groups
-         SET number = ?, specialty_id = ?, curator_id = ?,
-             is_professionality = ?, is_general_education = ?
-         WHERE id = ?'
-    );
-    $stmt->execute([
-        $number,
-        $specialtyId,
-        $curatorId ?: null,
-        $isProfessionality ? 1 : 0,
-        $isGeneralEducation ? 1 : 0,
-        $id,
-    ]);
+    $courseValue = $course !== null ? max(1, min(4, $course)) : (int) ($group['course'] ?? 1);
+    if ($courseValue < 1) {
+        $courseValue = 1;
+    }
+    $progValue = $programSemesters !== null
+        ? (in_array($programSemesters, [6, 8], true) ? $programSemesters : 6)
+        : (int) ($group['program_semesters'] ?? 6);
+
+    $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    $progCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'program_semesters'")->fetch();
+
+    if ($courseCol && $progCol) {
+        $stmt = db()->prepare(
+            'UPDATE study_groups
+             SET number = ?, specialty_id = ?, curator_id = ?,
+                 is_professionality = ?, is_general_education = ?,
+                 program_semesters = ?, course = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $number,
+            $specialtyId,
+            $curatorId ?: null,
+            $isProfessionality ? 1 : 0,
+            $isGeneralEducation ? 1 : 0,
+            $progValue,
+            $courseValue,
+            $id,
+        ]);
+    } else {
+        $stmt = db()->prepare(
+            'UPDATE study_groups
+             SET number = ?, specialty_id = ?, curator_id = ?,
+                 is_professionality = ?, is_general_education = ?
+             WHERE id = ?'
+        );
+        $stmt->execute([
+            $number,
+            $specialtyId,
+            $curatorId ?: null,
+            $isProfessionality ? 1 : 0,
+            $isGeneralEducation ? 1 : 0,
+            $id,
+        ]);
+    }
 
     return ['success' => true];
 }

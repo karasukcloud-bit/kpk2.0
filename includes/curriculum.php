@@ -210,38 +210,123 @@ function get_groups_with_curriculum_stats(string $academicYear): array
         return [];
     }
 
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+    $countExpr = $typeCol
+        ? "COUNT(CASE WHEN ci.item_type = 'subject' OR ci.item_type IS NULL THEN ci.id END)"
+        : 'COUNT(ci.id)';
+
     $stmt = db()->prepare(
-        'SELECT g.id, g.number, s.name AS specialty_name, s.code AS specialty_code,
+        "SELECT g.id, g.number, s.name AS specialty_name, s.code AS specialty_code,
                 cp.id AS plan_id,
-                COUNT(ci.id) AS subjects_count
+                {$countExpr} AS subjects_count
          FROM study_groups g
          INNER JOIN specialties s ON s.id = g.specialty_id
          LEFT JOIN curriculum_plans cp
             ON cp.group_id = g.id AND cp.academic_year = ?
          LEFT JOIN curriculum_items ci ON ci.curriculum_plan_id = cp.id
          GROUP BY g.id, g.number, s.name, s.code, cp.id
-         ORDER BY g.number ASC'
+         ORDER BY g.number ASC"
     );
     $stmt->execute([$academicYear]);
 
     return $stmt->fetchAll();
 }
 
-function get_curriculum_items(int $planId): array
+function get_curriculum_items(int $planId, $itemType = 'subject'): array
 {
-    $stmt = db()->prepare(
-        'SELECT ci.id, ci.curriculum_plan_id, ci.subject_id, ci.teacher_id, ci.semester, ci.sort_order,
-                sub.name AS subject_name,
-                u.full_name AS teacher_name
-         FROM curriculum_items ci
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+    $sql = 'SELECT ci.id, ci.curriculum_plan_id, ci.subject_id, ci.teacher_id, ci.semester, ci.sort_order,
+                   sub.name AS subject_name,
+                   u.full_name AS teacher_name';
+    if ($typeCol) {
+        $sql .= ', ci.item_type, ci.module_id, ci.practice_kind, ci.component_index,
+                  ci.start_abs_semester, ci.end_abs_semester';
+    }
+    $sql .= ' FROM curriculum_items ci
          INNER JOIN subjects sub ON sub.id = ci.subject_id
          LEFT JOIN users u ON u.id = ci.teacher_id
-         WHERE ci.curriculum_plan_id = ?
-         ORDER BY ci.sort_order ASC, sub.name ASC'
-    );
-    $stmt->execute([$planId]);
+         WHERE ci.curriculum_plan_id = ?';
+    $params = [$planId];
+    if ($typeCol && $itemType !== null) {
+        if (is_array($itemType)) {
+            $types = array_values(array_filter($itemType, 'is_string'));
+            if ($types !== []) {
+                $placeholders = implode(',', array_fill(0, count($types), '?'));
+                $sql .= ' AND ci.item_type IN (' . $placeholders . ')';
+                foreach ($types as $type) {
+                    $params[] = $type;
+                }
+            }
+        } else {
+            $sql .= ' AND ci.item_type = ?';
+            $params[] = $itemType;
+        }
+    }
+    $sql .= ' ORDER BY ci.sort_order ASC, sub.name ASC';
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
 
     return $stmt->fetchAll();
+}
+
+/**
+ * Предметы плана + МДК группы, актуальные для текущего курса (для списка учебного плана).
+ */
+function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course): array
+{
+    $items = get_curriculum_items($planId, ['subject', 'mdk']);
+    $seen = [];
+    foreach ($items as $item) {
+        $seen[(int) $item['id']] = true;
+    }
+
+    require_once __DIR__ . '/curriculum_modules.php';
+    foreach (get_group_mdk_for_period($groupId, $course, null) as $mdk) {
+        $id = (int) ($mdk['curriculum_item_id'] ?? $mdk['id'] ?? 0);
+        if ($id < 1 || isset($seen[$id])) {
+            continue;
+        }
+        $seen[$id] = true;
+        $items[] = [
+            'id' => $id,
+            'curriculum_plan_id' => (int) ($mdk['curriculum_plan_id'] ?? 0),
+            'subject_id' => (int) ($mdk['subject_id'] ?? 0),
+            'teacher_id' => $mdk['teacher_id'] ?? null,
+            'semester' => (string) ($mdk['semester'] ?? 'both'),
+            'sort_order' => 0,
+            'subject_name' => (string) ($mdk['subject_name'] ?? ''),
+            'teacher_name' => $mdk['teacher_name'] ?? null,
+            'item_type' => 'mdk',
+            'module_id' => $mdk['module_id'] ?? null,
+            'practice_kind' => null,
+            'component_index' => $mdk['component_index'] ?? null,
+            'start_abs_semester' => $mdk['start_abs_semester'] ?? null,
+            'end_abs_semester' => $mdk['end_abs_semester'] ?? null,
+        ];
+    }
+
+    usort($items, static function (array $a, array $b): int {
+        return strcmp((string) $a['subject_name'], (string) $b['subject_name']);
+    });
+
+    return $items;
+}
+
+function curriculum_list_item_in_semester(array $item, string $semester, int $course): bool
+{
+    if (!in_array($semester, ['1', '2'], true)) {
+        return false;
+    }
+
+    $type = (string) ($item['item_type'] ?? 'subject');
+    if ($type === 'mdk' && (int) ($item['start_abs_semester'] ?? 0) > 0) {
+        require_once __DIR__ . '/curriculum_modules.php';
+
+        return curriculum_item_covers_course_semester($item, $course, $semester);
+    }
+
+    return $item['semester'] === $semester || $item['semester'] === 'both';
 }
 
 function get_curriculum_item_by_id(int $itemId): ?array
@@ -345,11 +430,20 @@ function add_curriculum_item(int $planId, string $subjectName, string $semester,
 
     $sortOrder = get_next_curriculum_sort_order($planId);
 
-    $stmt = db()->prepare(
-        'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, teacher_id, semester, sort_order)
-         VALUES (?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+    if ($typeCol) {
+        $stmt = db()->prepare(
+            'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, item_type, teacher_id, semester, sort_order)
+             VALUES (?, ?, \'subject\', ?, ?, ?)'
+        );
+        $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+    } else {
+        $stmt = db()->prepare(
+            'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, teacher_id, semester, sort_order)
+             VALUES (?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+    }
 
     return ['success' => true, 'id' => (int) db()->lastInsertId()];
 }
@@ -462,30 +556,69 @@ function render_curriculum_semester_table(array $items, int $groupId, string $ac
     foreach ($items as $index => $item) {
         $id = (int) $item['id'];
         $year = e(urlencode($academicYear));
+        $isMdk = (($item['item_type'] ?? 'subject') === 'mdk');
         $html .= '<tr>'
             . '<td>' . ($index + 1) . '</td>'
             . '<td>' . e($item['subject_name']);
 
-        if ($item['semester'] === 'both') {
+        if ($isMdk) {
+            $html .= ' <span class="badge badge--role badge--semester-1">МДК</span>';
+        }
+
+        if ($item['semester'] === 'both' && !$isMdk) {
             $html .= ' ' . render_semester_badge('both');
         }
 
-        $html .= '</td><td>' . e($item['teacher_name'] ?? '—') . '</td><td class="table__actions">'
-            . '<button type="button" class="btn btn--ghost btn--sm"'
-            . ' data-curriculum-edit-open'
-            . ' data-item-id="' . $id . '"'
-            . ' data-subject-name="' . e($item['subject_name']) . '"'
-            . ' data-semester="' . e((string) $item['semester']) . '"'
-            . ' data-teacher-id="' . (int) ($item['teacher_id'] ?? 0) . '"'
-            . '>Изменить</button>'
-            . '<a href="curriculum_ktp.php?item_id=' . $id . '&group_id=' . $groupId . '&year=' . $year
-            . '" class="btn btn--ghost btn--sm">КТП</a>'
-            . '<form method="post" class="inline-form" onsubmit="return confirm(\'Удалить предмет из учебного плана?\');">'
-            . csrf_field()
-            . '<input type="hidden" name="action" value="delete_item">'
-            . '<input type="hidden" name="item_id" value="' . $id . '">'
-            . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
-            . '</form></td></tr>';
+        $html .= '</td><td>' . e($item['teacher_name'] ?? '—') . '</td><td class="table__actions">';
+
+        if ($isMdk) {
+            require_once __DIR__ . '/curriculum_modules.php';
+            $mdkModuleId = (int) ($item['module_id'] ?? 0);
+            $mdkIndex = (int) ($item['component_index'] ?? 1);
+            $mdkModule = $mdkModuleId > 0 ? get_curriculum_module_by_id($mdkModuleId) : null;
+            $mdkNumber = (int) ($mdkModule['number'] ?? 0);
+            $mdkCode = $mdkNumber > 0 ? format_mdk_code($mdkNumber, $mdkIndex) : 'МДК';
+            $mdkTitle = mdk_title_from_subject_name((string) $item['subject_name'], $mdkNumber, $mdkIndex);
+            $html .= '<button type="button" class="btn btn--ghost btn--sm"'
+                . ' data-curriculum-mdk-edit-open'
+                . ' data-item-id="' . $id . '"'
+                . ' data-module-id="' . $mdkModuleId . '"'
+                . ' data-component-index="' . $mdkIndex . '"'
+                . ' data-mdk-code="' . e($mdkCode) . '"'
+                . ' data-component-title="' . e($mdkTitle) . '"'
+                . ' data-start-abs="' . (int) ($item['start_abs_semester'] ?? 1) . '"'
+                . ' data-end-abs="' . (int) ($item['end_abs_semester'] ?? 1) . '"'
+                . ' data-teacher-id="' . (int) ($item['teacher_id'] ?? 0) . '"'
+                . ' data-redirect-tab="subjects"'
+                . '>Редактировать</button>'
+                . '<a href="curriculum_ktp.php?item_id=' . $id . '&group_id=' . $groupId . '&year=' . $year
+                . '" class="btn btn--ghost btn--sm">КТП</a>'
+                . '<form method="post" class="inline-form" onsubmit="return confirm(\'Удалить МДК из модуля?\');">'
+                . csrf_field()
+                . '<input type="hidden" name="action" value="delete_module_component">'
+                . '<input type="hidden" name="item_id" value="' . $id . '">'
+                . '<input type="hidden" name="redirect_tab" value="subjects">'
+                . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
+                . '</form>';
+        } else {
+            $html .= '<button type="button" class="btn btn--ghost btn--sm"'
+                . ' data-curriculum-edit-open'
+                . ' data-item-id="' . $id . '"'
+                . ' data-subject-name="' . e($item['subject_name']) . '"'
+                . ' data-semester="' . e((string) $item['semester']) . '"'
+                . ' data-teacher-id="' . (int) ($item['teacher_id'] ?? 0) . '"'
+                . '>Изменить</button>'
+                . '<a href="curriculum_ktp.php?item_id=' . $id . '&group_id=' . $groupId . '&year=' . $year
+                . '" class="btn btn--ghost btn--sm">КТП</a>'
+                . '<form method="post" class="inline-form" onsubmit="return confirm(\'Удалить предмет из учебного плана?\');">'
+                . csrf_field()
+                . '<input type="hidden" name="action" value="delete_item">'
+                . '<input type="hidden" name="item_id" value="' . $id . '">'
+                . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
+                . '</form>';
+        }
+
+        $html .= '</td></tr>';
     }
 
     return $html . '</tbody></table></div>';
