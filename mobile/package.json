@@ -1,0 +1,22 @@
+{
+  "name": "kpk-mobile",
+  "version": "1.4.0",
+  "private": true,
+  "description": "Android-оболочка КПК (Capacitor) для RuStore",
+  "scripts": {
+    "sync": "npx cap sync android",
+    "open": "npx cap open android",
+    "assets": "npx cap sync android"
+  },
+  "dependencies": {
+    "@capacitor/android": "^6.2.1",
+    "@capacitor/app": "^6.0.3",
+    "@capacitor/core": "^6.2.1",
+    "@capacitor/preferences": "^6.0.4",
+    "@capgo/capacitor-native-biometric": "^6.0.4",
+    "@capgo/inappbrowser": "^6.11.2"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^6.2.1"
+  }
+}

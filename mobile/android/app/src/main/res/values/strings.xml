@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">СПО-ПРОГРЕСС</string>
+    <string name="title_activity_main">СПО-ПРОГРЕСС</string>
+    <string name="package_name">ru.kpk.attendance</string>
+    <string name="custom_url_scheme">ru.kpk.attendance</string>
+</resources>

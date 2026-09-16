@@ -15,6 +15,11 @@
     align-items: flex-end;
 }
 
+.manual-brs-lessons-form #lessons_total {
+    width: 5rem;
+    max-width: 5rem;
+}
+
 .manual-brs-table tbody tr.manual-brs-row {
     cursor: pointer;
 }

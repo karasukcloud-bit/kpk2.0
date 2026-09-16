@@ -6,9 +6,15 @@ require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/roles.php';
 
 if (session_status() === PHP_SESSION_NONE) {
+    $sessionLifetime = 60 * 60 * 24 * 30;
+    ini_set('session.gc_maxlifetime', (string) $sessionLifetime);
+    $secure = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+        || ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443);
     session_start([
         'cookie_httponly' => true,
         'cookie_samesite' => 'Lax',
+        'cookie_secure' => $secure,
+        'cookie_lifetime' => $sessionLifetime,
         'use_strict_mode' => true,
     ]);
 }

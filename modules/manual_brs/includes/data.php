@@ -316,7 +316,7 @@ function manual_brs_build_student_rows(
     int $curriculumItemId,
     int $period
 ): array {
-    $siblings = manual_brs_sibling_periods($period);
+    $period = manual_brs_normalize_period($period);
     $semester = manual_brs_semester_from_period($period);
     $paMap = manual_brs_get_attestations_map($academicYear, $semester, $curriculumItemId);
     $rows = [];
@@ -325,31 +325,16 @@ function manual_brs_build_student_rows(
         $studentId = (int) $student['id'];
         $entry = $entries[$studentId] ?? null;
 
-        $siblingData = manual_brs_points_for_periods(
-            $academicYear,
-            $curriculumItemId,
-            $studentId,
-            $siblings
-        );
+        $periodPoints = null;
+        if ($entry && $entry['points'] !== null) {
+            $periodPoints = (float) $entry['points'];
+        }
         $paGrade = $paMap[$studentId] ?? null;
-        $sem = manual_brs_semester_total(
-            $siblingData[$siblings[0]]['points'] ?? null,
-            $siblingData[$siblings[1]]['points'] ?? null,
-            $paGrade
-        );
-
-        $p1 = $siblingData[$siblings[0]];
-        $p2 = $siblingData[$siblings[1]];
+        $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
 
         $rows[] = [
             'student' => $student,
             'entry' => $entry,
-            'period_1_id' => $siblings[0],
-            'period_2_id' => $siblings[1],
-            'period_1_display' => $p1['display'] ?? '',
-            'period_2_display' => $p2['display'] ?? '',
-            'period_1_points' => $p1['points'] ?? null,
-            'period_2_points' => $p2['points'] ?? null,
             'points' => $entry && $entry['points'] !== null ? (float) $entry['points'] : null,
             'grade' => $entry && $entry['grade'] !== null ? (int) $entry['grade'] : null,
             'display' => $entry

@@ -1,6 +1,166 @@
 (function () {
     const config = window.MANUAL_BRS_CONFIG || { lessonsTotal: 0, brs: {} };
     const brs = config.brs || {};
+
+    function formatNum(value, decimals) {
+        if (value === null || value === undefined || Number.isNaN(value)) {
+            return '—';
+        }
+        const fixed = Number(value).toFixed(decimals);
+        return fixed.replace(/\.?0+$/, '');
+    }
+
+    function syncPaSelectInRow(row, paGrade) {
+        const select = row.querySelector('[data-manual-brs-pa]');
+        if (select) {
+            select.value = paGrade == null || paGrade === '' ? '' : String(paGrade);
+        }
+        row.setAttribute('data-pa-grade', paGrade == null || paGrade === '' ? '' : String(paGrade));
+    }
+
+    function renderSemesterHtml(grade, points) {
+        if (grade === null || grade === undefined || grade === '') {
+            return '<span class="text-muted">—</span>';
+        }
+        const gradeNum = Math.max(2, Math.min(5, parseInt(grade, 10) || 2));
+        let html = '<div class="journal-total">'
+            + '<span class="journal-total__grade journal-total__grade--' + gradeNum + '">'
+            + gradeNum
+            + '</span>';
+        if (points !== null && points !== undefined && points !== '') {
+            html += '<span class="journal-total__points">' + formatNum(Number(points), 1) + '</span>';
+        }
+        return html + '</div>';
+    }
+
+    function updateRowSemester(row, data) {
+        const periodCell = row.querySelector('[data-manual-brs-period-cell]');
+        const semesterCell = row.querySelector('[data-manual-brs-semester-cell]');
+        if (periodCell) {
+            const display = data.period_display
+                || (data.calc && data.calc.display)
+                || '';
+            if (display !== undefined) {
+                periodCell.textContent = display || '—';
+            }
+        }
+        if (data.points !== undefined) {
+            row.setAttribute('data-points', data.points != null ? String(data.points) : '');
+        }
+        if (data.grade !== undefined) {
+            row.setAttribute('data-grade', data.grade != null ? String(data.grade) : '');
+        }
+        if (semesterCell) {
+            if (data.semester_html) {
+                semesterCell.innerHTML = data.semester_html;
+            } else {
+                semesterCell.innerHTML = renderSemesterHtml(data.semester_grade, data.semester_points);
+            }
+        }
+        if (data.pa_grade !== undefined) {
+            syncPaSelectInRow(row, data.pa_grade);
+        }
+    }
+
+    function applyRowsPayload(rowsMap) {
+        if (!rowsMap || typeof rowsMap !== 'object') {
+            return;
+        }
+        document.querySelectorAll('[data-manual-brs-open]').forEach((row) => {
+            const sid = row.getAttribute('data-student-id');
+            if (!sid || !rowsMap[sid]) {
+                return;
+            }
+            updateRowSemester(row, rowsMap[sid]);
+        });
+    }
+
+    const lessonsForm = document.querySelector('[data-manual-brs-lessons-form]');
+    const lessonsInput = document.querySelector('[data-manual-brs-lessons-input]');
+    const lessonsStatus = document.querySelector('[data-manual-brs-lessons-status]');
+    const lessonsLabel = document.querySelector('[data-manual-brs-lessons-label]');
+    let lessonsTimer = null;
+    let lessonsSaving = false;
+    let lessonsLastSaved = lessonsInput
+        ? String(parseInt(lessonsInput.value, 10) || 0)
+        : '';
+
+    function setLessonsStatus(text) {
+        if (lessonsStatus) {
+            lessonsStatus.textContent = text || '';
+        }
+    }
+
+    function applyLessonsTotal(value) {
+        const n = Math.max(0, Math.min(200, parseInt(value, 10) || 0));
+        config.lessonsTotal = n;
+        if (lessonsLabel) {
+            lessonsLabel.textContent = String(n);
+        }
+        return n;
+    }
+
+    async function saveLessonsTotal() {
+        if (!lessonsForm || !lessonsInput || lessonsSaving) {
+            return;
+        }
+        const value = String(Math.max(0, Math.min(200, parseInt(lessonsInput.value, 10) || 0)));
+        if (value === lessonsLastSaved) {
+            setLessonsStatus('');
+            return;
+        }
+        lessonsInput.value = value;
+        lessonsSaving = true;
+        setLessonsStatus('Сохранение…');
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(lessonsForm),
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Ошибка сохранения');
+            }
+            lessonsLastSaved = String(data.lessons_total != null ? data.lessons_total : value);
+            applyLessonsTotal(lessonsLastSaved);
+            applyRowsPayload(data.rows);
+            setLessonsStatus('Сохранено');
+            window.setTimeout(() => {
+                if (lessonsStatus && lessonsStatus.textContent === 'Сохранено') {
+                    setLessonsStatus('');
+                }
+            }, 1500);
+        } catch (err) {
+            setLessonsStatus(err.message || 'Не удалось сохранить');
+        } finally {
+            lessonsSaving = false;
+            const current = String(Math.max(0, Math.min(200, parseInt(lessonsInput.value, 10) || 0)));
+            if (current !== lessonsLastSaved) {
+                scheduleLessonsSave();
+            }
+        }
+    }
+
+    function scheduleLessonsSave() {
+        if (lessonsTimer) {
+            window.clearTimeout(lessonsTimer);
+        }
+        lessonsTimer = window.setTimeout(saveLessonsTotal, 400);
+    }
+
+    if (lessonsForm && lessonsInput) {
+        lessonsForm.addEventListener('submit', (event) => {
+            event.preventDefault();
+            saveLessonsTotal();
+        });
+        lessonsInput.addEventListener('change', saveLessonsTotal);
+        lessonsInput.addEventListener('input', scheduleLessonsSave);
+        lessonsInput.addEventListener('blur', saveLessonsTotal);
+    }
+
     const modal = document.querySelector('[data-manual-brs-modal]');
     if (!modal) {
         return;
@@ -50,14 +210,6 @@
             return null;
         }
         return Math.round((marks.reduce((a, b) => a + b, 0) / marks.length) * 100) / 100;
-    }
-
-    function formatNum(value, decimals) {
-        if (value === null || value === undefined || Number.isNaN(value)) {
-            return '—';
-        }
-        const fixed = Number(value).toFixed(decimals);
-        return fixed.replace(/\.?0+$/, '');
     }
 
     function pointsToGrade(points) {
@@ -125,51 +277,6 @@
         const grade = pointsToGrade(points);
         totalNode.textContent = formatNum(points, 1) + ' → ' + grade;
         return { points: points, grade: grade, display: formatNum(points, 1) + ' → ' + grade };
-    }
-
-    function syncPaSelectInRow(row, paGrade) {
-        const select = row.querySelector('[data-manual-brs-pa]');
-        if (select) {
-            select.value = paGrade == null || paGrade === '' ? '' : String(paGrade);
-        }
-        row.setAttribute('data-pa-grade', paGrade == null || paGrade === '' ? '' : String(paGrade));
-    }
-
-    function renderSemesterHtml(grade, points) {
-        if (grade === null || grade === undefined || grade === '') {
-            return '<span class="text-muted">—</span>';
-        }
-        const gradeNum = Math.max(2, Math.min(5, parseInt(grade, 10) || 2));
-        let html = '<div class="journal-total">'
-            + '<span class="journal-total__grade journal-total__grade--' + gradeNum + '">'
-            + gradeNum
-            + '</span>';
-        if (points !== null && points !== undefined && points !== '') {
-            html += '<span class="journal-total__points">' + formatNum(Number(points), 1) + '</span>';
-        }
-        return html + '</div>';
-    }
-
-    function updateRowSemester(row, data) {
-        const p1 = row.querySelector('[data-manual-brs-p1-cell]');
-        const p2 = row.querySelector('[data-manual-brs-p2-cell]');
-        const semesterCell = row.querySelector('[data-manual-brs-semester-cell]');
-        if (p1 && data.period_1_display !== undefined) {
-            p1.textContent = data.period_1_display || '—';
-        }
-        if (p2 && data.period_2_display !== undefined) {
-            p2.textContent = data.period_2_display || '—';
-        }
-        if (semesterCell) {
-            if (data.semester_html) {
-                semesterCell.innerHTML = data.semester_html;
-            } else {
-                semesterCell.innerHTML = renderSemesterHtml(data.semester_grade, data.semester_points);
-            }
-        }
-        if (data.pa_grade !== undefined) {
-            syncPaSelectInRow(row, data.pa_grade);
-        }
     }
 
     function openModal(row) {

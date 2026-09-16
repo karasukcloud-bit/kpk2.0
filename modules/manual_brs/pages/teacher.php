@@ -90,8 +90,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                 (int) ($_POST['lessons_total'] ?? 0)
             );
             if ($result['success']) {
+                $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+                    && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+                if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
+                    $entries = manual_brs_get_entries_map((int) $sheet['id']);
+                    $students = get_students_by_group($groupId);
+                    $builtRows = manual_brs_build_student_rows(
+                        $students,
+                        $entries,
+                        $academicYear,
+                        $itemId,
+                        $period
+                    );
+                    $rowsPayload = [];
+                    foreach ($builtRows as $row) {
+                        $sid = (int) $row['student']['id'];
+                        $rowsPayload[$sid] = [
+                            'period_display' => $row['display'],
+                            'points' => $row['points'],
+                            'grade' => $row['grade'],
+                            'pa_grade' => $row['pa_grade'],
+                            'semester_html' => $row['semester_html'],
+                            'semester_grade' => $row['semester_grade'],
+                            'semester_points' => $row['semester_points'],
+                        ];
+                    }
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode([
+                        'success' => true,
+                        'lessons_total' => (int) ($result['lessons_total'] ?? 0),
+                        'rows' => $rowsPayload,
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
                 flash_set('success', 'Число занятий периода сохранено.');
                 header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
+                exit;
+            }
+            $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+                && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
+            if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
+                header('Content-Type: application/json; charset=utf-8');
+                echo json_encode([
+                    'success' => false,
+                    'error' => $result['error'] ?? 'Не удалось сохранить.',
+                ], JSON_UNESCAPED_UNICODE);
                 exit;
             }
             $error = $result['error'] ?? 'Не удалось сохранить.';
@@ -119,22 +162,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                         && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
                     if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
                         header('Content-Type: application/json; charset=utf-8');
-                        $siblings = manual_brs_sibling_periods($period);
-                        $siblingData = manual_brs_points_for_periods($academicYear, $itemId, $studentId, $siblings);
                         $paGrade = $paResult['grade'];
-                        $sem = manual_brs_semester_total(
-                            $siblingData[$siblings[0]]['points'] ?? null,
-                            $siblingData[$siblings[1]]['points'] ?? null,
-                            $paGrade
-                        );
+                        $periodPoints = isset($result['calc']['points'])
+                            ? (float) $result['calc']['points']
+                            : null;
+                        $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+                        $periodDisplay = $result['calc']['display'] ?? '';
                         echo json_encode([
                             'success' => true,
                             'calc' => $result['calc'],
                             'current_period' => $period,
-                            'period_1_id' => $siblings[0],
-                            'period_2_id' => $siblings[1],
-                            'period_1_display' => $siblingData[$siblings[0]]['display'] ?? '',
-                            'period_2_display' => $siblingData[$siblings[1]]['display'] ?? '',
+                            'period_display' => $periodDisplay,
                             'pa_grade' => $paGrade,
                             'semester_display' => $sem['display'],
                             'semester_grade' => $sem['grade'],
@@ -165,16 +203,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                     && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
                 if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
                     header('Content-Type: application/json; charset=utf-8');
-                    $siblings = manual_brs_sibling_periods($period);
-                    $siblingData = manual_brs_points_for_periods($academicYear, $itemId, $studentId, $siblings);
-                    $sem = manual_brs_semester_total(
-                        $siblingData[$siblings[0]]['points'] ?? null,
-                        $siblingData[$siblings[1]]['points'] ?? null,
-                        $result['grade']
+                    $periodData = manual_brs_points_for_periods(
+                        $academicYear,
+                        $itemId,
+                        $studentId,
+                        [$period]
                     );
+                    $periodPoints = $periodData[$period]['points'] ?? null;
+                    $sem = manual_brs_semester_total($periodPoints, null, $result['grade']);
+                    $periodDisplay = $periodData[$period]['display'] ?? '';
                     echo json_encode([
                         'success' => true,
                         'pa_grade' => $result['grade'],
+                        'period_display' => $periodDisplay,
                         'semester_display' => $sem['display'],
                         'semester_grade' => $sem['grade'],
                         'semester_points' => $sem['points'],
@@ -219,7 +260,6 @@ require __DIR__ . '/../../../includes/header.php';
                 <h1>Ручное выставление БРС</h1>
                 <p class="text-muted">
                     Временный модуль · <?= e($academicYear) ?> · <?= e($periodMeta['label']) ?>
-                    (<?= e($periodMeta['semester_label']) ?>)
                 </p>
             </div>
         </div>
@@ -242,13 +282,13 @@ require __DIR__ . '/../../../includes/header.php';
                 <input type="hidden" name="item_id" value="<?= $itemId ?>">
             <?php endif; ?>
             <div class="form__group">
-                <label for="manual_brs_period">Период (четверть)</label>
+                <label for="manual_brs_period">Семестр</label>
                 <select id="manual_brs_period" name="period" onchange="this.form.submit()">
                     <?= manual_brs_render_period_options($period) ?>
                 </select>
             </div>
             <p class="text-muted manual-brs-period-hint">
-                В семестре два периода. Итог семестра — среднее баллов двух периодов.
+                Два периода в учебном году: 1-й и 2-й семестр. Итог семестра — по баллам выбранного семестра и ПА.
             </p>
         </form>
     </section>
@@ -268,9 +308,10 @@ require __DIR__ . '/../../../includes/header.php';
                 </div>
             </div>
 
-            <form method="post" class="form form--inline manual-brs-lessons-form">
+            <form method="post" class="form form--inline manual-brs-lessons-form" data-manual-brs-lessons-form>
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save_lessons_total">
+                <input type="hidden" name="ajax" value="1">
                 <div class="form__group">
                     <label for="lessons_total">Занятий в периоде (для посещаемости)</label>
                     <input
@@ -281,27 +322,22 @@ require __DIR__ . '/../../../includes/header.php';
                         max="200"
                         value="<?= (int) $sheet['lessons_total'] ?>"
                         required
+                        data-manual-brs-lessons-input
                     >
+                    <p class="form__hint" data-manual-brs-lessons-status></p>
                 </div>
-                <button type="submit" class="btn btn--ghost btn--sm">Сохранить</button>
             </form>
 
             <?php if ($students === []): ?>
                 <p class="text-muted">В группе нет студентов.</p>
             <?php else: ?>
-                <?php
-                $siblings = manual_brs_sibling_periods($period);
-                $period1Label = 'Баллы ' . $siblings[0] . ' периода';
-                $period2Label = 'Баллы ' . $siblings[1] . ' периода';
-                ?>
                 <div class="table-wrap">
                     <table class="table manual-brs-table">
                         <thead>
                             <tr>
                                 <th>№</th>
                                 <th>Студент</th>
-                                <th><?= e($period1Label) ?></th>
-                                <th><?= e($period2Label) ?></th>
+                                <th>Баллы (<?= e($periodMeta['label']) ?>)</th>
                                 <th>ПА</th>
                                 <th>Итог семестра</th>
                             </tr>
@@ -326,8 +362,7 @@ require __DIR__ . '/../../../includes/header.php';
                                 >
                                     <td><?= $index + 1 ?></td>
                                     <td><strong><?= e($st['full_name']) ?></strong></td>
-                                    <td data-manual-brs-p1-cell><?= $row['period_1_display'] !== '' ? e($row['period_1_display']) : '—' ?></td>
-                                    <td data-manual-brs-p2-cell><?= $row['period_2_display'] !== '' ? e($row['period_2_display']) : '—' ?></td>
+                                    <td data-manual-brs-period-cell><?= $row['display'] !== '' ? e($row['display']) : '—' ?></td>
                                     <td class="manual-brs-pa-cell" onclick="event.stopPropagation();">
                                         <select
                                             class="manual-brs-pa-select"
@@ -348,8 +383,8 @@ require __DIR__ . '/../../../includes/header.php';
                     </table>
                 </div>
                 <p class="text-muted">
-                    Нажмите на строку студента, чтобы заполнить данные текущего периода.
-                    ПА: пусто — итог по баллам периодов; «2» — итог 2; «3–5» — среднее оценки БРС и ПА.
+                    Нажмите на строку студента, чтобы заполнить данные выбранного семестра.
+                    ПА: пусто — итог по баллам БРС; «2» — итог 2; «3–5» — среднее оценки БРС и ПА.
                 </p>
             <?php endif; ?>
         </section>
@@ -412,7 +447,7 @@ require __DIR__ . '/../../../includes/header.php';
 
                     <div class="manual-brs-result" data-manual-brs-preview>
                         <div>Итог периода: <strong data-manual-brs-total>—</strong></div>
-                        <div class="text-muted">Занятий в периоде: <?= (int) $sheet['lessons_total'] ?></div>
+                        <div class="text-muted">Занятий в периоде: <span data-manual-brs-lessons-label><?= (int) $sheet['lessons_total'] ?></span></div>
                     </div>
 
                     <div class="form__actions">
@@ -437,11 +472,9 @@ require __DIR__ . '/../../../includes/header.php';
             'lessonsTotal' => (int) $sheet['lessons_total'],
             'brs' => $brsWeights,
             'currentPeriod' => $period,
-            'period1Id' => manual_brs_sibling_periods($period)[0],
-            'period2Id' => manual_brs_sibling_periods($period)[1],
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20260913c"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20260916c"></script>
 
     <?php elseif ($selectedGroup !== null): ?>
         <section class="panel">

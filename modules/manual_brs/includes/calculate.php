@@ -248,10 +248,10 @@ function manual_brs_calculate(array $input, ?array $brs = null): array
     ];
 }
 
-/** Итог семестра по двум периодам + ПА. */
+/** Итог семестра: баллы периода (семестра) + ПА. Второй период опционален (устаревшее усреднение). */
 function manual_brs_semester_total(
     ?float $pointsA,
-    ?float $pointsB,
+    ?float $pointsB = null,
     ?int $paGrade = null,
     ?array $brs = null
 ): array {

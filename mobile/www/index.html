@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>СПО-ПРОГРЕСС</title>
+  <link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+  <div id="app" class="app">
+    <section id="screen-boot" class="screen" hidden>
+      <div class="auth-card screen--center">
+        <div class="auth-card__header">
+          <div class="auth-card__brand" aria-label="СПО-ПРОГРЕСС">
+            <img class="auth-card__brand-logo" src="img/logo-icon.png" alt="" width="48" height="48">
+            <span class="auth-card__brand-title">
+              <span class="auth-card__brand-spo">СПО-</span><span class="auth-card__brand-progress">ПРОГРЕСС</span>
+            </span>
+          </div>
+          <p class="boot-status">Загрузка…</p>
+        </div>
+      </div>
+    </section>
+
+    <section id="screen-settings" class="screen" hidden>
+      <div class="auth-card">
+        <div class="auth-card__header">
+          <div class="auth-card__brand" aria-label="СПО-ПРОГРЕСС">
+            <img class="auth-card__brand-logo" src="img/logo-icon.png" alt="" width="48" height="48">
+            <span class="auth-card__brand-title">
+              <span class="auth-card__brand-spo">СПО-</span><span class="auth-card__brand-progress">ПРОГРЕСС</span>
+            </span>
+          </div>
+          <h1>Адрес сервера</h1>
+          <p>Укажите URL сайта (HTTPS). Для внутренней сети можно использовать HTTP.</p>
+        </div>
+        <label class="field">
+          <span>Базовый URL</span>
+          <input id="server-url" type="url" inputmode="url" autocomplete="url"
+                 placeholder="https://example.ru" value="">
+        </label>
+        <p id="settings-error" class="error" hidden></p>
+        <button type="button" id="btn-save-server" class="btn btn--primary">Сохранить</button>
+      </div>
+    </section>
+
+    <section id="screen-lock" class="screen" hidden>
+      <div class="auth-card">
+        <div class="auth-card__header">
+          <div class="auth-card__brand" aria-label="СПО-ПРОГРЕСС">
+            <img class="auth-card__brand-logo" src="img/logo-icon.png" alt="" width="48" height="48">
+            <span class="auth-card__brand-title">
+              <span class="auth-card__brand-spo">СПО-</span><span class="auth-card__brand-progress">ПРОГРЕСС</span>
+            </span>
+          </div>
+          <h1>Вход по PIN</h1>
+          <p id="lock-hint">Введите 4-значный код</p>
+        </div>
+        <div class="pin-panel">
+          <div class="pin-dots" id="pin-dots" aria-hidden="true"></div>
+          <input id="pin-input" class="pin-input" type="password" inputmode="numeric"
+                 pattern="[0-9]*" maxlength="4" autocomplete="one-time-code" autofocus
+                 aria-label="PIN-код">
+        </div>
+        <p id="lock-error" class="error" hidden></p>
+        <button type="button" id="btn-biometric" class="btn btn--ghost" hidden>Войти по отпечатку</button>
+        <button type="button" id="btn-open-settings" class="btn btn--link">Сменить сервер</button>
+      </div>
+    </section>
+
+    <section id="screen-setup-pin" class="screen" hidden>
+      <div class="auth-card">
+        <div class="auth-card__header">
+          <div class="auth-card__brand" aria-label="СПО-ПРОГРЕСС">
+            <img class="auth-card__brand-logo" src="img/logo-icon.png" alt="" width="48" height="48">
+            <span class="auth-card__brand-title">
+              <span class="auth-card__brand-spo">СПО-</span><span class="auth-card__brand-progress">ПРОГРЕСС</span>
+            </span>
+          </div>
+          <h1>Создайте PIN</h1>
+          <p>4 цифры для быстрого входа в приложение</p>
+        </div>
+        <label class="field">
+          <span>PIN</span>
+          <input id="setup-pin" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="new-password">
+        </label>
+        <label class="field">
+          <span>Повтор PIN</span>
+          <input id="setup-pin2" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="4" autocomplete="new-password">
+        </label>
+        <label class="check">
+          <input type="checkbox" id="setup-bio" checked>
+          <span>Использовать отпечаток / Face ID</span>
+        </label>
+        <p id="setup-error" class="error" hidden></p>
+        <button type="button" id="btn-save-pin" class="btn btn--primary">Сохранить PIN</button>
+      </div>
+    </section>
+  </div>
+
+  <script src="js/storage.js"></script>
+  <script src="js/crypto-pin.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

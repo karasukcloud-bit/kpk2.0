@@ -17,7 +17,7 @@ function manual_brs_require_gradebook_viewer(): void
 
 function manual_brs_periods_for_semester(string $semester): array
 {
-    return $semester === '2' ? [3, 4] : [1, 2];
+    return [manual_brs_period_for_semester($semester)];
 }
 
 /**
@@ -48,6 +48,7 @@ function manual_brs_get_gradebook_grades(
 
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
+            $periodId = $periods[0];
             $periodData = manual_brs_points_for_periods(
                 $academicYear,
                 $itemId,
@@ -55,8 +56,8 @@ function manual_brs_get_gradebook_grades(
                 $periods
             );
             $sem = manual_brs_semester_total(
-                $periodData[$periods[0]]['points'] ?? null,
-                $periodData[$periods[1]]['points'] ?? null,
+                $periodData[$periodId]['points'] ?? null,
+                null,
                 $paMap[$studentId] ?? null
             );
             if ($sem['grade'] !== null) {
@@ -99,29 +100,13 @@ function manual_brs_period_has_grades(
     return (bool) $stmt->fetchColumn();
 }
 
-/**
- * Контрольная неделя: есть оценки только за 1-й период семестра, за 2-й ещё нет.
- */
 function manual_brs_is_control_week(
     int $groupId,
     string $academicYear,
     string $semester,
     array $subjects
 ): bool {
-    $itemIds = [];
-    foreach ($subjects as $subject) {
-        $itemIds[] = (int) ($subject['curriculum_item_id'] ?? $subject['id'] ?? 0);
-    }
-    $itemIds = array_values(array_filter($itemIds));
-    if ($itemIds === []) {
-        return false;
-    }
-
-    $periods = manual_brs_periods_for_semester($semester);
-    $hasFirst = manual_brs_period_has_grades($groupId, $academicYear, $periods[0], $itemIds);
-    $hasSecond = manual_brs_period_has_grades($groupId, $academicYear, $periods[1], $itemIds);
-
-    return $hasFirst && !$hasSecond;
+    return false;
 }
 
 function manual_brs_gradebook_title(string $groupNumber, string $semester, string $academicYear): string
