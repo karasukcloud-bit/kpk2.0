@@ -86,6 +86,11 @@ body {
     background: #eef8ef;
 }
 
+.pdf-table__totals td {
+    background: #e8e8e8;
+    font-weight: bold;
+}
+
 .pdf-empty {
     color: #888;
 }
@@ -163,6 +168,36 @@ function educator_daily_attendance_pdf_render_html(string $date, array $dailyRep
             . '</td>';
         $html .= '</tr>';
     }
+
+    $totalsByReason = [];
+    foreach ($reasons as $reason) {
+        $totalsByReason[(int) $reason['id']] = 0;
+    }
+    $totalUnexcused = 0;
+    foreach ($rows as $row) {
+        foreach ($reasons as $reason) {
+            $reasonId = (int) $reason['id'];
+            $totalsByReason[$reasonId] += (int) ($row['reason_totals'][$reasonId] ?? 0);
+        }
+        $totalUnexcused += (int) ($row['unexcused'] ?? 0);
+    }
+
+    $html .= '<tr class="pdf-table__totals">';
+    $html .= '<td class="pdf-table__group">Итого</td>';
+    $html .= '<td class="pdf-table__curator"><span class="pdf-empty">—</span></td>';
+    foreach ($reasons as $reason) {
+        $count = (int) ($totalsByReason[(int) $reason['id']] ?? 0);
+        $html .= '<td class="pdf-table__reason">'
+            . ($count > 0 ? (string) $count : '<span class="pdf-empty">—</span>')
+            . '</td>';
+    }
+    $html .= '<td class="pdf-table__unexcused">'
+        . ($totalUnexcused > 0 ? (string) $totalUnexcused : '<span class="pdf-empty">—</span>')
+        . '</td>';
+    $html .= '<td class="pdf-table__students">'
+        . ($totalUnexcused > 0 ? ($totalUnexcused . ' студ.') : '<span class="pdf-empty">—</span>')
+        . '</td>';
+    $html .= '</tr>';
 
     $html .= '</tbody></table>';
     $html .= '<div class="pdf-note">Зелёная подсветка строки — за выбранный день дата уже внесена куратором.</div>';

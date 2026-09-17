@@ -13,6 +13,19 @@ $formatCell = static function (int $value): string {
 
     return '<span class="eda-cell-value">' . $value . '</span>';
 };
+
+$totalsByReason = [];
+foreach ($reasons as $reason) {
+    $totalsByReason[(int) $reason['id']] = 0;
+}
+$totalUnexcused = 0;
+foreach ($rows as $row) {
+    foreach ($reasons as $reason) {
+        $reasonId = (int) $reason['id'];
+        $totalsByReason[$reasonId] += (int) ($row['reason_totals'][$reasonId] ?? 0);
+    }
+    $totalUnexcused += (int) ($row['unexcused'] ?? 0);
+}
 ?>
 <?php if ($rows === []): ?>
     <p class="text-muted">Группы пока не добавлены.</p>
@@ -104,6 +117,34 @@ $formatCell = static function (int $value): string {
                 </tr>
                 <?php endforeach; ?>
             </tbody>
+            <tfoot>
+                <tr class="educator-daily-attendance-table__totals">
+                    <td class="educator-daily-attendance-table__group">
+                        <span class="eda-totals-label">Итого</span>
+                    </td>
+                    <td class="eda-col-curator"><span class="eda-cell-empty">—</span></td>
+                    <?php foreach ($reasons as $reason): ?>
+                    <?php $reasonTotal = (int) ($totalsByReason[(int) $reason['id']] ?? 0); ?>
+                    <td class="eda-col-reason<?= $reasonTotal > 0 ? ' eda-col-reason--filled' : '' ?>">
+                        <?= $formatCell($reasonTotal) ?>
+                    </td>
+                    <?php endforeach; ?>
+                    <td class="eda-col-unexcused<?= $totalUnexcused > 0 ? ' eda-col-unexcused--filled' : '' ?>">
+                        <?php if ($totalUnexcused > 0): ?>
+                        <span class="eda-unexcused-badge"><?= $totalUnexcused ?></span>
+                        <?php else: ?>
+                        <span class="eda-cell-empty">—</span>
+                        <?php endif; ?>
+                    </td>
+                    <td class="educator-attendance-table__students">
+                        <?php if ($totalUnexcused > 0): ?>
+                        <span class="eda-totals-students"><?= $totalUnexcused ?> студ.</span>
+                        <?php else: ?>
+                        <span class="eda-cell-empty">—</span>
+                        <?php endif; ?>
+                    </td>
+                </tr>
+            </tfoot>
         </table>
     </div>
 <?php endif; ?>

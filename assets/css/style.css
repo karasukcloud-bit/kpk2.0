@@ -5110,6 +5110,30 @@ code {
     border-bottom: none;
 }
 
+.educator-daily-attendance-page .educator-daily-attendance-table tfoot td {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    background: #f1f5f9;
+    border-top: 2px solid var(--color-border);
+    border-bottom: none;
+    padding: 0.65rem;
+    font-weight: 600;
+    vertical-align: middle;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__totals .eda-totals-label {
+    display: inline-block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.educator-daily-attendance-page .educator-daily-attendance-table__totals .eda-totals-students {
+    font-size: 0.875rem;
+    color: #334155;
+}
+
 .educator-daily-attendance-page .educator-daily-attendance-table tbody tr:hover td {
     background: #f8fafc;
 }

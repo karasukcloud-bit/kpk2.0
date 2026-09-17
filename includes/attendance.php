@@ -680,6 +680,7 @@ function build_educator_daily_attendance_report(string $date): array
             'group_number' => (string) $group['number'],
             'curator_name' => trim((string) ($group['curator_name'] ?? '')),
             'reason_totals' => $reasonTotals,
+            'reason_students' => [],
             'unexcused' => 0,
             'unexcused_students' => [],
             'has_absences' => false,
@@ -718,20 +719,22 @@ function build_educator_daily_attendance_report(string $date): array
         $excused = (int) $entry['excused_lessons'];
         $unexcused = (int) $entry['unexcused_lessons'];
         $reasonId = $entry['reason_id'] !== null ? (int) $entry['reason_id'] : null;
+        $studentId = (int) $entry['student_id'];
 
         if ($excused > 0 && $reasonId !== null) {
             if (!array_key_exists($reasonId, $rows[$groupId]['reason_totals'])) {
                 $rows[$groupId]['reason_totals'][$reasonId] = 0;
             }
-            $rows[$groupId]['reason_totals'][$reasonId] += $excused;
+            if (!isset($rows[$groupId]['reason_students'][$reasonId][$studentId])) {
+                $rows[$groupId]['reason_students'][$reasonId][$studentId] = true;
+                $rows[$groupId]['reason_totals'][$reasonId] += 1;
+            }
         }
 
         if ($unexcused <= 0) {
             continue;
         }
 
-        $rows[$groupId]['unexcused'] += $unexcused;
-        $studentId = (int) $entry['student_id'];
         if (!isset($rows[$groupId]['unexcused_students'][$studentId])) {
             $rows[$groupId]['unexcused_students'][$studentId] = [
                 'full_name' => person_last_first_name((string) $entry['full_name']),
@@ -743,12 +746,14 @@ function build_educator_daily_attendance_report(string $date): array
 
     $reportRows = [];
     foreach ($rows as $row) {
+        unset($row['reason_students']);
         $students = array_values($row['unexcused_students']);
         usort(
             $students,
             static fn (array $a, array $b): int => strcmp($a['full_name'], $b['full_name'])
         );
         $row['unexcused_students'] = $students;
+        $row['unexcused'] = count($students);
         $reportRows[] = $row;
     }
 
