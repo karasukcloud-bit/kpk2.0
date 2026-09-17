@@ -101,6 +101,8 @@ function run_migrations(PDO $pdo): void
     ensure_archive_journal_topics_schema($pdo);
     ensure_student_accounts_schema($pdo);
     ensure_notifications_schema($pdo);
+    require_once __DIR__ . '/mobile_notification_schedules.php';
+    ensure_mobile_notification_schedules_schema($pdo);
     ensure_glaz_schema($pdo);
     ensure_expelled_students_schema($pdo);
     ensure_expelled_period_schema($pdo);

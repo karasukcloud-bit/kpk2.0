@@ -39,6 +39,10 @@ $currentAdminTab = $currentAdminTab ?? 'teachers';
        class="admin-tabs__item<?= $currentAdminTab === 'notifications' ? ' admin-tabs__item--active' : '' ?>">
         Уведомления
     </a>
+    <a href="mobile_notifications.php"
+       class="admin-tabs__item<?= $currentAdminTab === 'mobile_notifications' ? ' admin-tabs__item--active' : '' ?>">
+        Уведомления на телефон
+    </a>
     <a href="logs.php"
        class="admin-tabs__item<?= $currentAdminTab === 'logs' ? ' admin-tabs__item--active' : '' ?>">
         Журнал действий

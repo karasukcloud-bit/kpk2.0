@@ -4036,6 +4036,7 @@ body.is-col-resizing * {
 .footer {
     text-align: center;
     padding: 1rem;
+    padding-bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
     color: var(--color-muted);
     font-size: 0.8125rem;
 }
@@ -4258,6 +4259,11 @@ code {
 
     .main {
         padding: 1rem 0.75rem;
+    }
+
+    .footer {
+        /* Отступ над системной панелью кнопок Android / жестовой полосой */
+        padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px) + 3rem);
     }
 
     .panel {

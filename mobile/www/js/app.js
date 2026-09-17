@@ -24,6 +24,7 @@
     setupBio: document.getElementById('setup-bio'),
     setupError: document.getElementById('setup-error'),
     btnSavePin: document.getElementById('btn-save-pin'),
+    bootStatus: document.getElementById('boot-status'),
   };
 
   let state = {
@@ -307,6 +308,13 @@
     });
   }
 
+  function showPreloader(message) {
+    if (els.bootStatus) {
+      els.bootStatus.textContent = message || 'Загрузка…';
+    }
+    show('boot');
+  }
+
   async function openSite(startUrl) {
     const InAppBrowser = plugin('InAppBrowser');
     const url = startUrl || siteHomeUrl();
@@ -314,15 +322,17 @@
       window.open(url, '_blank');
       return;
     }
+    showPreloader('Загрузка приложения…');
     await ensureBrowserListeners();
     const cookies = await restoreSessionCookies();
     const cookieHeader = cookiesToHeader(cookies);
     state.browserOpen = true;
     const options = {
       url,
-      backgroundColor: '#f1f5f9',
+      // плагин принимает только white|black; иначе будет чёрный экран
+      backgroundColor: 'white',
       toolbarType: 'blank',
-      isPresentAfterPageLoad: false,
+      isPresentAfterPageLoad: true,
       disableGoBackOnNativeApplication: false,
       activeNativeNavigationForWebview: true,
     };
@@ -334,14 +344,27 @@
 
   async function openLoginFlow() {
     state.awaitingPinSetup = !(await KpkStorage.isPinSet());
-    show('boot');
+    showPreloader('Загрузка приложения…');
+    await syncNotificationSchedules();
     await openSite(loginUrl());
+  }
+
+  async function syncNotificationSchedules() {
+    if (!state.serverUrl || !globalThis.KpkNotifySchedules) {
+      return;
+    }
+    try {
+      await KpkNotifySchedules.syncFromServer(state.serverUrl);
+    } catch (e) {
+      // сеть / разрешения — не блокируем вход
+    }
   }
 
   async function afterUnlock() {
     suppressLockResume(3000);
     state.unlocked = true;
-    show('boot');
+    showPreloader('Загрузка приложения…');
+    await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);
   }
@@ -371,7 +394,7 @@
   }
 
   async function boot() {
-    show('boot');
+    showPreloader('Загрузка…');
     state.serverUrl = (await KpkStorage.getServerUrl()) || DEFAULT_SERVER;
     state.pinSet = await KpkStorage.isPinSet();
     state.bioEnabled = await KpkStorage.isBioEnabled();
@@ -420,7 +443,6 @@
       return;
     }
     if (state.pinSet && state.unlocked) {
-      show('boot');
       await openSite(siteHomeUrl());
       return;
     }
@@ -481,7 +503,8 @@
     state.bioEnabled = wantBio;
     state.unlocked = true;
     suppressLockResume(3000);
-    show('boot');
+    showPreloader('Загрузка приложения…');
+    await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);
   });

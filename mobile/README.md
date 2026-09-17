@@ -44,27 +44,21 @@ APK: `mobile/android/app/build/outputs/apk/debug/app-debug.apk`
 
 ## Сборка релиза для RuStore
 
-### 1. Keystore (один раз)
+Подробный чеклист и тексты для витрины: [`RUSTORE.md`](RUSTORE.md).
 
-```bash
-cd mobile
-keytool -genkey -v -keystore android/kpk-release.keystore -alias kpk -keyalg RSA -keysize 2048 -validity 10000
-copy keystore.properties.example keystore.properties
-```
+### 1. Keystore
 
-Отредактируйте `mobile/keystore.properties` (пароли и путь). Файл **не коммитить**.
+Уже создан локально: `kpk-release.keystore` + `keystore.properties`  
+Секреты: `RELEASE_CREDENTIALS.txt` (не коммитить, хранить резервную копию).
 
 ### 2. AAB / APK
 
 ```bash
 cd mobile
-npx cap sync android
-cd android
-.\gradlew.bat bundleRelease
-.\gradlew.bat assembleRelease
+npm run release
 ```
 
-- AAB: `android/app/build/outputs/bundle/release/app-release.aab` (предпочтительно для RuStore)
+- AAB: `android/app/build/outputs/bundle/release/app-release.aab`
 - APK: `android/app/build/outputs/apk/release/app-release.apk`
 
 Перед каждой публикацией поднимайте `versionCode` и `versionName` в [`android/app/build.gradle`](android/app/build.gradle).
@@ -72,8 +66,8 @@ cd android
 ### 3. RuStore Console
 
 1. Создайте приложение с package name `ru.kpk.attendance`.
-2. Загрузите AAB/APK, заполните описание, скриншоты, политику конфиденциальности.
-3. Укажите, что приложение использует биометрию и доступ в интернет к вашему серверу учёта.
+2. Загрузите AAB (или APK), заполните описание, скриншоты, политику: `/privacy.php`.
+3. Укажите тестовый логин для модераторов.
 4. Отправьте на модерацию.
 
 ## Структура
@@ -96,6 +90,21 @@ mobile/
 | `@capgo/inappbrowser` | WebView сайта + события URL |
 | `@capgo/capacitor-native-biometric` | отпечаток / Face |
 | `@capacitor/app` | блокировка при возврате в приложение |
+| `@capacitor/local-notifications` | уведомления по расписанию с сервера |
+
+## Уведомления по расписанию
+
+Админ: `admin/mobile_notifications.php` — текст, время, ежедневно/еженедельно/ежемесячно.
+
+API для приложения: `GET /api/mobile_notification_schedules.php`
+
+После входа по PIN приложение запрашивает разрешение и синхронизирует расписания (локальное время устройства, `on` + repeats).
+
+**Проверка в debug:**
+1. В админке создайте уведомление на время через 1–2 минуты (ежедневно).
+2. Переустановите/откройте приложение, разрешите уведомления.
+3. Сверните приложение — в шторке должно появиться уведомление.
+4. На Android 12+: при необходимости разрешите «Будильники и напоминания» для точного времени.
 
 ## Безопасность PIN
 

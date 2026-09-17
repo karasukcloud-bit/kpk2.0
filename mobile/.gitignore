@@ -7,6 +7,8 @@ android/captures/
 *.keystore
 *.jks
 keystore.properties
+RELEASE_CREDENTIALS.txt
+rustore-upload/
 .idea/
 *.iml
 .DS_Store
