@@ -384,7 +384,7 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         table.addEventListener('mouseover', (event) => {
-            if (table.closest('.journal-table-wrap.is-dragging')) {
+            if (table.closest('.journal-table-wrap.is-dragging, .attendance-table-wrap.is-dragging')) {
                 return;
             }
             const cell = event.target instanceof Element
@@ -626,7 +626,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('click', () => closeAllMenus());
     }
 
-    document.querySelectorAll('.journal-table-wrap').forEach((wrap) => {
+    document.querySelectorAll('.journal-table-wrap, .attendance-table-wrap').forEach((wrap) => {
         let isDragging = false;
         let startX = 0;
         let startScrollLeft = 0;
@@ -639,7 +639,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
             return Boolean(
                 target.closest(
-                    'button, a, input, select, textarea, label, .journal-mark, .journal-flags, [data-mark-trigger], [data-flag], [data-mark-menu], [data-mark-option]'
+                    'button, a, input, select, textarea, label, .journal-mark, .journal-flags, [data-mark-trigger], [data-flag], [data-mark-menu], [data-mark-option], .journal-icon-btn'
                 )
             );
         };

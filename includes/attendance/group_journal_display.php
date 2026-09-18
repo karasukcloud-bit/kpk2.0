@@ -42,7 +42,7 @@ $groupId = (int) $group['id'];
         <?php endif; ?>
     </p>
 <?php else: ?>
-    <div class="table-wrap">
+    <div class="table-wrap attendance-table-wrap">
         <table class="table attendance-table">
             <thead>
                 <tr>

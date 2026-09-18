@@ -4,6 +4,6 @@
             <p class="footer__version">Версия <?= e(app_version()) ?></p>
         </footer>
     </div>
-    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20260912c"></script>
+    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20260918a"></script>
 </body>
 </html>

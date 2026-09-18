@@ -1443,6 +1443,29 @@ body {
     margin: 0 -0.5rem;
 }
 
+.attendance-table-wrap {
+    cursor: grab;
+    scrollbar-gutter: stable;
+}
+
+.attendance-table-wrap.is-dragging {
+    cursor: grabbing;
+    user-select: none;
+}
+
+.attendance-table-wrap.is-dragging * {
+    cursor: grabbing !important;
+}
+
+.attendance-table-wrap button,
+.attendance-table-wrap a,
+.attendance-table-wrap input,
+.attendance-table-wrap select,
+.attendance-table-wrap textarea,
+.attendance-table-wrap .journal-icon-btn {
+    cursor: pointer;
+}
+
 .table {
     width: 100%;
     border-collapse: collapse;
