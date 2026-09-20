@@ -1,0 +1,8 @@
+# Локальный обходной node_modules (не коммитить)
+mobile_nm/
+
+# Системное
+.vscode/
+.idea/
+*.iml
+.DS_Store

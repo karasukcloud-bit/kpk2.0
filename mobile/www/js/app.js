@@ -206,11 +206,49 @@
     }
   }
 
+  function apiUrl(path) {
+    return String(state.serverUrl || '').replace(/\/+$/, '') + path;
+  }
+
+  function pickPhpSessionId(cookies) {
+    if (!cookies || typeof cookies !== 'object') {
+      return '';
+    }
+    if (cookies.PHPSESSID) {
+      return String(cookies.PHPSESSID);
+    }
+    const keys = Object.keys(cookies);
+    for (let i = 0; i < keys.length; i += 1) {
+      if (/sess/i.test(keys[i])) {
+        return String(cookies[keys[i]]);
+      }
+    }
+    return '';
+  }
+
+  async function clearAuthState() {
+    await KpkStorage.clearSessionCookies();
+    const token = await KpkStorage.getMobileAuthToken();
+    if (token) {
+      try {
+        await fetch(apiUrl('/api/mobile_session.php'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ action: 'revoke', token }),
+          cache: 'no-store',
+        });
+      } catch (e) {
+        // ignore
+      }
+    }
+    await KpkStorage.clearMobileAuthToken();
+  }
+
   async function saveSessionCookies() {
     const InAppBrowser = plugin('InAppBrowser');
     const SessionCookie = plugin('SessionCookie');
     if (!InAppBrowser || !state.serverUrl) {
-      return;
+      return {};
     }
     try {
       const cookies = await InAppBrowser.getCookies({
@@ -225,12 +263,16 @@
       });
       if (Object.keys(cleaned).length > 0) {
         await KpkStorage.setSessionCookies(cleaned);
+        if (SessionCookie && SessionCookie.setCookies) {
+          await SessionCookie.setCookies({ url: cookieUrl(), cookies: cleaned });
+        }
       }
       if (SessionCookie && SessionCookie.flush) {
         await SessionCookie.flush();
       }
+      return cleaned;
     } catch (e) {
-      // ignore
+      return {};
     }
   }
 
@@ -246,6 +288,9 @@
           url: cookieUrl(),
           cookies,
         });
+        if (SessionCookie.flush) {
+          await SessionCookie.flush();
+        }
       } catch (e) {
         // ignore
       }
@@ -259,9 +304,99 @@
       .join('; ');
   }
 
+  async function applyServerSession(sessionName, sessionId) {
+    const name = String(sessionName || 'PHPSESSID');
+    const id = String(sessionId || '');
+    if (!id) {
+      return {};
+    }
+    const cookies = { [name]: id };
+    await KpkStorage.setSessionCookies(cookies);
+    const SessionCookie = plugin('SessionCookie');
+    if (SessionCookie && SessionCookie.setCookies) {
+      try {
+        await SessionCookie.setCookies({ url: cookieUrl(), cookies });
+        if (SessionCookie.flush) {
+          await SessionCookie.flush();
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+    return cookies;
+  }
+
+  async function issueMobileAuthToken() {
+    if (!state.serverUrl) {
+      return false;
+    }
+    const cookies = await KpkStorage.getSessionCookies();
+    const sessionId = pickPhpSessionId(cookies);
+    if (!sessionId) {
+      return false;
+    }
+    try {
+      const response = await fetch(apiUrl('/api/mobile_session.php'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+          Cookie: cookiesToHeader(cookies),
+        },
+        body: JSON.stringify({ action: 'issue', session_id: sessionId }),
+        cache: 'no-store',
+      });
+      const data = await response.json();
+      if (data && data.success && data.token) {
+        await KpkStorage.setMobileAuthToken(data.token);
+        return true;
+      }
+    } catch (e) {
+      // ignore
+    }
+    return false;
+  }
+
+  /** Восстанавливает PHP-сессию по долгоживущему mobile-токену */
+  async function ensureMobileSession() {
+    if (!state.serverUrl) {
+      return false;
+    }
+    const token = await KpkStorage.getMobileAuthToken();
+    if (!token) {
+      await restoreSessionCookies();
+      return false;
+    }
+    try {
+      const response = await fetch(apiUrl('/api/mobile_session.php'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({ action: 'exchange', token }),
+        cache: 'no-store',
+      });
+      const data = await response.json();
+      if (data && data.success && data.session_id) {
+        await applyServerSession(data.session_name, data.session_id);
+        return true;
+      }
+      if (response.status === 401) {
+        await KpkStorage.clearMobileAuthToken();
+        await KpkStorage.clearSessionCookies();
+      }
+    } catch (e) {
+      // сеть — пробуем старые cookie
+      await restoreSessionCookies();
+    }
+    return false;
+  }
+
   async function closeBrowserPreservingSession() {
     const InAppBrowser = plugin('InAppBrowser');
     await saveSessionCookies();
+    await issueMobileAuthToken();
     if (InAppBrowser && state.browserOpen) {
       try {
         await InAppBrowser.close();
@@ -284,6 +419,7 @@
       }
       if (isLoggedInUrl(url)) {
         await saveSessionCookies();
+        await issueMobileAuthToken();
       }
       if (state.awaitingPinSetup && isLoggedInUrl(url)) {
         state.awaitingPinSetup = false;
@@ -292,13 +428,14 @@
         return;
       }
       if (state.pinSet && isLoginUrl(url)) {
-        await KpkStorage.clearSessionCookies();
+        await clearAuthState();
       }
     });
 
     await InAppBrowser.addListener('closeEvent', async () => {
       state.browserOpen = false;
       await saveSessionCookies();
+      await issueMobileAuthToken();
       if (state.awaitingPinSetup) {
         return;
       }
@@ -329,7 +466,6 @@
     state.browserOpen = true;
     const options = {
       url,
-      // плагин принимает только white|black; иначе будет чёрный экран
       backgroundColor: 'white',
       toolbarType: 'blank',
       isPresentAfterPageLoad: true,
@@ -363,7 +499,8 @@
   async function afterUnlock() {
     suppressLockResume(3000);
     state.unlocked = true;
-    showPreloader('Загрузка приложения…');
+    showPreloader('Вход…');
+    await ensureMobileSession();
     await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);

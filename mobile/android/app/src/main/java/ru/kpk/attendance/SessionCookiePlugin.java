@@ -38,6 +38,7 @@ public class SessionCookiePlugin extends Plugin {
             cookieManager.setCookie(
                 url,
                 key + "=" + value + "; Path=/; Max-Age=2592000; SameSite=Lax"
+                    + (url.startsWith("https") ? "; Secure" : "")
             );
         }
         cookieManager.flush();

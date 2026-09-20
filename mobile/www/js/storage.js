@@ -8,6 +8,7 @@
     bioEnabled: 'bio_enabled',
     pinSet: 'pin_set',
     sessionCookies: 'session_cookies',
+    mobileAuthToken: 'mobile_auth_token',
   };
 
   async function prefs() {
@@ -102,6 +103,20 @@
     },
     async clearSessionCookies() {
       await remove(KEYS.sessionCookies);
+    },
+    async getMobileAuthToken() {
+      return get(KEYS.mobileAuthToken, '');
+    },
+    async setMobileAuthToken(token) {
+      const value = String(token || '').trim();
+      if (!value) {
+        await remove(KEYS.mobileAuthToken);
+        return;
+      }
+      await set(KEYS.mobileAuthToken, value);
+    },
+    async clearMobileAuthToken() {
+      await remove(KEYS.mobileAuthToken);
     },
   };
 })(window);
