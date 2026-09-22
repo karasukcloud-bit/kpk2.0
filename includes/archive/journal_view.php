@@ -284,6 +284,14 @@ require __DIR__ . '/../header.php';
                                         <span class="journal-lesson-type journal-lesson-type--<?= e($gradeType) ?>">
                                             <?= e(journal_grade_type_short($gradeType)) ?>
                                         </span>
+                                        <?php
+                                        $lessonNote = trim((string) ($lesson['note'] ?? ''));
+                                        if ($lessonNote !== ''):
+                                        ?>
+                                        <span class="journal-lesson-note" title="<?= e($lessonNote) ?>">
+                                            <?= e($lessonNote) ?>
+                                        </span>
+                                        <?php endif; ?>
                                         <?php if (!empty($lesson['topic_title'])): ?>
                                         <span class="journal-lesson-topic" title="<?= e($lesson['topic_title']) ?>">
                                             <?= e($lesson['topic_title']) ?>

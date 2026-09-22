@@ -612,6 +612,67 @@ function format_educator_unexcused_students_list(array $students): string
     return implode(', ', $parts);
 }
 
+/**
+ * Топ студентов с неуважительными пропусками за семестр (по всем группам).
+ *
+ * @return list<array{student_id: int, full_name: string, group_number: string, unexcused: int, excused: int, total: int}>
+ */
+function fetch_top_unexcused_students(string $academicYear, string $semester, int $limit = 5): array
+{
+    $bounds = get_attendance_semester_bounds($academicYear, $semester);
+    if ($bounds === null) {
+        return [];
+    }
+
+    $limit = max(1, min(50, $limit));
+    $stmt = db()->prepare(
+        'SELECT ae.student_id,
+                s.full_name,
+                g.number AS group_number,
+                COALESCE(SUM(ae.unexcused_lessons), 0) AS unexcused_lessons,
+                COALESCE(SUM(ae.excused_lessons), 0) AS excused_lessons
+         FROM attendance_entries ae
+         INNER JOIN attendance_days ad ON ad.id = ae.attendance_day_id
+         INNER JOIN students s ON s.id = ae.student_id
+         INNER JOIN study_groups g ON g.id = s.group_id
+         WHERE ad.academic_year = ?
+           AND ad.attendance_date BETWEEN ? AND ?
+         GROUP BY ae.student_id, s.full_name, g.number
+         HAVING unexcused_lessons > 0
+         ORDER BY unexcused_lessons DESC, s.full_name ASC
+         LIMIT ' . $limit
+    );
+    $stmt->execute([$academicYear, $bounds[0], $bounds[1]]);
+
+    $rows = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $unexcused = (int) $row['unexcused_lessons'];
+        $excused = (int) $row['excused_lessons'];
+        $rows[] = [
+            'student_id' => (int) $row['student_id'],
+            'full_name' => person_last_first_name((string) $row['full_name']),
+            'group_number' => (string) $row['group_number'],
+            'unexcused' => $unexcused,
+            'excused' => $excused,
+            'total' => $unexcused + $excused,
+        ];
+    }
+
+    return $rows;
+}
+
+/**
+ * @return array{semester1: list, semester2: list, academic_year: string}
+ */
+function build_attendance_attention_students(string $academicYear, int $limit = 5): array
+{
+    return [
+        'academic_year' => $academicYear,
+        'semester1' => fetch_top_unexcused_students($academicYear, '1', $limit),
+        'semester2' => fetch_top_unexcused_students($academicYear, '2', $limit),
+    ];
+}
+
 function resolve_academic_year_for_date(string $date): ?string
 {
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {

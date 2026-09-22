@@ -247,6 +247,60 @@ $report = $report ?? build_group_report(
             </div>
         <?php endif; ?>
 
+        <h3 class="subsection-title">Занятость во внеурочное время</h3>
+        <?php $activitiesBlock = $report['activities'] ?? null; ?>
+        <?php if (!$activitiesBlock || (int) ($report['total'] ?? 0) === 0): ?>
+            <p class="text-muted">Данных о занятости пока нет.</p>
+        <?php else: ?>
+            <div class="admin-stats-grid group-report__stats">
+                <div class="admin-stat-card">
+                    <div class="admin-stat-card__value"><?= (int) $activitiesBlock['with_activities'] ?></div>
+                    <div class="admin-stat-card__label">Заняты</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-card__value"><?= (int) $activitiesBlock['without_activities'] ?></div>
+                    <div class="admin-stat-card__label">Не заняты</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-card__value"><?= (int) $activitiesBlock['club_count'] ?></div>
+                    <div class="admin-stat-card__label">Кружков</div>
+                </div>
+                <div class="admin-stat-card">
+                    <div class="admin-stat-card__value"><?= (int) $activitiesBlock['section_count'] ?></div>
+                    <div class="admin-stat-card__label">Секций</div>
+                </div>
+            </div>
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>Студент</th>
+                            <th>Кружки и секции</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($activitiesBlock['rows'] as $index => $row): ?>
+                        <tr>
+                            <td><?= $index + 1 ?></td>
+                            <td><?= e($row['full_name']) ?></td>
+                            <td>
+                                <?php if ($row['summary'] === ''): ?>
+                                    <span class="text-muted">Не указано</span>
+                                <?php else: ?>
+                                    <?= e($row['summary']) ?>
+                                <?php endif; ?>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+            <p class="text-muted table-hint">
+                Заполняется куратором во вкладке «Занятость студентов».
+            </p>
+        <?php endif; ?>
+
         <h3 class="subsection-title">Взыскания</h3>
         <?php if ($report['sanctions'] === []): ?>
             <p class="text-muted">

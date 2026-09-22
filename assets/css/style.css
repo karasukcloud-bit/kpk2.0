@@ -2198,6 +2198,24 @@ body {
     white-space: nowrap;
 }
 
+.journal-lesson-note {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    max-width: 96px;
+    padding: 0.12rem 0.28rem;
+    border-radius: 6px;
+    background: #eef4ff;
+    border: 1px solid #c7d7f5;
+    color: #1e3a8a;
+    font-size: 0.6875rem;
+    font-weight: 650;
+    line-height: 1.2;
+    text-align: center;
+    overflow: hidden;
+    word-break: break-word;
+}
+
 .journal-lesson-actions {
     display: flex;
     justify-content: center;
@@ -5849,6 +5867,129 @@ code {
     .ktp-view-page .ktp-rows-table th,
     .ktp-view-page .ktp-rows-table td {
         border: 1px solid #000 !important;
+    }
+}
+
+.educator-attention-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+    .educator-attention-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.educator-attention-table__unexcused {
+    color: #b91c1c;
+}
+
+.curator-activities-list {
+    margin: 0;
+    padding-left: 1.1rem;
+}
+
+.curator-activities-list li {
+    margin: 0.15rem 0;
+}
+
+.curator-activity-badge {
+    display: inline-block;
+    margin-right: 0.25rem;
+    padding: 0.1rem 0.4rem;
+    border-radius: 6px;
+    font-size: 0.7rem;
+    font-weight: 650;
+    line-height: 1.2;
+    vertical-align: baseline;
+}
+
+.curator-activity-badge--club {
+    background: #eef4ff;
+    color: #1e3a8a;
+}
+
+.curator-activity-badge--section {
+    background: #ecfdf5;
+    color: #065f46;
+}
+
+.curator-activity-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.curator-activity-row {
+    display: grid;
+    grid-template-columns: 8rem 1fr 1fr auto;
+    gap: 0.6rem;
+    align-items: end;
+    padding: 0.75rem;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    background: #f8fafc;
+}
+
+.curator-activity-row .form__group {
+    margin: 0;
+}
+
+.curator-activity-row__remove {
+    width: 2rem;
+    min-width: 2rem;
+    height: 2.25rem;
+    padding: 0;
+    font-size: 1.25rem;
+    line-height: 1;
+}
+
+@media (max-width: 800px) {
+    .curator-activity-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+.curator-activities-print-header[hidden] {
+    display: none !important;
+}
+
+@media print {
+    body.curator-activities-printing .header,
+    body.curator-activities-printing .footer,
+    body.curator-activities-printing .admin-tabs,
+    body.curator-activities-printing .curator-group-filter,
+    body.curator-activities-printing .no-print,
+    body.curator-activities-printing .alert {
+        display: none !important;
+    }
+
+    body.curator-activities-printing .curator-activities-print-header {
+        display: block !important;
+        margin-bottom: 1rem;
+    }
+
+    body.curator-activities-printing .curator-activities-print-header h2 {
+        margin: 0 0 0.4rem;
+        font-size: 1.25rem;
+    }
+
+    body.curator-activities-printing .panel {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+    }
+
+    body.curator-activities-printing .curator-activities-table {
+        font-size: 11px;
+    }
+
+    body.curator-activities-printing .curator-activities-table th,
+    body.curator-activities-printing .curator-activities-table td {
+        border: 1px solid #000 !important;
+        padding: 0.35rem 0.45rem;
     }
 }
 

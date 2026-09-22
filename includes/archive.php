@@ -320,8 +320,8 @@ function archive_journals_for_period(string $academicYear, string $semester, boo
         );
         $lessonStmt = $pdo->prepare(
             'INSERT INTO archive_journal_lessons
-                (item_id, source_lesson_id, lesson_date, topic_title, topic_lesson_type, topic_hours, grade_type, sort_order)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+                (item_id, source_lesson_id, lesson_date, topic_title, topic_lesson_type, topic_hours, grade_type, note, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $topicStmt = $pdo->prepare(
             'INSERT INTO archive_journal_topics
@@ -394,6 +394,7 @@ function archive_journals_for_period(string $academicYear, string $semester, boo
                         (string) ($lesson['topic_lesson_type'] ?? ''),
                         $topicHours !== null && $topicHours !== '' ? $topicHours : null,
                         (string) ($lesson['grade_type'] ?? 'current'),
+                        normalize_journal_lesson_note((string) ($lesson['note'] ?? '')),
                         $index + 1,
                     ]);
                     $archiveLessonId = (int) $pdo->lastInsertId();

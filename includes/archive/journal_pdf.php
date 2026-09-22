@@ -193,6 +193,7 @@ body {
 }
 .pdf-lesson-date { display: block; font-weight: bold; }
 .pdf-lesson-type { display: block; font-size: 6pt; color: #555; }
+.pdf-lesson-note { display: block; font-size: 5.5pt; color: #1e3a8a; margin-top: 1px; line-height: 1.15; }
 .pdf-mark-muted { font-size: 6pt; color: #666; }
 
 .pdf-summary {
@@ -335,6 +336,10 @@ function archive_journal_pdf_render_subject_journal(array $item, array $sheet, i
             $html .= '<th class="pdf-table__lesson">';
             $html .= '<span class="pdf-lesson-date">' . e(format_journal_date((string) $lesson['lesson_date'])) . '</span>';
             $html .= '<span class="pdf-lesson-type">' . e(journal_grade_type_short($gradeType)) . '</span>';
+            $lessonNote = trim((string) ($lesson['note'] ?? ''));
+            if ($lessonNote !== '') {
+                $html .= '<span class="pdf-lesson-note">' . e($lessonNote) . '</span>';
+            }
             $html .= '</th>';
         }
         $html .= '<th class="pdf-table__total">Итог</th></tr></thead><tbody>';

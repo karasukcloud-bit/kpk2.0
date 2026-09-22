@@ -110,6 +110,8 @@ function run_migrations(PDO $pdo): void
     ensure_expelled_period_schema($pdo);
     ensure_student_transfers_schema($pdo);
     ensure_student_social_schema($pdo);
+    require_once __DIR__ . '/student_activities.php';
+    ensure_student_activities_schema($pdo);
     ensure_activity_logs_schema($pdo);
     ensure_courseworks_schema($pdo);
     ensure_practices_schema($pdo);
@@ -1324,6 +1326,14 @@ function ensure_ktp_schema(PDO $pdo): void
         }
     }
 
+    $noteCol = $pdo->query("SHOW COLUMNS FROM journal_lessons LIKE 'note'")->fetch();
+    if (!$noteCol) {
+        $pdo->exec(
+            "ALTER TABLE journal_lessons
+             ADD note VARCHAR(255) NOT NULL DEFAULT '' AFTER grade_type"
+        );
+    }
+
     $uniqueKey = $pdo->query("SHOW INDEX FROM journal_lessons WHERE Key_name = 'uq_journal_item_date'")->fetch();
     if ($uniqueKey) {
         $fkItem = $pdo->query(
@@ -1601,6 +1611,14 @@ function ensure_archive_journal_topics_schema(PDO $pdo): void
             "ALTER TABLE archive_journal_lessons
              ADD topic_lesson_type VARCHAR(50) NOT NULL DEFAULT '' AFTER topic_title,
              ADD topic_hours DECIMAL(4,1) NULL AFTER topic_lesson_type"
+        );
+    }
+
+    $noteCol = $pdo->query("SHOW COLUMNS FROM archive_journal_lessons LIKE 'note'")->fetch();
+    if (!$noteCol) {
+        $pdo->exec(
+            "ALTER TABLE archive_journal_lessons
+             ADD note VARCHAR(255) NOT NULL DEFAULT '' AFTER grade_type"
         );
     }
 }

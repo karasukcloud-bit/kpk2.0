@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/students.php';
 require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/glaz.php';
+require_once __DIR__ . '/student_activities.php';
 
 /**
  * Аналитическая справка по группе на основе карточек студентов.
@@ -135,6 +136,7 @@ function build_group_report(array $students, ?int $groupId = null): array
         'nonresident_apartment' => $nonresidentApartment,
         'without_parental_care' => $withoutParentalCare,
         'sanctions' => [],
+        'activities' => build_group_activities_report($students),
     ];
 
     return array_merge($report, build_group_report_academic($students, $groupId));

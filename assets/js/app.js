@@ -705,6 +705,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const dateInput = lessonModal.querySelector('[data-lesson-date]');
         const topicSelect = lessonModal.querySelector('[data-lesson-topic]');
         const gradeTypeSelect = lessonModal.querySelector('[data-lesson-grade-type]');
+        const noteInput = lessonModal.querySelector('[data-lesson-note]');
         const submitBtn = lessonModal.querySelector('[data-lesson-submit]');
 
         const openModal = (button) => {
@@ -746,6 +747,9 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (gradeTypeSelect) {
                 gradeTypeSelect.value = button.dataset.gradeType || 'current';
+            }
+            if (noteInput) {
+                noteInput.value = button.dataset.note || '';
             }
             if (submitBtn) {
                 submitBtn.textContent = isEdit ? 'Сохранить' : 'Добавить';

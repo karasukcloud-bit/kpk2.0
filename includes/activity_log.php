@@ -221,6 +221,7 @@ function activity_log_lesson_details(array $lesson): array
         'lesson_date' => $date,
         'grade_type_label' => ($lesson['grade_type'] ?? 'current') === 'control' ? 'Контрольная' : 'Текущая',
         'topic_title' => trim((string) ($lesson['topic_title'] ?? '')),
+        'note' => trim((string) ($lesson['note'] ?? '')),
     ]);
 }
 

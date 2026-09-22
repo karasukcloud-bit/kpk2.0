@@ -91,14 +91,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null) {
                 $itemId,
                 (string) ($_POST['lesson_date'] ?? ''),
                 (int) ($_POST['ktp_topic_id'] ?? 0) ?: null,
-                (string) ($_POST['grade_type'] ?? 'current')
+                (string) ($_POST['grade_type'] ?? 'current'),
+                (string) ($_POST['note'] ?? '')
             );
         } elseif ($action === 'update_lesson') {
             $result = update_journal_lesson(
                 (int) ($_POST['lesson_id'] ?? 0),
                 (string) ($_POST['lesson_date'] ?? ''),
                 (int) ($_POST['ktp_topic_id'] ?? 0) ?: null,
-                (string) ($_POST['grade_type'] ?? 'current')
+                (string) ($_POST['grade_type'] ?? 'current'),
+                (string) ($_POST['note'] ?? '')
             );
         } elseif ($action === 'delete_lesson') {
             $result = delete_journal_lesson((int) ($_POST['lesson_id'] ?? 0));
@@ -292,6 +294,7 @@ require __DIR__ . '/../includes/header.php';
                                 <thead>
                                     <tr>
                                         <th>Дата</th>
+                                        <th>Примечание</th>
                                         <th>Тема</th>
                                         <th>Тип оценки</th>
                                         <th>Тип урока</th>
@@ -301,6 +304,7 @@ require __DIR__ . '/../includes/header.php';
                                     <?php foreach ($lessons as $lesson): ?>
                                     <tr>
                                         <td><?= e(date('d.m.Y', (int) strtotime($lesson['lesson_date']))) ?></td>
+                                        <td><?= e(trim((string) ($lesson['note'] ?? '')) ?: '—') ?></td>
                                         <td><?= e($lesson['topic_title'] ?: '—') ?></td>
                                         <td>
                                             <span class="journal-lesson-type journal-lesson-type--<?= e($lesson['grade_type'] ?? 'current') ?>">
@@ -378,6 +382,14 @@ require __DIR__ . '/../includes/header.php';
                                                         title="<?= e(journal_grade_type_label($gradeType)) ?>"
                                                     ><?= e(journal_grade_type_short($gradeType)) ?></span>
                                                 </div>
+                                                <?php
+                                                $lessonNote = trim((string) ($lesson['note'] ?? ''));
+                                                if ($lessonNote !== ''):
+                                                ?>
+                                                <span class="journal-lesson-note" title="<?= e($lessonNote) ?>">
+                                                    <?= e($lessonNote) ?>
+                                                </span>
+                                                <?php endif; ?>
                                                 <?php if (!empty($lesson['topic_title'])): ?>
                                                 <span class="journal-lesson-topic" title="<?= e($lesson['topic_title']) ?>">
                                                     <?= e($lesson['topic_title']) ?>
@@ -394,6 +406,7 @@ require __DIR__ . '/../includes/header.php';
                                                         data-date="<?= e($lesson['lesson_date']) ?>"
                                                         data-topic-id="<?= (int) ($lesson['ktp_topic_id'] ?? 0) ?>"
                                                         data-grade-type="<?= e($gradeType) ?>"
+                                                        data-note="<?= e($lessonNote) ?>"
                                                     >✎</button>
                                                     <form method="post" class="form-inline">
                                                         <?= csrf_field() ?>
@@ -649,6 +662,21 @@ require __DIR__ . '/../includes/header.php';
                     <option value="control">Контрольная</option>
                     <option value="attestation">Промежуточная аттестация</option>
                 </select>
+            </div>
+
+            <div class="form__group">
+                <label for="modal_lesson_note">Примечание</label>
+                <input
+                    type="text"
+                    id="modal_lesson_note"
+                    name="note"
+                    maxlength="255"
+                    placeholder="Например: Практика №3 — Сборка схемы"
+                    data-lesson-note
+                >
+                <p class="text-muted form-hint">
+                    Краткое название работы — отображается в шапке столбца журнала.
+                </p>
             </div>
 
             <div class="form__actions">

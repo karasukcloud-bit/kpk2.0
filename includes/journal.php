@@ -295,7 +295,7 @@ function get_journal_grades_for_student(int $curriculumItemId, int $studentId): 
 function get_journal_lessons(int $curriculumItemId): array
 {
     $stmt = db()->prepare(
-        'SELECT jl.id, jl.curriculum_item_id, jl.lesson_date, jl.ktp_topic_id, jl.grade_type,
+        'SELECT jl.id, jl.curriculum_item_id, jl.lesson_date, jl.ktp_topic_id, jl.grade_type, jl.note,
                 kt.title AS topic_title,
                 kt.lesson_type AS topic_lesson_type,
                 kt.hours AS topic_hours,
@@ -308,6 +308,19 @@ function get_journal_lessons(int $curriculumItemId): array
     $stmt->execute([$curriculumItemId]);
 
     return $stmt->fetchAll();
+}
+
+function normalize_journal_lesson_note(?string $note): string
+{
+    $note = trim((string) $note);
+    if ($note === '') {
+        return '';
+    }
+    if (function_exists('mb_substr')) {
+        return mb_substr($note, 0, 255);
+    }
+
+    return substr($note, 0, 255);
 }
 
 function journal_grade_type_label(string $type): string
@@ -412,16 +425,18 @@ function add_journal_lesson(
     int $curriculumItemId,
     string $date,
     ?int $ktpTopicId = null,
-    string $gradeType = 'current'
+    string $gradeType = 'current',
+    string $note = ''
 ): array {
-    return save_journal_lesson_data($curriculumItemId, $date, $ktpTopicId, $gradeType, null);
+    return save_journal_lesson_data($curriculumItemId, $date, $ktpTopicId, $gradeType, null, $note);
 }
 
 function update_journal_lesson(
     int $lessonId,
     string $date,
     ?int $ktpTopicId = null,
-    string $gradeType = 'current'
+    string $gradeType = 'current',
+    string $note = ''
 ): array {
     $lesson = get_journal_lesson_by_id($lessonId);
     if ($lesson === null) {
@@ -433,7 +448,8 @@ function update_journal_lesson(
         $date,
         $ktpTopicId,
         $gradeType,
-        $lessonId
+        $lessonId,
+        $note
     );
 }
 
@@ -442,7 +458,8 @@ function save_journal_lesson_data(
     string $date,
     ?int $ktpTopicId,
     string $gradeType,
-    ?int $lessonId
+    ?int $lessonId,
+    string $note = ''
 ): array {
     if (!can_access_journal_item($curriculumItemId)) {
         return ['success' => false, 'error' => 'Нет доступа к журналу.'];
@@ -454,6 +471,7 @@ function save_journal_lesson_data(
     }
 
     $gradeType = normalize_journal_grade_type($gradeType);
+    $note = normalize_journal_lesson_note($note);
 
     if ($ktpTopicId !== null && $ktpTopicId > 0) {
         $topic = get_ktp_topic_by_id($ktpTopicId);
@@ -479,10 +497,10 @@ function save_journal_lesson_data(
     $pdo = db();
     if ($lessonId === null) {
         $stmt = $pdo->prepare(
-            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type)
-             VALUES (?, ?, ?, ?)'
+            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note)
+             VALUES (?, ?, ?, ?, ?)'
         );
-        $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType]);
+        $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType, $note]);
         $newLessonId = (int) $pdo->lastInsertId();
         $savedLesson = get_journal_lesson_by_id($newLessonId);
         if ($savedLesson !== null) {
@@ -500,10 +518,10 @@ function save_journal_lesson_data(
 
     $stmt = $pdo->prepare(
         'UPDATE journal_lessons
-         SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?
+         SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?, note = ?
          WHERE id = ? AND curriculum_item_id = ?'
     );
-    $stmt->execute([$date, $ktpTopicId, $gradeType, $lessonId, $curriculumItemId]);
+    $stmt->execute([$date, $ktpTopicId, $gradeType, $note, $lessonId, $curriculumItemId]);
 
     $savedLesson = get_journal_lesson_by_id($lessonId);
     if ($savedLesson !== null) {
