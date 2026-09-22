@@ -440,7 +440,7 @@ require __DIR__ . '/../includes/header.php';
                                     <?php $studentId = (int) $student['id']; ?>
                                     <tr class="<?= $rowIndex % 2 === 1 ? 'journal-row--alt' : '' ?>">
                                         <td class="journal-table__student-col">
-                                            <span class="journal-student-name"><?= e($student['full_name']) ?></span>
+                                            <span class="journal-student-name"><?= e(person_last_first_name((string) $student['full_name'])) ?></span>
                                         </td>
                                         <?php foreach ($lessons as $index => $lesson): ?>
                                         <?php

@@ -672,6 +672,7 @@ body {
 
 .subsection-title {
     margin: 1.5rem 0 1rem;
+    text-align: center;
     font-size: 1rem;
     font-weight: 600;
 }
@@ -5873,7 +5874,28 @@ code {
 .educator-attention-grid {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 1.25rem;
+    gap: 1.5rem;
+}
+
+.educator-attention-col {
+    background: var(--color-bg, #f8fafc);
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: var(--radius, 8px);
+    padding: 1rem 0.75rem 1.15rem;
+}
+
+.educator-attention-col--sem1 {
+    border-top: 3px solid #2563eb;
+}
+
+.educator-attention-col--sem2 {
+    border-top: 3px solid #0d9488;
+}
+
+.educator-attention-col .subsection-title {
+    margin: 0 0 0.85rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid var(--color-border, #e2e8f0);
 }
 
 @media (max-width: 900px) {

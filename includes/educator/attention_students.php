@@ -59,14 +59,14 @@ $renderAttentionTable = static function (array $rows, string $emptyText): void {
     </div>
 
     <div class="educator-attention-grid">
-        <div>
+        <div class="educator-attention-col educator-attention-col--sem1">
             <h3 class="subsection-title">1 семестр</h3>
             <?php $renderAttentionTable(
                 $attentionStudents['semester1'],
                 'В 1 семестре студентов с неуважительными пропусками нет.'
             ); ?>
         </div>
-        <div>
+        <div class="educator-attention-col educator-attention-col--sem2">
             <h3 class="subsection-title">2 семестр</h3>
             <?php $renderAttentionTable(
                 $attentionStudents['semester2'],
