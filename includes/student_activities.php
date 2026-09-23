@@ -216,8 +216,7 @@ function build_group_activities_report(array $students): array
     $map = get_students_activities_map($ids);
 
     $with = 0;
-    $clubCount = 0;
-    $sectionCount = 0;
+    $allActivities = [];
     $rows = [];
 
     foreach ($students as $student) {
@@ -227,11 +226,7 @@ function build_group_activities_report(array $students): array
             $with++;
         }
         foreach ($list as $activity) {
-            if (($activity['activity_type'] ?? '') === 'section') {
-                $sectionCount++;
-            } else {
-                $clubCount++;
-            }
+            $allActivities[] = $activity;
         }
         $rows[] = [
             'student_id' => $id,
@@ -242,14 +237,151 @@ function build_group_activities_report(array $students): array
     }
 
     $total = count($students);
+    $distinct = count_distinct_activity_titles($allActivities);
 
     return [
         'map' => $map,
         'with_activities' => $with,
         'without_activities' => max(0, $total - $with),
+        'club_count' => $distinct['club_count'],
+        'section_count' => $distinct['section_count'],
+        'total_activities' => $distinct['total_activities'],
+        'total_students' => $total,
+        'pct_with' => activities_percent($with, $total),
+        'pct_without' => activities_percent(max(0, $total - $with), $total),
+        'rows' => $rows,
+    ];
+}
+
+function activities_percent(int $part, int $total): float
+{
+    if ($total <= 0) {
+        return 0.0;
+    }
+
+    return round(($part / $total) * 100, 1);
+}
+
+function normalize_activity_title_key(string $title): string
+{
+    $title = trim($title);
+    if ($title === '') {
+        return '';
+    }
+    if (function_exists('mb_strtolower')) {
+        return mb_strtolower($title, 'UTF-8');
+    }
+
+    return strtolower($title);
+}
+
+/**
+ * @param list<array<string, mixed>> $activities
+ * @return array{club_count: int, section_count: int, total_activities: int}
+ */
+function count_distinct_activity_titles(array $activities): array
+{
+    $clubs = [];
+    $sections = [];
+    foreach ($activities as $activity) {
+        $key = normalize_activity_title_key((string) ($activity['title'] ?? ''));
+        if ($key === '') {
+            continue;
+        }
+        if (($activity['activity_type'] ?? '') === 'section') {
+            $sections[$key] = true;
+        } else {
+            $clubs[$key] = true;
+        }
+    }
+
+    $clubCount = count($clubs);
+    $sectionCount = count($sections);
+
+    return [
         'club_count' => $clubCount,
         'section_count' => $sectionCount,
         'total_activities' => $clubCount + $sectionCount,
-        'rows' => $rows,
+    ];
+}
+
+/**
+ * Аналитика занятости по всему колледжу и по группам.
+ *
+ * @return array{
+ *   total_students: int,
+ *   with_activities: int,
+ *   without_activities: int,
+ *   pct_with: float,
+ *   pct_without: float,
+ *   club_count: int,
+ *   section_count: int,
+ *   groups: list<array{
+ *     group_id: int,
+ *     group_number: string,
+ *     specialty_name: string,
+ *     total_students: int,
+ *     with_activities: int,
+ *     without_activities: int,
+ *     pct_with: float,
+ *     pct_without: float
+ *   }>
+ * }
+ */
+function build_college_activities_analytics(): array
+{
+    ensure_student_activities_schema();
+    require_once __DIR__ . '/organization.php';
+    require_once __DIR__ . '/students.php';
+
+    $busyStmt = db()->query('SELECT DISTINCT student_id FROM student_activities');
+    $busySet = [];
+    foreach ($busyStmt->fetchAll() as $row) {
+        $busySet[(int) $row['student_id']] = true;
+    }
+
+    $titlesStmt = db()->query('SELECT activity_type, title FROM student_activities');
+    $distinct = count_distinct_activity_titles($titlesStmt->fetchAll());
+
+    $groupRows = [];
+    $totalStudents = 0;
+    $totalWith = 0;
+
+    foreach (get_all_groups() as $group) {
+        $groupId = (int) $group['id'];
+        $students = get_students_by_group($groupId);
+        $count = count($students);
+        $with = 0;
+        foreach ($students as $student) {
+            if (isset($busySet[(int) $student['id']])) {
+                $with++;
+            }
+        }
+        $without = max(0, $count - $with);
+        $groupRows[] = [
+            'group_id' => $groupId,
+            'group_number' => (string) ($group['number'] ?? ''),
+            'specialty_name' => (string) ($group['specialty_name'] ?? ''),
+            'total_students' => $count,
+            'with_activities' => $with,
+            'without_activities' => $without,
+            'pct_with' => activities_percent($with, $count),
+            'pct_without' => activities_percent($without, $count),
+        ];
+        $totalStudents += $count;
+        $totalWith += $with;
+    }
+
+    $totalWithout = max(0, $totalStudents - $totalWith);
+
+    return [
+        'total_students' => $totalStudents,
+        'with_activities' => $totalWith,
+        'without_activities' => $totalWithout,
+        'pct_with' => activities_percent($totalWith, $totalStudents),
+        'pct_without' => activities_percent($totalWithout, $totalStudents),
+        'club_count' => $distinct['club_count'],
+        'section_count' => $distinct['section_count'],
+        'groups' => $groupRows,
     ];
 }

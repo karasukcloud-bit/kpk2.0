@@ -5908,6 +5908,19 @@ code {
     color: #b91c1c;
 }
 
+.educator-activities-groups-table tr.is-selected td {
+    background: #eef6ff;
+}
+
+.educator-activities-groups-table a {
+    font-weight: 600;
+    text-decoration: none;
+}
+
+.educator-activities-groups-table a:hover {
+    text-decoration: underline;
+}
+
 .curator-activities-list {
     margin: 0;
     padding-left: 1.1rem;

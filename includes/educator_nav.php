@@ -21,4 +21,8 @@ $currentEducatorTab = $currentEducatorTab ?? 'summary';
        class="admin-tabs__item<?= $currentEducatorTab === 'students' ? ' admin-tabs__item--active' : '' ?>">
         Информация по студентам
     </a>
+    <a href="activities.php"
+       class="admin-tabs__item<?= $currentEducatorTab === 'activities' ? ' admin-tabs__item--active' : '' ?>">
+        Занятость студентов
+    </a>
 </nav>
