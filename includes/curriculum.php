@@ -210,26 +210,34 @@ function get_groups_with_curriculum_stats(string $academicYear): array
         return [];
     }
 
-    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
-    $countExpr = $typeCol
-        ? "COUNT(CASE WHEN ci.item_type = 'subject' OR ci.item_type IS NULL THEN ci.id END)"
-        : 'COUNT(ci.id)';
-
     $stmt = db()->prepare(
-        "SELECT g.id, g.number, s.name AS specialty_name, s.code AS specialty_code,
-                cp.id AS plan_id,
-                {$countExpr} AS subjects_count
+        'SELECT g.id, g.number, g.course, s.name AS specialty_name, s.code AS specialty_code,
+                cp.id AS plan_id
          FROM study_groups g
          INNER JOIN specialties s ON s.id = g.specialty_id
          LEFT JOIN curriculum_plans cp
             ON cp.group_id = g.id AND cp.academic_year = ?
-         LEFT JOIN curriculum_items ci ON ci.curriculum_plan_id = cp.id
-         GROUP BY g.id, g.number, s.name, s.code, cp.id
-         ORDER BY g.number ASC"
+         ORDER BY g.number ASC'
     );
     $stmt->execute([$academicYear]);
+    $rows = $stmt->fetchAll();
 
-    return $stmt->fetchAll();
+    foreach ($rows as &$row) {
+        $planId = (int) ($row['plan_id'] ?? 0);
+        if ($planId <= 0) {
+            $row['subjects_count'] = 0;
+            continue;
+        }
+
+        $row['subjects_count'] = count(get_curriculum_subjects_with_mdk(
+            $planId,
+            (int) $row['id'],
+            get_group_course($row)
+        ));
+    }
+    unset($row);
+
+    return $rows;
 }
 
 function get_curriculum_items(int $planId, $itemType = 'subject'): array
