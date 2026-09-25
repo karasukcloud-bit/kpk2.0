@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/characteristic.php';
 
 require_curator_panel();
+ensure_student_characteristics_schema();
 
 $ctx = resolve_curator_group_context(isset($_GET['group_id']) ? (int) $_GET['group_id'] : null);
 $groups = $ctx['groups'];
@@ -22,6 +23,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $studentId = (int) ($_POST['student_id'] ?? $studentId);
 }
 
+$isPreviewAjax = $_SERVER['REQUEST_METHOD'] === 'POST'
+    && (string) ($_POST['action'] ?? '') === 'preview_ajax';
+
 $student = null;
 foreach ($students as $row) {
     if ((int) $row['id'] === $studentId) {
@@ -31,36 +35,99 @@ foreach ($students as $row) {
 }
 if ($student === null) {
     $studentId = 0;
+    if ($isPreviewAjax) {
+        header('Content-Type: application/json; charset=utf-8');
+        http_response_code(400);
+        echo json_encode(['ok' => false, 'error' => 'Студент не выбран.'], JSON_UNESCAPED_UNICODE);
+        exit;
+    }
 }
 
 $data = null;
 $preview = '';
+$previewHtml = '';
 $gender = null;
+$hasSavedCharacteristic = false;
 
 if ($student !== null && $group !== null) {
-    $defaults = characteristic_default_data($student, $group, $user ?: null);
-    $gender = (string) ($student['gender'] ?? '');
-    if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (!verify_csrf($_POST['csrf_token'] ?? null)) {
-            $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
-            $data = $defaults;
-        } else {
-            $data = characteristic_merge_post($defaults, $_POST);
-            $data['student_id'] = (string) $studentId;
-            $data['gender'] = $gender;
-            $action = (string) ($_POST['action'] ?? 'preview');
-            if ($action === 'download') {
-                try {
-                    download_characteristic_docx($data);
-                } catch (Throwable $e) {
-                    $error = 'Не удалось сформировать файл Word.';
+    try {
+        $defaults = characteristic_default_data($student, $group, $user ?: null);
+        $savedPayload = get_student_characteristic_payload($studentId);
+        $hasSavedCharacteristic = $savedPayload !== null;
+        $defaults = characteristic_apply_saved_payload($defaults, $savedPayload);
+        $gender = (string) ($student['gender'] ?? '');
+        if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+            if (!verify_csrf($_POST['csrf_token'] ?? null)) {
+                $action = (string) ($_POST['action'] ?? '');
+                if ($action === 'preview_ajax') {
+                    header('Content-Type: application/json; charset=utf-8');
+                    http_response_code(403);
+                    echo json_encode(['ok' => false, 'error' => 'Ошибка безопасности. Обновите страницу.'], JSON_UNESCAPED_UNICODE);
+                    exit;
                 }
+                $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
+                $data = $defaults;
+                $previewHtml = build_characteristic_preview_html($data);
+            } else {
+                $data = characteristic_merge_post($defaults, $_POST);
+                $data['student_id'] = (string) $studentId;
+                $data['gender'] = $gender;
+                $action = (string) ($_POST['action'] ?? 'preview');
+                if ($action === 'preview_ajax') {
+                    header('Content-Type: application/json; charset=utf-8');
+                    echo json_encode([
+                        'ok' => true,
+                        'preview' => build_characteristic_text($data),
+                        'preview_html' => build_characteristic_preview_html($data),
+                        'full_name_genitive' => (string) ($data['full_name_genitive'] ?? ''),
+                        'first_name_genitive' => (string) ($data['first_name_genitive'] ?? ''),
+                        'first_name' => (string) ($data['first_name'] ?? ''),
+                    ], JSON_UNESCAPED_UNICODE);
+                    exit;
+                }
+                if ($action === 'save') {
+                    $saveResult = save_student_characteristic(
+                        $studentId,
+                        $data,
+                        $user ? (int) ($user['id'] ?? 0) ?: null : null
+                    );
+                    if ($saveResult['success']) {
+                        flash_set('success', 'Характеристика сохранена.');
+                    } else {
+                        flash_set('error', $saveResult['error'] ?? 'Не удалось сохранить характеристику.');
+                    }
+                    header('Location: characteristics.php?group_id=' . $groupId . '&student_id=' . $studentId);
+                    exit;
+                }
+                if ($action === 'download') {
+                    try {
+                        download_characteristic_docx($data);
+                    } catch (Throwable $e) {
+                        $error = 'Не удалось сформировать файл Word.';
+                    }
+                }
+                $preview = build_characteristic_text($data);
+                $previewHtml = build_characteristic_preview_html($data);
             }
+        } else {
+            $data = $defaults;
             $preview = build_characteristic_text($data);
+            $previewHtml = build_characteristic_preview_html($data);
         }
-    } else {
-        $data = $defaults;
-        $preview = build_characteristic_text($data);
+    } catch (Throwable $e) {
+        if ($isPreviewAjax) {
+            header('Content-Type: application/json; charset=utf-8');
+            http_response_code(500);
+            echo json_encode([
+                'ok' => false,
+                'error' => 'Не удалось сформировать характеристику.',
+            ], JSON_UNESCAPED_UNICODE);
+            exit;
+        }
+        $error = 'Не удалось сформировать характеристику. Проверьте данные студента и попробуйте снова.';
+        $data = null;
+        $preview = '';
+        $previewHtml = '';
     }
 }
 
@@ -144,7 +211,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
 ?>
 
 <div class="dashboard dashboard--wide curator-characteristics-page">
-    <section class="panel">
+    <section class="panel no-print">
         <div class="panel__header">
             <div>
                 <h1>Панель куратора</h1>
@@ -155,26 +222,26 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
     </section>
 
     <?php if ($success): ?>
-        <div class="alert alert--success"><?= e($success) ?></div>
+        <div class="alert alert--success no-print"><?= e($success) ?></div>
     <?php endif; ?>
     <?php if ($error): ?>
-        <div class="alert alert--error"><?= e($error) ?></div>
+        <div class="alert alert--error no-print"><?= e($error) ?></div>
     <?php endif; ?>
 
     <?php if ($groups === []): ?>
-        <section class="panel">
+        <section class="panel no-print">
             <p class="text-muted">Вам ещё не назначена группа. Обратитесь к администратору.</p>
         </section>
     <?php elseif ($group === null): ?>
-        <section class="panel">
+        <section class="panel no-print">
             <p class="text-muted">Выберите группу, чтобы сформировать характеристику.</p>
         </section>
     <?php elseif ($students === []): ?>
-        <section class="panel">
+        <section class="panel no-print">
             <p class="text-muted">В группе нет студентов.</p>
         </section>
     <?php else: ?>
-        <section class="panel">
+        <section class="panel no-print">
             <form method="get" class="form form--filter">
                 <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
                 <div class="form__row form__row--filter">
@@ -199,7 +266,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
             <input type="hidden" name="student_id" value="<?= (int) $studentId ?>">
             <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
 
-            <section class="panel">
+            <section class="panel no-print">
                 <h2>Шапка</h2>
                 <div class="form__grid form__grid--2">
                     <?php $fieldSelect(
@@ -210,9 +277,9 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                         false
                     ); ?>
                     <?php $fieldText('full_name', 'ФИО (именительный)', $data); ?>
-                    <?php $fieldText('full_name_genitive', 'ФИО в родительном падеже', $data, 'Для заголовка: «Тахтамира Александра Александровича»'); ?>
+                    <?php $fieldText('full_name_genitive', 'ФИО в родительном падеже', $data, 'Подставляется автоматически (можно поправить вручную), напр. «Иванова Ивана Ивановича»'); ?>
                     <?php $fieldText('first_name', 'Имя в тексте', $data); ?>
-                    <?php $fieldText('first_name_genitive', 'Имя в родительном падеже', $data, 'Для фразы «к достоинствам Александра»'); ?>
+                    <?php $fieldText('first_name_genitive', 'Имя в родительном падеже', $data, 'Автосклонение, напр. «к достоинствам Ивана»'); ?>
                     <?php $fieldText('birth_date', 'Дата рождения', $data); ?>
                     <?php $fieldText('course', 'Курс', $data); ?>
                     <?php $fieldText('org_name', 'Организация (полное название)', $data); ?>
@@ -221,7 +288,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel no-print">
                 <h2>Адрес и семья</h2>
                 <div class="form__grid form__grid--2">
                     <?php $fieldArea('address', 'Адрес проживания', $data, 2); ?>
@@ -230,19 +297,30 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel no-print">
                 <h2>Учёба и качества</h2>
                 <div class="form__grid form__grid--2">
                     <?php $fieldSelect('dominant_grade', 'Преобладающая отметка', characteristic_option_list('dominant_grade'), $data); ?>
                     <div class="form__group form__group--full">
                         <label for="favorite_subjects">Интерес к предметам</label>
                         <?php
-                        $curriculumSubjects = characteristic_group_subject_names((int) $groupId);
+                        $curriculumSubjects = [];
+                        try {
+                            $curriculumSubjects = characteristic_group_subject_names((int) $groupId);
+                        } catch (Throwable $e) {
+                            $curriculumSubjects = [];
+                        }
                         $favoriteValue = (string) ($data['favorite_subjects'] ?? '');
-                        $favoriteParts = array_values(array_filter(array_map(
-                            static fn (string $part): string => mb_strtolower(trim($part)),
-                            preg_split('/\s*,\s*/u', $favoriteValue) ?: []
-                        )));
+                        $favoriteParts = [];
+                        foreach (preg_split('/\s*,\s*/u', $favoriteValue) ?: [] as $part) {
+                            $part = trim((string) $part);
+                            if ($part === '') {
+                                continue;
+                            }
+                            $favoriteParts[] = function_exists('mb_strtolower')
+                                ? mb_strtolower($part, 'UTF-8')
+                                : strtolower($part);
+                        }
                         ?>
                         <?php if ($curriculumSubjects !== []): ?>
                         <div class="characteristic-subjects" data-favorite-subjects-picker>
@@ -277,12 +355,15 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                     <?php $fieldSelect('motivation', 'Мотив учения', characteristic_option_list('motivation'), $data); ?>
                     <?php $fieldText('sports_section', 'Спортивная секция', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
                     <?php $fieldText('club', 'Кружок', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
-                    <?php $fieldArea('achievements', 'Достижения / конкурсы', $data, 3, 'Заполняется вручную. Если пусто — абзац в текст не попадёт.'); ?>
+                    <?php $fieldArea('events', 'Мероприятия', $data, 3, 'Конкретные мероприятия, в которых участвовал студент. Если пусто — абзац не попадёт в текст.'); ?>
+                    <?php $fieldArea('contests', 'Конкурсы', $data, 3, 'Конкурсы, олимпиады, соревнования. Если пусто — абзац не попадёт в текст.'); ?>
+                    <?php $fieldArea('achievements', 'Достижения / результаты', $data, 2, 'Грамоты, призовые места и т.п. Если пусто — не добавляется.'); ?>
+                    <?php $fieldArea('additional_info', 'Дополнительная информация', $data, 4, 'Любые сведения, которые куратор хочет отразить в характеристике.'); ?>
                     <?php $fieldSelect('merits', 'Основные достоинства', characteristic_option_list('merits'), $data); ?>
                 </div>
             </section>
 
-            <section class="panel">
+            <section class="panel no-print">
                 <h2>Дисциплина и подписи</h2>
                 <div class="form__grid form__grid--2">
                     <?php $fieldSelect('discipline', 'Правила распорядка', characteristic_option_list('discipline'), $data); ?>
@@ -301,14 +382,19 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 </div>
 
                 <div class="form__actions" style="margin-top:1rem">
-                    <button type="submit" name="action" value="preview" class="btn btn--ghost">Обновить текст</button>
-                    <button type="submit" name="action" value="download" class="btn btn--primary">Скачать Word</button>
+                    <button type="submit" name="action" value="save" class="btn btn--primary">Сохранить</button>
+                    <button type="button" class="btn btn--ghost" data-print-characteristic>Печать</button>
+                    <button type="submit" name="action" value="download" class="btn btn--ghost">Скачать Word</button>
                 </div>
+                <?php if ($hasSavedCharacteristic): ?>
+                <p class="text-muted" style="margin-top:0.75rem">Загружена сохранённая характеристика студента.</p>
+                <?php endif; ?>
             </section>
 
-            <section class="panel">
-                <h2>Предпросмотр</h2>
-                <pre class="characteristic-preview"><?= e($preview) ?></pre>
+            <section class="panel characteristic-preview-panel">
+                <h2 class="no-print">Предпросмотр</h2>
+                <p class="text-muted characteristic-preview-hint no-print">Текст обновляется автоматически при изменении полей. Вид совпадает с документом Word.</p>
+                <div class="characteristic-preview" data-characteristic-preview><?= $previewHtml ?></div>
             </section>
         </form>
         <?php endif; ?>
@@ -320,12 +406,73 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
     const form = document.getElementById('characteristic-form');
     if (!form) return;
 
+    const previewEl = form.querySelector('[data-characteristic-preview]');
+    let previewTimer = null;
+    let previewSeq = 0;
+
+    const refreshPreview = () => {
+        if (!previewEl) return;
+        const seq = ++previewSeq;
+        const body = new FormData(form);
+        body.set('action', 'preview_ajax');
+
+        fetch(form.getAttribute('action') || window.location.href, {
+            method: 'POST',
+            body: body,
+            headers: { 'X-Requested-With': 'XMLHttpRequest' },
+            credentials: 'same-origin'
+        })
+            .then((response) => response.json())
+            .then((payload) => {
+                if (seq !== previewSeq || !payload || !payload.ok) return;
+                if (typeof payload.preview_html === 'string') {
+                    previewEl.innerHTML = payload.preview_html;
+                } else if (typeof payload.preview === 'string') {
+                    previewEl.textContent = payload.preview;
+                }
+                if (typeof payload.full_name_genitive === 'string') {
+                    const genInput = form.querySelector('[name="full_name_genitive"]');
+                    const genCustom = form.querySelector('[name="full_name_genitive_custom"]');
+                    const genManual = genCustom && genCustom.value.trim() !== '';
+                    if (genInput && !genManual && document.activeElement !== genInput) {
+                        genInput.value = payload.full_name_genitive;
+                    }
+                }
+                if (typeof payload.first_name_genitive === 'string') {
+                    const firstGen = form.querySelector('[name="first_name_genitive"]');
+                    const firstGenCustom = form.querySelector('[name="first_name_genitive_custom"]');
+                    const firstManual = firstGenCustom && firstGenCustom.value.trim() !== '';
+                    if (firstGen && !firstManual && document.activeElement !== firstGen) {
+                        firstGen.value = payload.first_name_genitive;
+                    }
+                }
+                if (typeof payload.first_name === 'string') {
+                    const firstInput = form.querySelector('[name="first_name"]');
+                    if (firstInput && document.activeElement !== firstInput && !firstInput.value.trim()) {
+                        firstInput.value = payload.first_name;
+                    }
+                }
+            })
+            .catch(() => {});
+    };
+
+    const schedulePreview = () => {
+        clearTimeout(previewTimer);
+        previewTimer = setTimeout(refreshPreview, 280);
+    };
+
     form.querySelectorAll('.characteristic-custom-input').forEach((input) => {
         input.addEventListener('input', () => {
             const targetName = input.getAttribute('data-target');
-            if (!targetName || !input.value.trim()) return;
+            if (!targetName || !input.value.trim()) {
+                schedulePreview();
+                return;
+            }
             const select = form.querySelector('select[name="' + targetName + '"]');
-            if (!select) return;
+            if (!select) {
+                schedulePreview();
+                return;
+            }
             let option = Array.from(select.options).find((o) => o.value === input.value.trim());
             if (!option) {
                 option = document.createElement('option');
@@ -334,6 +481,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 select.appendChild(option);
             }
             option.selected = true;
+            schedulePreview();
         });
     });
 
@@ -345,11 +493,26 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 .map((input) => String(input.value || '').trim().toLowerCase())
                 .filter(Boolean);
             favoriteInput.value = selected.join(', ');
+            schedulePreview();
         };
         picker.addEventListener('change', (event) => {
             if (event.target && event.target.matches('[data-favorite-subject]')) {
                 syncFromChecks();
             }
+        });
+    }
+
+    form.addEventListener('input', schedulePreview);
+    form.addEventListener('change', schedulePreview);
+
+    const printBtn = form.querySelector('[data-print-characteristic]');
+    if (printBtn) {
+        printBtn.addEventListener('click', () => {
+            document.body.classList.add('characteristic-printing');
+            window.print();
+            window.setTimeout(() => {
+                document.body.classList.remove('characteristic-printing');
+            }, 300);
         });
     }
 })();

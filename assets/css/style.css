@@ -6071,16 +6071,125 @@ code {
 }
 
 .characteristic-preview {
-    white-space: pre-wrap;
     font-family: "Times New Roman", Times, serif;
-    font-size: 1rem;
-    line-height: 1.45;
-    background: #f8fafc;
+    font-size: 14px;
+    line-height: 1.5;
+    background: #fff;
     border: 1px solid var(--color-border, #e2e8f0);
     border-radius: 8px;
-    padding: 1.25rem 1.5rem;
-    margin: 0;
-    max-height: 36rem;
+    padding: 1.5rem 2rem 2rem;
+    margin: 0 auto;
+    max-width: 52rem;
+    max-height: 40rem;
     overflow: auto;
+    color: #111;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.characteristic-preview-hint {
+    margin: 0 0 0.65rem;
+}
+
+.characteristic-preview__p {
+    margin: 0;
+    padding: 0;
+    line-height: 1.5;
+}
+
+.characteristic-preview__p--center {
+    text-align: center;
+}
+
+.characteristic-preview__p--left {
+    text-align: left;
+}
+
+.characteristic-preview__p--justify {
+    text-align: justify;
+    text-align-last: left;
+    hyphens: auto;
+    -webkit-hyphens: auto;
+}
+
+.characteristic-preview__p--indent {
+    text-indent: 1.25cm;
+}
+
+.characteristic-preview__p--bold {
+    font-weight: 700;
+    font-size: 16px;
+    text-align: center;
+    margin: 0 0 0.85em;
+    text-indent: 0;
+}
+
+.characteristic-preview__sign-row,
+.characteristic-preview__acquainted {
+    display: grid;
+    grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1.2fr);
+    gap: 0.75rem;
+    align-items: end;
+    margin: 0.85em 0 0;
+    line-height: 1.5;
+}
+
+.characteristic-preview__sign-left,
+.characteristic-preview__acquainted > span:first-child {
+    text-align: left;
+}
+
+.characteristic-preview__sign-line,
+.characteristic-preview__sign {
+    text-align: center;
+    letter-spacing: 0.02em;
+}
+
+.characteristic-preview__sign-right,
+.characteristic-preview__acquainted > span:last-child {
+    text-align: right;
+}
+
+@media print {
+    body.characteristic-printing {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    @page {
+        size: A4 portrait;
+        margin: 15mm 12mm 15mm 20mm;
+    }
+
+    body.characteristic-printing .header,
+    body.characteristic-printing .footer,
+    body.characteristic-printing .admin-tabs,
+    body.characteristic-printing .curator-group-filter,
+    body.characteristic-printing .no-print,
+    body.characteristic-printing .alert {
+        display: none !important;
+    }
+
+    body.characteristic-printing .characteristic-preview-panel {
+        box-shadow: none;
+        border: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    body.characteristic-printing .characteristic-preview {
+        max-height: none;
+        max-width: none;
+        overflow: visible;
+        border: none;
+        box-shadow: none;
+        padding: 0;
+        margin: 0;
+    }
+
+    body.characteristic-printing .page,
+    body.characteristic-printing .dashboard {
+        margin: 0;
+        padding: 0;
+    }
 }
 
