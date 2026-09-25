@@ -355,6 +355,20 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                     <?php $fieldSelect('motivation', 'Мотив учения', characteristic_option_list('motivation'), $data); ?>
                     <?php $fieldText('sports_section', 'Спортивная секция', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
                     <?php $fieldText('club', 'Кружок', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
+                    <?php $fieldSelect(
+                        'group_duty',
+                        'Обязанности в группе',
+                        characteristic_option_list('group_duty'),
+                        $data,
+                        false
+                    ); ?>
+                    <?php $fieldSelect(
+                        'student_council',
+                        'Студенческий совет',
+                        characteristic_option_list('student_council'),
+                        $data,
+                        false
+                    ); ?>
                     <?php $fieldArea('events', 'Мероприятия', $data, 3, 'Конкретные мероприятия, в которых участвовал студент. Если пусто — абзац не попадёт в текст.'); ?>
                     <?php $fieldArea('contests', 'Конкурсы', $data, 3, 'Конкурсы, олимпиады, соревнования. Если пусто — абзац не попадёт в текст.'); ?>
                     <?php $fieldArea('achievements', 'Достижения / результаты', $data, 2, 'Грамоты, призовые места и т.п. Если пусто — не добавляется.'); ?>

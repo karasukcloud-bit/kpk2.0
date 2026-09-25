@@ -531,6 +531,18 @@ function characteristic_option_list(string $key, ?string $gender = null): array
             'получение знаний в области будущей профессии',
             'освоение профессии и успешная учёба',
         ],
+        'group_duty' => [
+            '' => '— не указано —',
+            'старосты' => 'Староста',
+            'завуча' => 'Завуч',
+            'физорга' => 'Физорг',
+            'библиотекаря' => 'Библиотекарь',
+            'культмассового сектора' => 'Культмассовый сектор',
+        ],
+        'student_council' => [
+            '0' => 'Нет',
+            '1' => 'Да',
+        ],
     ];
 
     if ($key === 'discipline' && $f) {
@@ -883,6 +895,8 @@ function characteristic_default_data(array $student, array $group, ?array $user 
         'motivation' => characteristic_option_list('motivation')[0],
         'sports_section' => $activities['section'],
         'club' => $activities['club'],
+        'group_duty' => '',
+        'student_council' => '0',
         'events' => '',
         'contests' => '',
         'achievements' => '',
@@ -981,6 +995,8 @@ function build_characteristic_text(array $data): string
     $additionalInfo = trim((string) ($data['additional_info'] ?? ''));
     $sportsSection = trim((string) ($data['sports_section'] ?? ''));
     $club = trim((string) ($data['club'] ?? ''));
+    $groupDuty = trim((string) ($data['group_duty'] ?? ''));
+    $studentCouncil = trim((string) ($data['student_council'] ?? '0'));
     $discipline = trim((string) ($data['discipline'] ?? ''));
     $penalties = trim((string) ($data['penalties'] ?? ''));
     $badHabits = trim((string) ($data['bad_habits'] ?? ''));
@@ -1063,6 +1079,14 @@ function build_characteristic_text(array $data): string
 
     if ($interestLine !== '') {
         $lines[] = trim($interestLine);
+    }
+
+    if ($groupDuty !== '') {
+        $lines[] = $first . ' выполняет обязанности ' . $groupDuty . ' в группе.';
+    }
+
+    if ($studentCouncil === '1') {
+        $lines[] = $first . ' входит в состав студенческого совета.';
     }
 
     if ($events !== '') {
