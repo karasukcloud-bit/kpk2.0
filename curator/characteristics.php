@@ -77,19 +77,33 @@ $fieldSelect = static function (
     string $label,
     array $options,
     array $data,
-    bool $allowCustom = true
+    bool $allowCustom = true,
+    array $labels = []
 ): void {
     $value = (string) ($data[$name] ?? '');
-    $known = in_array($value, $options, true);
+    $known = array_key_exists($value, $options) || in_array($value, $options, true);
+    $isAssoc = $options !== [] && array_keys($options) !== range(0, count($options) - 1);
     ?>
     <div class="form__group">
         <label for="<?= e($name) ?>"><?= e($label) ?></label>
         <select id="<?= e($name) ?>" name="<?= e($name) ?>">
-            <?php foreach ($options as $option): ?>
-            <option value="<?= e($option) ?>"<?= $value === $option ? ' selected' : '' ?>>
-                <?= e($option) ?>
-            </option>
-            <?php endforeach; ?>
+            <?php if ($isAssoc): ?>
+                <?php foreach ($options as $optValue => $optLabel): ?>
+                <option value="<?= e((string) $optValue) ?>"<?= $value === (string) $optValue ? ' selected' : '' ?>>
+                    <?= e((string) $optLabel) ?>
+                </option>
+                <?php endforeach; ?>
+            <?php else: ?>
+                <?php foreach ($options as $option): ?>
+                <?php
+                $optValue = (string) $option;
+                $optLabel = $labels[$optValue] ?? ($optValue !== '' ? $optValue : '— не указывать —');
+                ?>
+                <option value="<?= e($optValue) ?>"<?= $value === $optValue ? ' selected' : '' ?>>
+                    <?= e($optLabel) ?>
+                </option>
+                <?php endforeach; ?>
+            <?php endif; ?>
             <?php if ($allowCustom && $value !== '' && !$known): ?>
             <option value="<?= e($value) ?>" selected><?= e($value) ?> (своё)</option>
             <?php endif; ?>
@@ -116,11 +130,14 @@ $fieldText = static function (string $name, string $label, array $data, string $
     <?php
 };
 
-$fieldArea = static function (string $name, string $label, array $data, int $rows = 2): void {
+$fieldArea = static function (string $name, string $label, array $data, int $rows = 2, string $hint = ''): void {
     ?>
     <div class="form__group">
         <label for="<?= e($name) ?>"><?= e($label) ?></label>
         <textarea id="<?= e($name) ?>" name="<?= e($name) ?>" rows="<?= $rows ?>"><?= e((string) ($data[$name] ?? '')) ?></textarea>
+        <?php if ($hint !== ''): ?>
+        <p class="form__hint text-muted"><?= e($hint) ?></p>
+        <?php endif; ?>
     </div>
     <?php
 };
@@ -183,68 +200,103 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
             <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
 
             <section class="panel">
-                <h2>1. Общие сведения</h2>
+                <h2>Шапка</h2>
                 <div class="form__grid form__grid--2">
-                    <?php $fieldText('full_name', 'ФИО', $data); ?>
+                    <?php $fieldSelect(
+                        'status',
+                        'Статус',
+                        ['student' => 'Студент курса', 'graduate' => 'Выпускник'],
+                        $data,
+                        false
+                    ); ?>
+                    <?php $fieldText('full_name', 'ФИО (именительный)', $data); ?>
+                    <?php $fieldText('full_name_genitive', 'ФИО в родительном падеже', $data, 'Для заголовка: «Тахтамира Александра Александровича»'); ?>
+                    <?php $fieldText('first_name', 'Имя в тексте', $data); ?>
+                    <?php $fieldText('first_name_genitive', 'Имя в родительном падеже', $data, 'Для фразы «к достоинствам Александра»'); ?>
                     <?php $fieldText('birth_date', 'Дата рождения', $data); ?>
                     <?php $fieldText('course', 'Курс', $data); ?>
-                    <?php $fieldText('group_number', 'Группа', $data); ?>
-                    <?php $fieldText('org_name', 'Образовательная организация', $data); ?>
-                    <?php $fieldText('specialty', 'Специальность / профессия', $data); ?>
-                    <?php $fieldText('study_start', 'Обучается с (месяц, год)', $data); ?>
-                    <?php $fieldSelect('study_form', 'Форма обучения', characteristic_option_list('study_form', $gender), $data); ?>
-                    <?php $fieldSelect('funding', 'Основа обучения', characteristic_option_list('funding', $gender), $data); ?>
-                    <?php $fieldSelect('general_trait', 'Проявил(а) себя как', characteristic_option_list('general_trait', $gender), $data); ?>
+                    <?php $fieldText('org_name', 'Организация (полное название)', $data); ?>
+                    <?php $fieldText('college_in', 'Фраза «В … колледже»', $data); ?>
+                    <?php $fieldText('specialty', 'Специальность', $data, 'Например: «Физическая культура»'); ?>
                 </div>
             </section>
 
             <section class="panel">
-                <h2>2. Учебная деятельность</h2>
+                <h2>Адрес и семья</h2>
                 <div class="form__grid form__grid--2">
-                    <?php $fieldText('average_grade', 'Средний балл', $data, 'Подставляется из электронной ведомости, если есть оценки'); ?>
-                    <?php $fieldSelect('study_level', 'Учится на', characteristic_option_list('study_level', $gender), $data); ?>
-                    <?php $fieldArea('favorite_subjects', 'Интерес к дисциплинам', $data); ?>
-                    <?php $fieldSelect('attendance', 'Посещаемость', characteristic_option_list('attendance', $gender), $data); ?>
-                    <?php $fieldSelect('assignments', 'Отношение к заданиям', characteristic_option_list('assignments', $gender), $data); ?>
-                    <?php $fieldSelect('deadlines', 'Сроки сдачи работ', characteristic_option_list('deadlines', $gender), $data); ?>
-                    <?php $fieldText('debts', 'Академические задолженности', $data); ?>
+                    <?php $fieldArea('address', 'Адрес проживания', $data, 2); ?>
+                    <?php $fieldSelect('family_kind', 'Состав семьи (в тексте)', characteristic_option_list('family_kind'), $data); ?>
+                    <?php $fieldArea('family_sentence', 'Предложение о семье', $data, 3, 'Полная фраза: «Александр воспитывается в неполной семье, мать: …»'); ?>
                 </div>
             </section>
 
             <section class="panel">
-                <h2>3. Практическая подготовка</h2>
+                <h2>Учёба и качества</h2>
                 <div class="form__grid form__grid--2">
-                    <?php $fieldText('practice_place', 'Место практики', $data); ?>
-                    <?php $fieldText('practice_grade', 'Оценка за практику', $data); ?>
-                    <?php $fieldArea('practice_review', 'Отзыв руководителя', $data); ?>
-                    <?php $fieldArea('practice_skills', 'Профессиональные навыки', $data); ?>
-                    <?php $fieldText('competitions', 'Олимпиады / конкурсы', $data); ?>
-                    <?php $fieldText('competition_result', 'Результат участия', $data); ?>
+                    <?php $fieldSelect('dominant_grade', 'Преобладающая отметка', characteristic_option_list('dominant_grade'), $data); ?>
+                    <div class="form__group form__group--full">
+                        <label for="favorite_subjects">Интерес к предметам</label>
+                        <?php
+                        $curriculumSubjects = characteristic_group_subject_names((int) $groupId);
+                        $favoriteValue = (string) ($data['favorite_subjects'] ?? '');
+                        $favoriteParts = array_values(array_filter(array_map(
+                            static fn (string $part): string => mb_strtolower(trim($part)),
+                            preg_split('/\s*,\s*/u', $favoriteValue) ?: []
+                        )));
+                        ?>
+                        <?php if ($curriculumSubjects !== []): ?>
+                        <div class="characteristic-subjects" data-favorite-subjects-picker>
+                            <?php foreach ($curriculumSubjects as $subjectName): ?>
+                            <?php
+                            $subjectLower = mb_strtolower($subjectName);
+                            $checked = in_array($subjectLower, $favoriteParts, true);
+                            ?>
+                            <label class="checkbox-label characteristic-subjects__item">
+                                <input
+                                    type="checkbox"
+                                    value="<?= e($subjectName) ?>"
+                                    data-favorite-subject
+                                    <?= $checked ? 'checked' : '' ?>
+                                >
+                                <?= e($subjectName) ?>
+                            </label>
+                            <?php endforeach; ?>
+                        </div>
+                        <p class="form__hint text-muted">Отметьте предметы из учебного плана группы — они подставятся в поле ниже.</p>
+                        <?php else: ?>
+                        <p class="form__hint text-muted">В учебном плане группы предметы пока не найдены — введите вручную.</p>
+                        <?php endif; ?>
+                        <textarea
+                            id="favorite_subjects"
+                            name="favorite_subjects"
+                            rows="2"
+                            data-favorite-subjects-input
+                        ><?= e($favoriteValue) ?></textarea>
+                    </div>
+                    <?php $fieldSelect('self_esteem', 'Самооценка', characteristic_option_list('self_esteem'), $data); ?>
+                    <?php $fieldSelect('motivation', 'Мотив учения', characteristic_option_list('motivation'), $data); ?>
+                    <?php $fieldText('sports_section', 'Спортивная секция', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
+                    <?php $fieldText('club', 'Кружок', $data, 'Из занятости студента. Если пусто — фраза не добавляется.'); ?>
+                    <?php $fieldArea('achievements', 'Достижения / конкурсы', $data, 3, 'Заполняется вручную. Если пусто — абзац в текст не попадёт.'); ?>
+                    <?php $fieldSelect('merits', 'Основные достоинства', characteristic_option_list('merits'), $data); ?>
                 </div>
             </section>
 
             <section class="panel">
-                <h2>4. Личностные качества</h2>
+                <h2>Дисциплина и подписи</h2>
                 <div class="form__grid form__grid--2">
-                    <?php $fieldSelect('personal_traits', 'Характеризуется как', characteristic_option_list('personal_traits', $gender), $data); ?>
-                    <?php $fieldSelect('skills', 'Умеет', characteristic_option_list('skills', $gender), $data); ?>
-                    <?php $fieldSelect('relations', 'Отношения с окружающими', characteristic_option_list('relations', $gender), $data); ?>
-                    <?php $fieldSelect('conflicts', 'В конфликтных ситуациях', characteristic_option_list('conflicts', $gender), $data); ?>
-                </div>
-            </section>
-
-            <section class="panel">
-                <h2>5–7. Внеучебная деятельность, дисциплина, заключение</h2>
-                <div class="form__grid form__grid--2">
-                    <?php $fieldArea('extracurricular', 'Участие во внеучебной деятельности', $data); ?>
-                    <?php $fieldArea('achievements', 'Достижения', $data); ?>
-                    <?php $fieldSelect('discipline_rules', 'Правила распорядка', characteristic_option_list('discipline_rules', $gender), $data); ?>
-                    <?php $fieldSelect('penalties', 'Дисциплинарные взыскания', characteristic_option_list('penalties', $gender), $data); ?>
-                    <?php $fieldText('violations', 'Нарушения', $data); ?>
-                    <?php $fieldSelect('conclusion_side', 'Зарекомендовал(а) себя с … стороны', characteristic_option_list('conclusion_side', $gender), $data); ?>
-                    <?php $fieldSelect('purpose', 'Характеристика выдана для', characteristic_option_list('purpose', $gender), $data); ?>
-                    <?php $fieldText('purpose_extra', 'Уточнение места предоставления', $data, 'Например, название организации'); ?>
-                    <?php $fieldText('director_name', 'Директор (Фамилия И. О.)', $data); ?>
+                    <?php $fieldSelect('discipline', 'Правила распорядка', characteristic_option_list('discipline'), $data); ?>
+                    <?php $fieldSelect('penalties', 'Взыскания', characteristic_option_list('penalties'), $data); ?>
+                    <?php $fieldSelect(
+                        'bad_habits',
+                        'Вредные привычки',
+                        characteristic_option_list('bad_habits'),
+                        $data,
+                        true,
+                        ['' => '— не указывать —']
+                    ); ?>
+                    <?php $fieldText('acquainted_line', 'Строка «Ознакомлен …»', $data, 'Оставьте пустым, если не нужна'); ?>
+                    <?php $fieldText('director_name', 'Директор (Фамилия И. О. или полная строка)', $data, 'Необязательно'); ?>
                     <?php $fieldText('curator_name', 'Куратор (Фамилия И. О.)', $data); ?>
                 </div>
 
@@ -267,6 +319,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
 (function () {
     const form = document.getElementById('characteristic-form');
     if (!form) return;
+
     form.querySelectorAll('.characteristic-custom-input').forEach((input) => {
         input.addEventListener('input', () => {
             const targetName = input.getAttribute('data-target');
@@ -283,6 +336,22 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
             option.selected = true;
         });
     });
+
+    const picker = form.querySelector('[data-favorite-subjects-picker]');
+    const favoriteInput = form.querySelector('[data-favorite-subjects-input]');
+    if (picker && favoriteInput) {
+        const syncFromChecks = () => {
+            const selected = Array.from(picker.querySelectorAll('[data-favorite-subject]:checked'))
+                .map((input) => String(input.value || '').trim().toLowerCase())
+                .filter(Boolean);
+            favoriteInput.value = selected.join(', ');
+        };
+        picker.addEventListener('change', (event) => {
+            if (event.target && event.target.matches('[data-favorite-subject]')) {
+                syncFromChecks();
+            }
+        });
+    }
 })();
 </script>
 

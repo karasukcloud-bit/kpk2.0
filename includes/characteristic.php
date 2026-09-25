@@ -34,119 +34,211 @@ function characteristic_is_female(?string $gender): bool
 /**
  * @return array<string, string>
  */
-function characteristic_gender_words(?string $gender): array
+function characteristic_gender_words(?string $gender, bool $isGraduate = false): array
 {
     $f = characteristic_is_female($gender);
 
+    if ($isGraduate) {
+        return [
+            'status_label' => $f ? 'выпускницы' : 'выпускника',
+            'student_nom' => $f ? 'студентки' : 'студента',
+            'raised' => $f ? 'воспитывалась' : 'воспитывался',
+            'studies' => $f ? 'обучалась' : 'обучался',
+            'studies_well' => $f ? 'занималась' : 'занимался',
+            'showed' => $f ? 'зарекомендовала' : 'зарекомендовал',
+            'participated' => $f ? 'участвовала' : 'участвовал',
+            'relates' => $f ? 'относилась' : 'относился',
+            'has' => $f ? 'имела' : 'имел',
+            'shows_interest' => $f ? 'проявляла' : 'проявлял',
+            'attends' => $f ? 'Посещала' : 'Посещал',
+            'acquainted' => $f ? 'Ознакомлена' : 'Ознакомлен',
+        ];
+    }
+
     return [
-        'student_acc' => $f ? 'студентку' : 'студента',
-        'student_nom' => $f ? 'студентка' : 'студент',
-        'showed' => $f ? 'проявила' : 'проявил',
-        'studied_as' => $f ? 'как' : 'как',
-        'passed_practice' => $f ? 'проходила' : 'проходил',
-        'received' => $f ? 'получила' : 'получил',
+        'status_label' => $f ? 'студентки' : 'студента',
+        'student_nom' => $f ? 'студентки' : 'студента',
+        'raised' => $f ? 'воспитывается' : 'воспитывается',
+        'studies' => $f ? 'обучается' : 'обучается',
+        'studies_well' => $f ? 'занимается' : 'занимается',
+        'showed' => $f ? 'зарекомендовала' : 'зарекомендовал',
         'participated' => $f ? 'участвовала' : 'участвовал',
-        'noticed' => $f ? 'не замечена' : 'не замечен',
-        'allowed' => $f ? 'не допускала' : 'не допускал',
-        'proved' => $f ? 'зарекомендовала' : 'зарекомендовал',
-        'takes_part' => $f ? 'Принимает' : 'Принимает',
+        'relates' => $f ? 'относится' : 'относится',
+        'has' => $f ? 'имеет' : 'имеет',
+        'shows_interest' => $f ? 'проявляет' : 'проявляет',
+        'attends' => 'Посещает',
+        'acquainted' => $f ? 'Ознакомлена' : 'Ознакомлен',
     ];
 }
 
 /**
  * @return list<string>
  */
-function characteristic_option_list(string $key, ?string $gender): array
+function characteristic_option_list(string $key, ?string $gender = null): array
 {
     $f = characteristic_is_female($gender);
 
     $map = [
-        'general_trait' => $f
-            ? ['ответственная', 'добросовестная', 'целеустремлённая']
-            : ['ответственный', 'добросовестный', 'целеустремлённый'],
-        'study_level' => [
-            '«отлично»',
-            '«хорошо» и «отлично»',
-            '«хорошо»',
-            '«удовлетворительно»',
+        'status' => ['student', 'graduate'],
+        'dominant_grade' => ['«5»', '«4-5»', '«4»', '«4-3»', '«3-4»', '«3»'],
+        'family_kind' => [
+            'полной семье',
+            'неполной семье',
+            'приёмной семье',
         ],
-        'attendance' => [
-            'регулярно',
-            'с единичными пропусками по уважительным причинам',
-            'с пропусками',
+        'discipline' => [
+            'Соблюдает правила внутреннего распорядка колледжа',
+            'Старается соблюдать правила внутреннего распорядка колледжа',
         ],
-        'assignments' => $f
-            ? ['добросовестно', 'ответственно', 'формально']
-            : ['добросовестно', 'ответственно', 'формально'],
-        'deadlines' => ['соблюдает', 'иногда нарушает'],
-        'personal_traits' => $f
-            ? [
-                'трудолюбивая, коммуникабельная, дисциплинированная, исполнительная, инициативная, стрессоустойчивая',
-                'трудолюбивая, дисциплинированная, ответственная',
-                'коммуникабельная, инициативная, доброжелательная',
-            ]
-            : [
-                'трудолюбивый, коммуникабельный, дисциплинированный, исполнительный, инициативный, стрессоустойчивый',
-                'трудолюбивый, дисциплинированный, ответственный',
-                'коммуникабельный, инициативный, доброжелательный',
-            ],
-        'skills' => [
-            'работать в команде, планировать время, находить решения в нестандартных ситуациях',
-            'работать в команде и планировать время',
-            'самостоятельно выполнять учебные задания',
+        'penalties' => [
+            'дисциплинарных взысканий не имеет',
+            'взысканий не имеет',
+            'имеет взыскание за пропуск занятия без уважительной причины',
         ],
-        'relations' => [
-            'поддерживает доброжелательные, уважительные отношения',
-            'поддерживает корректные, уважительные отношения',
+        'bad_habits' => [
+            'Вредных привычек не имеет.',
+            'Имеет вредную привычку курение.',
+            '',
         ],
-        'conflicts' => $f
-            ? ['не замечена', 'ведёт себя корректно']
-            : ['не замечен', 'ведёт себя корректно'],
-        'discipline_rules' => ['соблюдает', 'в основном соблюдает'],
-        'penalties' => ['не имеет', 'имеет'],
-        'conclusion_side' => ['положительной', 'хорошей', 'отличной'],
-        'purpose' => [
-            'по месту требования',
-            'в военный комиссариат',
-            'для прохождения практики',
-            'в органы опеки',
-            'в организацию',
+        'merits' => [
+            'желание и умение учиться, настойчивость в достижении поставленных целей, ответственность',
+            'трудолюбие, ответственность, дисциплинированность',
+            'коммуникабельность, инициативность, ответственность',
         ],
-        'study_form' => ['очной', 'заочной'],
-        'funding' => ['бюджетной', 'внебюджетной'],
+        'self_esteem' => [
+            'имеет адекватную самооценку, что положительно сказывается на процессе обучения',
+            'имеет адекватную самооценку',
+        ],
+        'motivation' => [
+            'получение знаний в области будущей профессии',
+            'освоение профессии и успешная учёба',
+        ],
     ];
+
+    if ($key === 'discipline' && $f) {
+        // same text for female in samples
+    }
 
     return $map[$key] ?? [];
 }
 
-function characteristic_estimate_study_start(array $group): string
+function characteristic_first_name(string $fullName): string
 {
-    $course = get_group_course($group);
-    $period = get_active_gradebook_period();
-    $year = (string) ($period['academic_year'] ?? get_default_academic_year());
-    $parts = explode('-', $year);
-    $startYear = (int) ($parts[0] ?? date('Y'));
-    $enrollYear = max(2000, $startYear - $course + 1);
+    $parts = split_person_full_name($fullName);
 
-    return 'сентября ' . $enrollYear;
+    return trim($parts['first_name']) !== ''
+        ? trim($parts['first_name'])
+        : trim($fullName);
 }
 
-function characteristic_study_level_from_average(?float $avg): string
+function characteristic_acquainted_name(string $fullName): string
 {
-    if ($avg === null) {
-        return '«хорошо»';
-    }
-    if ($avg >= 4.75) {
-        return '«отлично»';
-    }
-    if ($avg >= 4.0) {
-        return '«хорошо» и «отлично»';
-    }
-    if ($avg >= 3.5) {
-        return '«хорошо»';
+    $parts = split_person_full_name($fullName);
+    $first = trim($parts['first_name']);
+    $last = trim($parts['last_name']);
+
+    return trim($first . ' ' . $last);
+}
+
+function characteristic_org_short_default(string $orgName): string
+{
+    if (preg_match('/«([^»]+)»/u', $orgName, $m)) {
+        return trim($m[1]);
     }
 
-    return '«удовлетворительно»';
+    return $orgName !== '' ? $orgName : 'педагогическом колледже';
+}
+
+function characteristic_college_in_default(string $orgName): string
+{
+    $short = characteristic_org_short_default($orgName);
+    // Типовая формулировка для Карасукского педколледжа; поле редактируется.
+    if (mb_stripos($short, 'Карасукск') !== false) {
+        return 'В Карасукском педагогическом колледже';
+    }
+
+    return 'В ' . $short;
+}
+
+function characteristic_dominant_grade_from_average(?float $avg): string
+{
+    if ($avg === null) {
+        return '«4-5»';
+    }
+    if ($avg >= 4.75) {
+        return '«5»';
+    }
+    if ($avg >= 4.35) {
+        return '«4-5»';
+    }
+    if ($avg >= 3.85) {
+        return '«4»';
+    }
+    if ($avg >= 3.35) {
+        return '«4-3»';
+    }
+
+    return '«3-4»';
+}
+
+function characteristic_family_kind_from_student(array $student): string
+{
+    if (!empty($student['without_parental_care'])) {
+        return 'приёмной семье';
+    }
+    $type = (string) ($student['family_type'] ?? '');
+    if ($type === 'complete') {
+        return 'полной семье';
+    }
+    if ($type === 'no_father' || $type === 'no_mother') {
+        return 'неполной семье';
+    }
+
+    return 'полной семье';
+}
+
+function characteristic_parent_clause(string $role, string $name, string $workplace): string
+{
+    $name = trim($name);
+    if ($name === '') {
+        return '';
+    }
+    $workplace = trim($workplace);
+    $label = $role === 'mother' ? 'мать' : 'отец';
+    if ($workplace !== '') {
+        return $label . ': ' . $name . ', работает ' . $workplace;
+    }
+
+    return $label . ': ' . $name;
+}
+
+function characteristic_family_sentence(array $student, string $firstName, string $familyKind, string $raisedVerb): string
+{
+    $mother = characteristic_parent_clause(
+        'mother',
+        (string) ($student['mother_name'] ?? ''),
+        (string) ($student['mother_workplace'] ?? '')
+    );
+    $father = characteristic_parent_clause(
+        'father',
+        (string) ($student['father_name'] ?? ''),
+        (string) ($student['father_workplace'] ?? '')
+    );
+
+    $parts = [];
+    if ($mother !== '') {
+        $parts[] = $mother;
+    }
+    if ($father !== '') {
+        $parts[] = $father;
+    }
+
+    $sentence = $firstName . ' ' . $raisedVerb . ' в ' . $familyKind;
+    if ($parts !== []) {
+        $sentence .= ', ' . implode(', ', $parts);
+    }
+
+    return $sentence . '.';
 }
 
 /**
@@ -193,83 +285,106 @@ function characteristic_student_grades_info(int $studentId, int $groupId): array
 
         return [
             'average' => $avg,
-            'top_subjects' => implode(', ', $top),
-            'study_level' => characteristic_study_level_from_average($avg),
+            'top_subjects' => mb_strtolower(implode(', ', $top)),
+            'study_level' => characteristic_dominant_grade_from_average($avg),
         ];
     } catch (Throwable $e) {
         return $empty;
     }
 }
 
-function characteristic_student_attendance_text(int $studentId, int $groupId): string
+/**
+ * Названия кружков/секций студента для характеристики.
+ *
+ * @return array{section: string, club: string}
+ */
+function characteristic_student_activity_titles(int $studentId): array
 {
-    try {
-        $period = get_active_gradebook_period();
-        $year = (string) $period['academic_year'];
-        $totals = fetch_group_attendance_student_totals($groupId, $year);
-        $row = $totals[$studentId] ?? null;
-        if ($row === null) {
-            return 'регулярно';
-        }
-        $unexcused = (int) ($row['unexcused_lessons'] ?? 0);
-        $excused = (int) ($row['excused_lessons'] ?? 0);
-        if ($unexcused === 0 && $excused === 0) {
-            return 'регулярно';
-        }
-        if ($unexcused === 0) {
-            return 'с единичными пропусками по уважительным причинам';
-        }
-
-        return 'с пропусками';
-    } catch (Throwable $e) {
-        return 'регулярно';
-    }
-}
-
-function characteristic_student_debts_text(int $studentId): string
-{
-    try {
-        $subjects = [];
-        foreach (get_all_academic_debts() as $debt) {
-            if ((int) ($debt['student_id'] ?? 0) !== $studentId) {
-                continue;
-            }
-            $name = trim((string) ($debt['subject_name'] ?? ''));
-            if ($name !== '') {
-                $subjects[] = $name;
-            }
-        }
-        $subjects = array_values(array_unique($subjects));
-        if ($subjects === []) {
-            return 'нет';
-        }
-
-        return 'имеются по ' . implode(', ', array_slice($subjects, 0, 5));
-    } catch (Throwable $e) {
-        return 'нет';
-    }
-}
-
-function characteristic_student_activities_text(int $studentId): string
-{
-    $list = get_student_activities($studentId);
-    if ($list === []) {
-        return 'мероприятиях колледжа';
-    }
-    $titles = [];
-    foreach ($list as $activity) {
+    $sections = [];
+    $clubs = [];
+    foreach (get_student_activities($studentId) as $activity) {
         $title = trim((string) ($activity['title'] ?? ''));
         if ($title === '') {
             continue;
         }
-        $type = student_activity_type_label((string) ($activity['activity_type'] ?? 'club'));
-        $titles[] = mb_strtolower($type) . ' «' . $title . '»';
-    }
-    if ($titles === []) {
-        return 'мероприятиях колледжа';
+        $quoted = '«' . $title . '»';
+        if (($activity['activity_type'] ?? '') === 'section') {
+            $sections[] = $quoted;
+        } else {
+            $clubs[] = $quoted;
+        }
     }
 
-    return implode(', ', $titles);
+    return [
+        'section' => implode(', ', array_values(array_unique($sections))),
+        'club' => implode(', ', array_values(array_unique($clubs))),
+    ];
+}
+
+/**
+ * Уникальные названия предметов учебного плана группы.
+ *
+ * @return list<string>
+ */
+function characteristic_group_subject_names(int $groupId): array
+{
+    if ($groupId < 1) {
+        return [];
+    }
+
+    require_once __DIR__ . '/curriculum.php';
+
+    $names = [];
+    $years = [];
+    try {
+        $period = get_active_gradebook_period();
+        $years[] = (string) ($period['academic_year'] ?? '');
+    } catch (Throwable $e) {
+        // ignore
+    }
+    $years[] = get_default_academic_year();
+
+    $stmt = db()->prepare(
+        'SELECT DISTINCT academic_year FROM curriculum_plans WHERE group_id = ? ORDER BY academic_year DESC'
+    );
+    $stmt->execute([$groupId]);
+    foreach ($stmt->fetchAll() as $row) {
+        $years[] = (string) ($row['academic_year'] ?? '');
+    }
+
+    $years = array_values(array_unique(array_filter($years)));
+    foreach ($years as $year) {
+        try {
+            foreach (get_group_curriculum_subjects($groupId, $year, null) as $subject) {
+                $name = trim((string) ($subject['subject_name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $names[mb_strtolower($name)] = $name;
+            }
+        } catch (Throwable $e) {
+            continue;
+        }
+    }
+
+    $list = array_values($names);
+    usort($list, static fn (string $a, string $b): int => strnatcasecmp($a, $b));
+
+    return $list;
+}
+
+function characteristic_specialty_quoted(array $group): string
+{
+    $code = trim((string) ($group['specialty_code'] ?? ''));
+    $name = trim((string) ($group['specialty_name'] ?? ''));
+    if ($name === '') {
+        return '«»';
+    }
+    if ($code !== '') {
+        return $code . ' «' . $name . '»';
+    }
+
+    return '«' . $name . '»';
 }
 
 /**
@@ -279,61 +394,66 @@ function characteristic_default_data(array $student, array $group, ?array $user 
 {
     $org = get_organization();
     $orgName = trim((string) ($org['name'] ?? ''));
+    if ($orgName === '') {
+        $orgName = 'ГАПОУ НСО «Карасукский педагогический колледж»';
+    }
+
     $gender = (string) ($student['gender'] ?? '');
-    $words = characteristic_gender_words($gender);
+    $fullName = trim((string) ($student['full_name'] ?? ''));
+    $firstName = characteristic_first_name($fullName);
     $studentId = (int) ($student['id'] ?? 0);
     $groupId = (int) ($group['id'] ?? 0);
     $grades = characteristic_student_grades_info($studentId, $groupId);
-    $generalOptions = characteristic_option_list('general_trait', $gender);
-    $personalOptions = characteristic_option_list('personal_traits', $gender);
+
+    $address = format_student_registered_address($student);
+    if ($address === '—') {
+        $address = trim((string) ($student['address_actual'] ?? ''));
+    }
+
     $curatorName = trim((string) ($group['curator_name'] ?? ''));
     if ($curatorName === '' && $user !== null) {
         $curatorName = (string) ($user['full_name'] ?? '');
     }
 
-    $specialty = trim(
-        trim((string) ($group['specialty_code'] ?? '')) . ' '
-        . trim((string) ($group['specialty_name'] ?? ''))
-    );
+    $familyKind = characteristic_family_kind_from_student($student);
+    $words = characteristic_gender_words($gender, false);
+    $familySentence = characteristic_family_sentence($student, $firstName, $familyKind, $words['raised']);
+
+    $favorite = $grades['top_subjects'] !== ''
+        ? $grades['top_subjects']
+        : 'профильным дисциплинам';
+    $activities = characteristic_student_activity_titles($studentId);
 
     return [
         'student_id' => (string) $studentId,
-        'full_name' => trim((string) ($student['full_name'] ?? '')),
-        'birth_date' => format_student_birth_date($student['birth_date'] ?? null),
         'gender' => $gender,
+        'status' => 'student',
+        'full_name' => $fullName,
+        'full_name_genitive' => $fullName,
+        'first_name' => $firstName,
+        'first_name_genitive' => $firstName,
+        'birth_date' => format_student_birth_date($student['birth_date'] ?? null),
+        'address' => $address,
         'course' => (string) get_group_course($group),
         'group_number' => (string) ($group['number'] ?? ''),
-        'org_name' => $orgName !== '' ? $orgName : 'образовательной организации',
-        'specialty' => $specialty,
-        'study_start' => characteristic_estimate_study_start($group),
-        'study_form' => 'очной',
-        'funding' => 'бюджетной',
-        'general_trait' => $generalOptions[0] ?? ($words['student_nom'] === 'студентка' ? 'ответственная' : 'ответственный'),
-        'average_grade' => $grades['average'] !== null ? (string) $grades['average'] : '',
-        'study_level' => $grades['study_level'],
-        'favorite_subjects' => $grades['top_subjects'] !== '' ? $grades['top_subjects'] : 'профильным дисциплинам',
-        'attendance' => characteristic_student_attendance_text($studentId, $groupId),
-        'assignments' => 'добросовестно',
-        'deadlines' => 'соблюдает',
-        'debts' => characteristic_student_debts_text($studentId),
-        'practice_place' => '',
-        'practice_grade' => '',
-        'practice_review' => '',
-        'practice_skills' => '',
-        'competitions' => '',
-        'competition_result' => '',
-        'personal_traits' => $personalOptions[0] ?? '',
-        'skills' => characteristic_option_list('skills', $gender)[0] ?? '',
-        'relations' => characteristic_option_list('relations', $gender)[0] ?? '',
-        'conflicts' => characteristic_option_list('conflicts', $gender)[0] ?? '',
-        'extracurricular' => characteristic_student_activities_text($studentId),
+        'org_name' => $orgName,
+        'college_in' => characteristic_college_in_default($orgName),
+        'specialty' => characteristic_specialty_quoted($group),
+        'family_kind' => $familyKind,
+        'family_sentence' => $familySentence,
+        'dominant_grade' => $grades['study_level'],
+        'favorite_subjects' => $favorite,
+        'self_esteem' => characteristic_option_list('self_esteem')[0],
+        'motivation' => characteristic_option_list('motivation')[0],
+        'sports_section' => $activities['section'],
+        'club' => $activities['club'],
         'achievements' => '',
-        'discipline_rules' => 'соблюдает',
-        'penalties' => 'не имеет',
-        'violations' => $words['allowed'],
-        'conclusion_side' => 'положительной',
-        'purpose' => 'по месту требования',
-        'purpose_extra' => '',
+        'discipline' => characteristic_option_list('discipline')[0],
+        'penalties' => characteristic_option_list('penalties')[0],
+        'bad_habits' => characteristic_option_list('bad_habits')[0],
+        'merits' => characteristic_option_list('merits')[0],
+        'acquainted_line' => characteristic_gender_words($gender)['acquainted']
+            . ' ' . characteristic_acquainted_name($fullName),
         'director_name' => '',
         'curator_name' => person_short_name($curatorName),
     ];
@@ -369,117 +489,146 @@ function characteristic_merge_post(array $defaults, array $post): array
  */
 function build_characteristic_text(array $data): string
 {
-    $words = characteristic_gender_words($data['gender'] ?? '');
-    $fio = (string) ($data['full_name'] ?? '');
-    $fioShort = $fio;
-    $org = (string) ($data['org_name'] ?? '');
-    $avg = trim((string) ($data['average_grade'] ?? ''));
-    $avgText = $avg !== '' ? $avg : 'не рассчитан';
+    $isGraduate = ($data['status'] ?? 'student') === 'graduate';
+    $words = characteristic_gender_words($data['gender'] ?? '', $isGraduate);
 
-    $purpose = (string) ($data['purpose'] ?? 'по месту требования');
-    $purposeExtra = trim((string) ($data['purpose_extra'] ?? ''));
-    if ($purpose === 'в организацию' && $purposeExtra !== '') {
-        $purpose .= ' (' . $purposeExtra . ')';
-    } elseif ($purposeExtra !== '' && $purpose === 'по месту требования') {
-        $purpose = $purposeExtra;
-    }
-
-    $practicePlace = trim((string) ($data['practice_place'] ?? ''));
-    $practiceGrade = trim((string) ($data['practice_grade'] ?? ''));
-    $practiceReview = trim((string) ($data['practice_review'] ?? ''));
-    $practiceSkills = trim((string) ($data['practice_skills'] ?? ''));
-    $competitions = trim((string) ($data['competitions'] ?? ''));
-    $competitionResult = trim((string) ($data['competition_result'] ?? ''));
+    $fullName = trim((string) ($data['full_name'] ?? ''));
+    $fullGen = trim((string) ($data['full_name_genitive'] ?? $fullName));
+    $first = trim((string) ($data['first_name'] ?? characteristic_first_name($fullName)));
+    $firstGen = trim((string) ($data['first_name_genitive'] ?? $first));
+    $org = trim((string) ($data['org_name'] ?? ''));
+    $course = trim((string) ($data['course'] ?? ''));
+    $birth = trim((string) ($data['birth_date'] ?? ''));
+    $address = trim((string) ($data['address'] ?? ''));
+    $collegeIn = trim((string) ($data['college_in'] ?? 'В колледже'));
+    $specialty = trim((string) ($data['specialty'] ?? ''));
+    $grade = trim((string) ($data['dominant_grade'] ?? '«4-5»'));
+    $favorite = trim((string) ($data['favorite_subjects'] ?? ''));
+    $selfEsteem = trim((string) ($data['self_esteem'] ?? ''));
+    $motivation = trim((string) ($data['motivation'] ?? ''));
     $achievements = trim((string) ($data['achievements'] ?? ''));
+    $sportsSection = trim((string) ($data['sports_section'] ?? ''));
+    $club = trim((string) ($data['club'] ?? ''));
+    $discipline = trim((string) ($data['discipline'] ?? ''));
+    $penalties = trim((string) ($data['penalties'] ?? ''));
+    $badHabits = trim((string) ($data['bad_habits'] ?? ''));
+    $merits = trim((string) ($data['merits'] ?? ''));
+    $familySentence = trim((string) ($data['family_sentence'] ?? ''));
+    $acquainted = trim((string) ($data['acquainted_line'] ?? ''));
+    $director = trim((string) ($data['director_name'] ?? ''));
+    $curator = trim((string) ($data['curator_name'] ?? ''));
 
-    $practiceBlock = '';
-    if ($practicePlace !== '') {
-        $practiceBlock .= $words['passed_practice'] . ' учебную и производственную практику в '
-            . $practicePlace . '.';
-        if ($practiceGrade !== '') {
-            $practiceBlock .= ' По итогам практики ' . $words['received'] . ' оценку '
-                . $practiceGrade;
-            if ($practiceReview !== '') {
-                $practiceBlock .= ' и отзыв руководителя: ' . $practiceReview;
-            }
-            $practiceBlock .= '.';
-        } elseif ($practiceReview !== '') {
-            $practiceBlock .= ' Отзыв руководителя: ' . $practiceReview . '.';
-        }
+    if ($isGraduate) {
+        $headerRole = $words['status_label'] . ' ' . $org;
     } else {
-        $practiceBlock .= 'Сведения о месте прохождения практики уточняются.';
-    }
-    if ($practiceSkills !== '') {
-        $practiceBlock .= ' Профессиональные навыки: ' . $practiceSkills . '.';
-    }
-    if ($competitions !== '') {
-        $practiceBlock .= ' ' . $words['participated'] . ' в ' . $competitions;
-        if ($competitionResult !== '') {
-            $practiceBlock .= ' — ' . $competitionResult;
-        }
-        $practiceBlock .= '.';
+        $headerRole = $words['status_label'] . ' ' . $course . ' курса ' . $org;
     }
 
-    $extraBlock = 'Принимает участие в ' . ($data['extracurricular'] ?: 'мероприятиях колледжа') . '.';
-    if ($achievements !== '') {
-        $extraBlock .= ' Достижения: ' . $achievements . '.';
+    $birthLine = $fullName;
+    if ($birth !== '') {
+        $birthLine .= ' ' . $birth . ' года рождения';
+    }
+    if ($address !== '' && $address !== '—') {
+        $birthLine .= ' проживает по адресу: ' . $address . '.';
+    } else {
+        $birthLine .= '.';
     }
 
-    $penalties = (string) ($data['penalties'] ?? 'не имеет');
+    if ($isGraduate) {
+        $female = characteristic_is_female($data['gender'] ?? '');
+        $studyLine = $collegeIn . ' ' . $first . ' завершил' . ($female ? 'а' : '')
+            . ' обучение по специальности ' . $specialty . '.';
+    } else {
+        $studyLine = $collegeIn . ' ' . $first . ' ' . $words['studies']
+            . ' на специальности ' . $specialty . '.';
+    }
+
+    $studyBlock = 'По всем предметам ' . $words['studies_well'] . ' хорошо, преобладающая отметка '
+        . $grade . '. За период обучения ' . $words['showed']
+        . ' себя с положительной стороны. Активно ' . $words['participated']
+        . ' во всех общеколледжных мероприятиях и мероприятиях группы. Всегда '
+        . $words['relates'] . ' ответственно к поручениям и своим обязанностям. ';
+    if ($selfEsteem !== '') {
+        $studyBlock .= $first . ' ' . $selfEsteem . '. ';
+    }
+    if ($motivation !== '') {
+        $studyBlock .= 'Основным мотивом учения у ' . $words['student_nom']
+            . ' выступает ' . $motivation . '.';
+    }
+
+    $interestLine = $first . ' ' . $words['shows_interest']
+        . ' особый интерес к таким предметам, как ' . $favorite . '.';
+    if ($badHabits !== '') {
+        $interestLine .= ' ' . $badHabits;
+    }
+
+    $disciplineLine = trim($discipline);
+    if ($penalties !== '') {
+        $disciplineLine .= ($disciplineLine !== '' ? ', ' : '') . $penalties;
+    }
+    if ($disciplineLine !== '') {
+        $disciplineLine .= '.';
+    }
+
+    $meritsLine = 'К основным достоинствам ' . $firstGen
+        . ' можно отнести ' . $merits . '.';
 
     $lines = [
-        'ХАРАКТЕРИСТИКА',
+        'Характеристика',
+        $fullGen,
+        $headerRole,
         '',
-        'на ' . $words['student_acc'] . ' ' . ($data['course'] ?? '') . ' курса группы '
-            . ($data['group_number'] ?? ''),
-        $org,
-        'специальность / профессия: ' . ($data['specialty'] ?? ''),
-        '',
-        $fio . ', ' . ($data['birth_date'] ?? '') . ',',
-        '',
-        '1. Общие сведения',
-        $fioShort . ' обучается в ' . $org . ' с ' . ($data['study_start'] ?? '')
-            . ' по ' . ($data['study_form'] ?? 'очной') . ' форме обучения на '
-            . ($data['funding'] ?? 'бюджетной') . ' основе. За время обучения '
-            . $words['showed'] . ' себя как ' . ($data['general_trait'] ?? '')
-            . ' ' . $words['student_nom'] . '.',
-        '',
-        '2. Учебная деятельность',
-        'Средний балл успеваемости: ' . $avgText . '. Учится на '
-            . ($data['study_level'] ?? '«хорошо»') . '. Наибольший интерес проявляет к дисциплинам '
-            . ($data['favorite_subjects'] ?? '') . '. Занятия посещает '
-            . ($data['attendance'] ?? 'регулярно') . '. К выполнению заданий относится '
-            . ($data['assignments'] ?? 'добросовестно') . ', сроки сдачи работ '
-            . ($data['deadlines'] ?? 'соблюдает') . '. Академических задолженностей '
-            . ($data['debts'] ?? 'нет') . '.',
-        '',
-        '3. Практическая подготовка',
-        $practiceBlock,
-        '',
-        '4. Личностные и деловые качества',
-        $fioShort . ' характеризуется как ' . ($data['personal_traits'] ?? '')
-            . '. Умеет ' . ($data['skills'] ?? '') . '. С одногруппниками и преподавателями '
-            . ($data['relations'] ?? '') . '. В конфликтных ситуациях '
-            . ($data['conflicts'] ?? '') . '.',
-        '',
-        '5. Внеучебная и общественная деятельность',
-        $extraBlock,
-        '',
-        '6. Дисциплина и соблюдение норм',
-        'Правила внутреннего распорядка ' . ($data['discipline_rules'] ?? 'соблюдает')
-            . '. Дисциплинарных взысканий ' . $penalties
-            . '. Нарушений ' . ($data['violations'] ?? $words['allowed']) . '.',
-        '',
-        '7. Заключение',
-        $fioShort . ' ' . $words['proved'] . ' себя с '
-            . ($data['conclusion_side'] ?? 'положительной')
-            . ' стороны. Характеристика выдана для предоставления ' . $purpose . '.',
-        '',
-        'Директор ' . $org . ' ___________ / '
-            . (($data['director_name'] ?? '') !== '' ? $data['director_name'] : '_______________'),
-        'Куратор группы ___________ / '
-            . (($data['curator_name'] ?? '') !== '' ? $data['curator_name'] : '_______________'),
+        $birthLine,
     ];
+
+    if ($familySentence !== '') {
+        $lines[] = $familySentence;
+    }
+
+    $lines[] = $studyLine;
+    $lines[] = '';
+    $lines[] = trim($studyBlock);
+    $lines[] = '';
+    $lines[] = trim($interestLine);
+
+    if ($achievements !== '') {
+        $lines[] = $first . ' ' . $words['participated'] . ' в ' . $achievements . '.';
+    }
+
+    if ($sportsSection !== '') {
+        $sectionValue = $sportsSection;
+        if (!str_contains($sectionValue, '«')) {
+            $sectionValue = '«' . $sectionValue . '»';
+        }
+        $lines[] = $words['attends'] . ' спортивную секцию ' . $sectionValue . '.';
+    }
+
+    if ($club !== '') {
+        $clubValue = $club;
+        if (!str_contains($clubValue, '«')) {
+            $clubValue = '«' . $clubValue . '»';
+        }
+        $lines[] = $words['attends'] . ' кружок ' . $clubValue . '.';
+    }
+
+    if ($disciplineLine !== '') {
+        $lines[] = $disciplineLine;
+    }
+
+    $lines[] = $meritsLine;
+    $lines[] = '';
+
+    if ($acquainted !== '') {
+        $lines[] = $acquainted;
+        $lines[] = '';
+    }
+    if ($director !== '') {
+        $lines[] = (str_contains(mb_strtolower($director), 'директор')
+            ? $director
+            : ('Директор колледжа ' . $director));
+        $lines[] = '';
+    }
+    $lines[] = 'Куратор группы ' . ($curator !== '' ? $curator : '_______________');
 
     return implode("\n", $lines);
 }
@@ -494,14 +643,11 @@ function characteristic_word_paragraph(
     bool $bold = false,
     string $align = 'both',
     int $size = 28,
-    bool $center = false
+    bool $firstLineIndent = true
 ): string {
-    if ($center) {
-        $align = 'center';
-    }
     $align = in_array($align, ['left', 'center', 'right', 'both'], true) ? $align : 'both';
     $boldXml = $bold ? '<w:b/>' : '';
-    $indent = $align === 'both'
+    $indent = ($align === 'both' && $firstLineIndent)
         ? '<w:ind w:firstLine="709"/>'
         : '';
 
@@ -514,47 +660,62 @@ function characteristic_word_paragraph(
 
 /**
  * @param array<string, string> $data
- * @return list<array{text: string, bold?: bool, align?: string, size?: int}>
+ * @return list<array{text: string, bold?: bool, align?: string, size?: int, indent?: bool}>
  */
 function build_characteristic_blocks(array $data): array
 {
     $text = build_characteristic_text($data);
     $parts = preg_split("/\r\n|\n|\r/", $text) ?: [];
-    $org = (string) ($data['org_name'] ?? '');
-    $specialtyLine = 'специальность / профессия: ' . ($data['specialty'] ?? '');
     $blocks = [];
+    $lineIndex = 0;
+    $contentStarted = false;
 
-    foreach ($parts as $line) {
-        $line = rtrim($line);
+    foreach ($parts as $raw) {
+        $line = rtrim($raw);
         if ($line === '') {
-            $blocks[] = ['text' => '', 'align' => 'left'];
+            $blocks[] = ['text' => '', 'align' => 'left', 'indent' => false];
             continue;
         }
-        if ($line === 'ХАРАКТЕРИСТИКА') {
-            $blocks[] = ['text' => $line, 'bold' => true, 'align' => 'center', 'size' => 32];
+
+        $lineIndex++;
+
+        if ($lineIndex === 1 && mb_strtolower($line) === 'характеристика') {
+            $blocks[] = ['text' => 'Характеристика', 'bold' => true, 'align' => 'center', 'size' => 32, 'indent' => false];
             continue;
         }
-        if (preg_match('/^\d+\.\s/u', $line)
-            || str_starts_with($line, 'Директор')
-            || str_starts_with($line, 'Куратор')) {
-            $blocks[] = [
-                'text' => $line,
-                'bold' => (bool) preg_match('/^\d+\.\s/u', $line),
-                'align' => 'left',
-            ];
+
+        // Заголовок: ФИО род.п. и строка статуса — по центру
+        if (!$contentStarted && (
+            $lineIndex <= 3
+            || str_starts_with($line, 'студента ')
+            || str_starts_with($line, 'студентки ')
+            || str_starts_with($line, 'выпускника ')
+            || str_starts_with($line, 'выпускницы ')
+        )) {
+            $blocks[] = ['text' => $line, 'align' => 'center', 'indent' => false];
+            if ($lineIndex >= 3
+                || str_starts_with($line, 'студента ')
+                || str_starts_with($line, 'студентки ')
+                || str_starts_with($line, 'выпускника ')
+                || str_starts_with($line, 'выпускницы ')
+            ) {
+                $contentStarted = true;
+            }
             continue;
         }
+
         if (
-            str_starts_with($line, 'на ')
-            || $line === $org
-            || $line === $specialtyLine
-            || str_starts_with($line, 'специальность / профессия')
-            || preg_match('/,\s*\d{2}\.\d{2}\.\d{4},?\s*$/u', $line)
+            str_starts_with($line, 'Ознакомлен')
+            || str_starts_with($line, 'Ознакомлена')
+            || str_starts_with($line, 'Директор')
+            || str_starts_with($line, 'И.О. директора')
+            || str_starts_with($line, 'Куратор группы')
         ) {
-            $blocks[] = ['text' => $line, 'align' => 'center'];
+            $blocks[] = ['text' => $line, 'align' => 'left', 'indent' => false];
             continue;
         }
-        $blocks[] = ['text' => $line, 'align' => 'both'];
+
+        $blocks[] = ['text' => $line, 'align' => 'both', 'indent' => true];
     }
 
     return $blocks;
@@ -577,7 +738,7 @@ function build_characteristic_docx(array $data): string
             !empty($block['bold']),
             (string) ($block['align'] ?? 'both'),
             (int) ($block['size'] ?? 28),
-            ($block['align'] ?? '') === 'center'
+            ($block['indent'] ?? true) !== false && ($block['align'] ?? '') === 'both'
         );
     }
 

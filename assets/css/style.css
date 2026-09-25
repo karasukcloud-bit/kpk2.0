@@ -6044,6 +6044,32 @@ code {
     margin-top: 0.4rem;
 }
 
+.characteristic-subjects {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem 0.75rem;
+    max-height: 12rem;
+    overflow: auto;
+    padding: 0.65rem 0.75rem;
+    margin-bottom: 0.5rem;
+    border: 1px solid var(--color-border, #e2e8f0);
+    border-radius: 8px;
+    background: #f8fafc;
+}
+
+.characteristic-subjects__item {
+    margin: 0;
+    font-size: 0.875rem;
+    font-weight: 400;
+    text-transform: none;
+    letter-spacing: 0;
+    color: #334155;
+}
+
+.curator-characteristics-page .form__group--full {
+    grid-column: 1 / -1;
+}
+
 .characteristic-preview {
     white-space: pre-wrap;
     font-family: "Times New Roman", Times, serif;
