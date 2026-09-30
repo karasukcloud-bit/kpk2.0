@@ -129,6 +129,111 @@ function get_journal_mdk_assignments(string $academicYear, ?string $semester = n
     return $result;
 }
 
+/** Журналы УП/ПП по группам (без ПДП). */
+function get_journal_practice_assignments(string $academicYear, ?string $semester = null): array
+{
+    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+    if (!$typeCol) {
+        return [];
+    }
+
+    $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
+    $courseSelect = $courseCol ? ', g.course AS group_course' : ', 1 AS group_course';
+    $moduleJoin = '';
+    $moduleSelect = ', NULL AS module_number, ci.practice_kind, ci.component_index';
+    $modTable = db()->query("SHOW TABLES LIKE 'curriculum_modules'")->fetch();
+    if ($modTable) {
+        $moduleJoin = ' LEFT JOIN curriculum_modules cm ON cm.id = ci.module_id';
+        $moduleSelect = ', cm.number AS module_number, ci.practice_kind, ci.component_index';
+    }
+
+    $stmt = db()->prepare(
+        'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
+                ci.item_type, ci.start_abs_semester, ci.end_abs_semester,
+                sub.name AS subject_name' . $moduleSelect . ',
+                g.id AS group_id, g.number AS group_number' . $courseSelect . ',
+                sp.name AS specialty_name,
+                cp.academic_year,
+                u.full_name AS teacher_name
+         FROM curriculum_items ci
+         INNER JOIN subjects sub ON sub.id = ci.subject_id
+         INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
+         INNER JOIN study_groups g ON g.id = cp.group_id
+         INNER JOIN specialties sp ON sp.id = g.specialty_id
+         LEFT JOIN users u ON u.id = ci.teacher_id' . $moduleJoin . '
+         WHERE ci.item_type = \'practice\'
+           AND ci.practice_kind IN (\'up\', \'pp\')
+           AND cp.academic_year = ?'
+    );
+    $stmt->execute([$academicYear]);
+    $all = $stmt->fetchAll();
+    $result = [];
+
+    foreach ($all as $row) {
+        $course = get_group_course([
+            'id' => (int) $row['group_id'],
+            'number' => (string) $row['group_number'],
+            'course' => $row['group_course'] ?? null,
+        ]);
+        if ($semester !== null && in_array($semester, ['1', '2'], true)) {
+            if (!curriculum_item_covers_course_semester($row, $course, $semester)) {
+                continue;
+            }
+        } elseif (
+            !curriculum_item_covers_course_semester($row, $course, '1')
+            && !curriculum_item_covers_course_semester($row, $course, '2')
+        ) {
+            continue;
+        }
+
+        $kind = normalize_practice_kind((string) ($row['practice_kind'] ?? '')) ?? 'up';
+        $moduleNumber = (int) ($row['module_number'] ?? 0);
+        $index = max(1, (int) ($row['component_index'] ?? 1));
+        if ($moduleNumber > 0) {
+            $code = format_practice_code($kind, $moduleNumber, $index);
+            $row['subject_name'] = $code . ' — ' . (string) $row['subject_name'];
+        } else {
+            $row['subject_name'] = practice_kind_label($kind) . ' — ' . (string) $row['subject_name'];
+        }
+        $result[] = $row;
+    }
+
+    usort($result, static function (array $a, array $b): int {
+        $g = strcmp((string) $a['group_number'], (string) $b['group_number']);
+        if ($g !== 0) {
+            return $g;
+        }
+
+        return strcmp((string) $a['subject_name'], (string) $b['subject_name']);
+    });
+
+    return $result;
+}
+
+function get_journal_practice_groups(?string $academicYear = null, ?string $semester = null): array
+{
+    return group_journal_assignments_by_group(
+        get_journal_practice_assignments(
+            normalize_academic_year($academicYear ?? get_default_academic_year())
+                ?? get_default_academic_year(),
+            $semester
+        )
+    );
+}
+
+function normalize_journal_work_type(?string $workType): string
+{
+    $workType = trim((string) $workType);
+    if ($workType === '') {
+        return '';
+    }
+    if (function_exists('mb_substr')) {
+        return mb_substr($workType, 0, 255);
+    }
+
+    return substr($workType, 0, 255);
+}
+
 function group_journal_assignments_by_group(array $assignments): array
 {
     $groups = [];
@@ -292,13 +397,69 @@ function get_journal_grades_for_student(int $curriculumItemId, int $studentId): 
     return $result;
 }
 
+function journal_lessons_have_work_type(): bool
+{
+    static $has = null;
+    if ($has === null) {
+        $has = (bool) db()->query("SHOW COLUMNS FROM journal_lessons LIKE 'work_type'")->fetch();
+    }
+
+    return $has;
+}
+
+function journal_lessons_have_hours(): bool
+{
+    static $has = null;
+    if ($has === null) {
+        $has = (bool) db()->query("SHOW COLUMNS FROM journal_lessons LIKE 'hours'")->fetch();
+    }
+
+    return $has;
+}
+
+function normalize_journal_lesson_hours($hours): float
+{
+    $value = round((float) $hours, 1);
+    if ($value < 0) {
+        return 0.0;
+    }
+    if ($value > 99.9) {
+        return 99.9;
+    }
+
+    return $value;
+}
+
+function build_practice_covered_summary(array $lessons): array
+{
+    $total = count($lessons);
+
+    return [
+        'total_lessons' => $total,
+        'total_hours' => $total,
+    ];
+}
+
 function get_journal_lessons(int $curriculumItemId): array
 {
+    $workSelect = journal_lessons_have_work_type()
+        ? ', jl.work_type'
+        : ', \'\' AS work_type';
+    $hoursSelect = journal_lessons_have_hours()
+        ? ', jl.hours'
+        : ', 0 AS hours';
+    $topicSelect = journal_lessons_have_work_type()
+        ? 'COALESCE(NULLIF(TRIM(jl.work_type), \'\'), kt.title) AS topic_title'
+        : 'kt.title AS topic_title';
+    $topicHoursSelect = journal_lessons_have_hours()
+        ? 'COALESCE(NULLIF(jl.hours, 0), kt.hours) AS topic_hours'
+        : 'kt.hours AS topic_hours';
+
     $stmt = db()->prepare(
-        'SELECT jl.id, jl.curriculum_item_id, jl.lesson_date, jl.ktp_topic_id, jl.grade_type, jl.note,
-                kt.title AS topic_title,
+        'SELECT jl.id, jl.curriculum_item_id, jl.lesson_date, jl.ktp_topic_id, jl.grade_type, jl.note' . $workSelect . $hoursSelect . ',
+                ' . $topicSelect . ',
                 kt.lesson_type AS topic_lesson_type,
-                kt.hours AS topic_hours,
+                ' . $topicHoursSelect . ',
                 kt.sort_order AS topic_sort_order
          FROM journal_lessons jl
          LEFT JOIN ktp_topics kt ON kt.id = jl.ktp_topic_id
@@ -426,9 +587,20 @@ function add_journal_lesson(
     string $date,
     ?int $ktpTopicId = null,
     string $gradeType = 'current',
-    string $note = ''
+    string $note = '',
+    string $workType = '',
+    float $hours = 0.0
 ): array {
-    return save_journal_lesson_data($curriculumItemId, $date, $ktpTopicId, $gradeType, null, $note);
+    return save_journal_lesson_data(
+        $curriculumItemId,
+        $date,
+        $ktpTopicId,
+        $gradeType,
+        null,
+        $note,
+        $workType,
+        $hours
+    );
 }
 
 function update_journal_lesson(
@@ -436,11 +608,17 @@ function update_journal_lesson(
     string $date,
     ?int $ktpTopicId = null,
     string $gradeType = 'current',
-    string $note = ''
+    string $note = '',
+    string $workType = '',
+    ?float $hours = null
 ): array {
     $lesson = get_journal_lesson_by_id($lessonId);
     if ($lesson === null) {
         return ['success' => false, 'error' => 'Урок не найден.'];
+    }
+
+    if ($hours === null) {
+        $hours = (float) ($lesson['hours'] ?? 0);
     }
 
     return save_journal_lesson_data(
@@ -449,7 +627,9 @@ function update_journal_lesson(
         $ktpTopicId,
         $gradeType,
         $lessonId,
-        $note
+        $note,
+        $workType,
+        $hours
     );
 }
 
@@ -459,7 +639,9 @@ function save_journal_lesson_data(
     ?int $ktpTopicId,
     string $gradeType,
     ?int $lessonId,
-    string $note = ''
+    string $note = '',
+    string $workType = '',
+    float $hours = 0.0
 ): array {
     if (!can_access_journal_item($curriculumItemId)) {
         return ['success' => false, 'error' => 'Нет доступа к журналу.'];
@@ -472,6 +654,10 @@ function save_journal_lesson_data(
 
     $gradeType = normalize_journal_grade_type($gradeType);
     $note = normalize_journal_lesson_note($note);
+    $workType = normalize_journal_work_type($workType);
+    $hours = normalize_journal_lesson_hours($hours);
+    $hasWorkType = journal_lessons_have_work_type();
+    $hasHours = journal_lessons_have_hours();
 
     if ($ktpTopicId !== null && $ktpTopicId > 0) {
         $topic = get_ktp_topic_by_id($ktpTopicId);
@@ -496,11 +682,25 @@ function save_journal_lesson_data(
 
     $pdo = db();
     if ($lessonId === null) {
-        $stmt = $pdo->prepare(
-            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note)
-             VALUES (?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType, $note]);
+        if ($hasWorkType && $hasHours) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note, work_type, hours)
+                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType, $note, $workType, $hours]);
+        } elseif ($hasWorkType) {
+            $stmt = $pdo->prepare(
+                'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note, work_type)
+                 VALUES (?, ?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType, $note, $workType]);
+        } else {
+            $stmt = $pdo->prepare(
+                'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note)
+                 VALUES (?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$curriculumItemId, $date, $ktpTopicId, $gradeType, $note]);
+        }
         $newLessonId = (int) $pdo->lastInsertId();
         $savedLesson = get_journal_lesson_by_id($newLessonId);
         if ($savedLesson !== null) {
@@ -516,12 +716,28 @@ function save_journal_lesson_data(
         return ['success' => true, 'lesson_id' => $newLessonId];
     }
 
-    $stmt = $pdo->prepare(
-        'UPDATE journal_lessons
-         SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?, note = ?
-         WHERE id = ? AND curriculum_item_id = ?'
-    );
-    $stmt->execute([$date, $ktpTopicId, $gradeType, $note, $lessonId, $curriculumItemId]);
+    if ($hasWorkType && $hasHours) {
+        $stmt = $pdo->prepare(
+            'UPDATE journal_lessons
+             SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?, note = ?, work_type = ?, hours = ?
+             WHERE id = ? AND curriculum_item_id = ?'
+        );
+        $stmt->execute([$date, $ktpTopicId, $gradeType, $note, $workType, $hours, $lessonId, $curriculumItemId]);
+    } elseif ($hasWorkType) {
+        $stmt = $pdo->prepare(
+            'UPDATE journal_lessons
+             SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?, note = ?, work_type = ?
+             WHERE id = ? AND curriculum_item_id = ?'
+        );
+        $stmt->execute([$date, $ktpTopicId, $gradeType, $note, $workType, $lessonId, $curriculumItemId]);
+    } else {
+        $stmt = $pdo->prepare(
+            'UPDATE journal_lessons
+             SET lesson_date = ?, ktp_topic_id = ?, grade_type = ?, note = ?
+             WHERE id = ? AND curriculum_item_id = ?'
+        );
+        $stmt->execute([$date, $ktpTopicId, $gradeType, $note, $lessonId, $curriculumItemId]);
+    }
 
     $savedLesson = get_journal_lesson_by_id($lessonId);
     if ($savedLesson !== null) {
@@ -563,9 +779,13 @@ function delete_journal_lesson(int $lessonId): array
 
 function get_journal_lesson_by_id(int $lessonId): ?array
 {
+    $topicSelect = journal_lessons_have_work_type()
+        ? 'COALESCE(NULLIF(TRIM(jl.work_type), \'\'), kt.title) AS topic_title'
+        : 'kt.title AS topic_title';
+
     $stmt = db()->prepare(
         'SELECT jl.*, ci.teacher_id, cp.group_id,
-                kt.title AS topic_title,
+                ' . $topicSelect . ',
                 kt.lesson_type AS topic_lesson_type,
                 kt.hours AS topic_hours
          FROM journal_lessons jl

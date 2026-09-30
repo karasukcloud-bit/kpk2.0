@@ -1336,6 +1336,25 @@ function ensure_ktp_schema(PDO $pdo): void
         );
     }
 
+    $workTypeCol = $pdo->query("SHOW COLUMNS FROM journal_lessons LIKE 'work_type'")->fetch();
+    if (!$workTypeCol) {
+        $pdo->exec(
+            "ALTER TABLE journal_lessons
+             ADD work_type VARCHAR(255) NOT NULL DEFAULT '' AFTER note"
+        );
+    }
+
+    $hoursCol = $pdo->query("SHOW COLUMNS FROM journal_lessons LIKE 'hours'")->fetch();
+    if (!$hoursCol) {
+        $after = $workTypeCol || $pdo->query("SHOW COLUMNS FROM journal_lessons LIKE 'work_type'")->fetch()
+            ? 'work_type'
+            : 'note';
+        $pdo->exec(
+            "ALTER TABLE journal_lessons
+             ADD hours DECIMAL(4,1) NOT NULL DEFAULT 0 AFTER {$after}"
+        );
+    }
+
     $uniqueKey = $pdo->query("SHOW INDEX FROM journal_lessons WHERE Key_name = 'uq_journal_item_date'")->fetch();
     if ($uniqueKey) {
         $fkItem = $pdo->query(

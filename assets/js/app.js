@@ -704,6 +704,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const lessonIdInput = lessonModal.querySelector('[data-lesson-id]');
         const dateInput = lessonModal.querySelector('[data-lesson-date]');
         const topicSelect = lessonModal.querySelector('[data-lesson-topic]');
+        const workTypeInput = lessonModal.querySelector('[data-lesson-work-type]');
+        const hoursInput = lessonModal.querySelector('[data-lesson-hours]');
         const gradeTypeSelect = lessonModal.querySelector('[data-lesson-grade-type]');
         const noteInput = lessonModal.querySelector('[data-lesson-note]');
         const submitBtn = lessonModal.querySelector('[data-lesson-submit]');
@@ -744,6 +746,12 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (selectedTopicId && topicSelect.value !== selectedTopicId) {
                     topicSelect.value = '';
                 }
+            }
+            if (workTypeInput) {
+                workTypeInput.value = button.dataset.workType || '';
+            }
+            if (hoursInput) {
+                hoursInput.value = button.dataset.hours || hoursInput.value || '6';
             }
             if (gradeTypeSelect) {
                 gradeTypeSelect.value = button.dataset.gradeType || 'current';
