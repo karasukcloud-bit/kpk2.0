@@ -3837,6 +3837,292 @@ body.is-col-resizing * {
     margin-top: 0.35rem;
 }
 
+.group-report__divider {
+    margin: 1.75rem 0 1.25rem;
+}
+
+.group-report-dash {
+    margin: 0 0 0.5rem;
+}
+
+.group-report-dash__hero {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 1rem 1.5rem;
+    padding: 1.25rem 1.35rem;
+    margin-bottom: 1rem;
+    border-radius: 16px;
+    background:
+        radial-gradient(120% 140% at 100% 0%, rgba(37, 99, 235, 0.16), transparent 55%),
+        linear-gradient(135deg, #0f172a 0%, #1e293b 55%, #1d4ed8 140%);
+    color: #f8fafc;
+    box-shadow: 0 12px 28px rgba(15, 23, 42, 0.18);
+}
+
+.group-report-dash__eyebrow {
+    font-size: 0.75rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: rgba(248, 250, 252, 0.72);
+    margin-bottom: 0.35rem;
+}
+
+.group-report-dash__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.55rem 0.85rem;
+}
+
+.group-report-dash__group {
+    font-size: 2rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.group-report-dash__course {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.12);
+    font-size: 0.8125rem;
+    font-weight: 600;
+}
+
+.group-report-dash__specialty {
+    margin-top: 0.4rem;
+    font-size: 0.95rem;
+    color: rgba(248, 250, 252, 0.88);
+}
+
+.group-report-dash__specialty .text-muted {
+    color: rgba(248, 250, 252, 0.55);
+}
+
+.group-report-dash__kpi {
+    text-align: right;
+    min-width: 5.5rem;
+}
+
+.group-report-dash__kpi-value {
+    font-size: 2.25rem;
+    font-weight: 700;
+    line-height: 1;
+}
+
+.group-report-dash__kpi-label {
+    margin-top: 0.25rem;
+    font-size: 0.8125rem;
+    color: rgba(248, 250, 252, 0.7);
+}
+
+.group-report-dash__grid {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.85rem;
+}
+
+.group-report-dash__card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border);
+    border-radius: 14px;
+    padding: 1rem 1.05rem;
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.group-report-dash__card--activities {
+    border-color: #bfdbfe;
+    background: linear-gradient(180deg, #eff6ff 0%, #ffffff 70%);
+}
+
+.group-report-dash__card-label {
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    color: var(--color-muted);
+    margin-bottom: 0.65rem;
+}
+
+.group-report-dash__big {
+    font-size: 1.75rem;
+    font-weight: 700;
+    line-height: 1.15;
+    color: var(--color-text);
+}
+
+.group-report-dash__meta {
+    margin-top: 0.45rem;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+    line-height: 1.4;
+}
+
+.group-report-dash__split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.group-report-dash__split-value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    line-height: 1.1;
+}
+
+.group-report-dash__split-label {
+    margin-top: 0.15rem;
+    font-size: 0.78rem;
+    color: var(--color-muted);
+}
+
+.group-report-dash__bar {
+    display: flex;
+    width: 100%;
+    height: 0.45rem;
+    margin-top: 0.75rem;
+    border-radius: 999px;
+    overflow: hidden;
+    background: #e2e8f0;
+}
+
+.group-report-dash__bar-male { background: #2563eb; }
+.group-report-dash__bar-female { background: #db2777; }
+.group-report-dash__bar-busy { background: #16a34a; }
+.group-report-dash__bar-free { background: #94a3b8; }
+
+.group-report-dash__chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.group-report-dash__chip {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.55rem;
+    border-radius: 999px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    font-size: 0.78rem;
+    color: #334155;
+}
+
+.group-report-dash__chip--warn {
+    background: #fff7ed;
+    border-color: #fed7aa;
+    color: #c2410c;
+}
+
+.group-report-dash__chip--danger {
+    background: #fef2f2;
+    border-color: #fecaca;
+    color: #b91c1c;
+}
+
+.group-report-dash__chip--alert {
+    background: #f5f3ff;
+    border-color: #ddd6fe;
+    color: #6d28d9;
+}
+
+.group-report-dash__attention {
+    margin: 1rem 0 0;
+    padding: 1rem 1.05rem;
+    border: 1px solid #fecaca;
+    border-radius: 14px;
+    background: linear-gradient(180deg, #fff1f2 0%, #ffffff 65%);
+    box-shadow: 0 4px 16px rgba(15, 23, 42, 0.04);
+}
+
+.group-report-dash__attention-hint {
+    margin: 0.15rem 0 0;
+    font-size: 0.8125rem;
+    color: var(--color-muted);
+}
+
+.group-report-dash__attention-empty {
+    margin: 0.75rem 0 0;
+    color: var(--color-muted);
+    font-size: 0.9rem;
+}
+
+.group-report-dash__attention-list {
+    list-style: none;
+    margin: 0.85rem 0 0;
+    padding: 0;
+    display: grid;
+    gap: 0.65rem;
+}
+
+.group-report-dash__attention-item {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.7rem 0.8rem;
+    border-radius: 12px;
+    background: #fff;
+    border: 1px solid #fee2e2;
+}
+
+.group-report-dash__attention-rank {
+    flex: 0 0 auto;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 999px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #dc2626;
+    color: #fff;
+    font-size: 0.85rem;
+    font-weight: 700;
+}
+
+.group-report-dash__attention-body {
+    min-width: 0;
+    flex: 1 1 auto;
+}
+
+.group-report-dash__attention-name {
+    font-weight: 650;
+    color: var(--color-text);
+}
+
+.group-report-dash__attention-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    margin-top: 0.4rem;
+}
+
+@media (max-width: 1100px) {
+    .group-report-dash__grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+@media (max-width: 700px) {
+    .group-report-dash__grid {
+        grid-template-columns: 1fr;
+    }
+
+    .group-report-dash__hero {
+        padding: 1.1rem 1rem;
+    }
+
+    .group-report-dash__group {
+        font-size: 1.65rem;
+    }
+
+    .group-report-dash__kpi {
+        text-align: left;
+    }
+}
+
 .checkbox-label input[type="checkbox"] {
     width: auto;
 }

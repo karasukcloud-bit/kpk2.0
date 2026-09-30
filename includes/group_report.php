@@ -6,6 +6,7 @@ require_once __DIR__ . '/students.php';
 require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/glaz.php';
 require_once __DIR__ . '/student_activities.php';
+require_once __DIR__ . '/attendance.php';
 
 /**
  * Аналитическая справка по группе на основе карточек студентов.
@@ -139,7 +140,143 @@ function build_group_report(array $students, ?int $groupId = null): array
         'activities' => build_group_activities_report($students),
     ];
 
-    return array_merge($report, build_group_report_academic($students, $groupId));
+    $report = array_merge($report, build_group_report_academic($students, $groupId));
+    $report['attention_students'] = build_group_attention_students(
+        $students,
+        $groupId,
+        $report['debtors'] ?? [],
+        $report['sanctions'] ?? [],
+        3
+    );
+
+    return $report;
+}
+
+/**
+ * Топ студентов группы, требующих внимания куратора.
+ *
+ * @param list<array<string, mixed>> $students
+ * @param list<array<string, mixed>> $debtors
+ * @param list<array<string, mixed>> $sanctions
+ * @return list<array{
+ *   student_id: int,
+ *   full_name: string,
+ *   score: int,
+ *   debts: int,
+ *   unexcused: int,
+ *   sanctions: int,
+ *   reasons: list<string>
+ * }>
+ */
+function build_group_attention_students(
+    array $students,
+    ?int $groupId,
+    array $debtors,
+    array $sanctions,
+    int $limit = 3
+): array {
+    if ($students === [] || $limit < 1) {
+        return [];
+    }
+
+    $byId = [];
+    foreach ($students as $student) {
+        $id = (int) ($student['id'] ?? 0);
+        if ($id < 1) {
+            continue;
+        }
+        $byId[$id] = [
+            'student_id' => $id,
+            'full_name' => (string) ($student['full_name'] ?? ''),
+            'score' => 0,
+            'debts' => 0,
+            'unexcused' => 0,
+            'sanctions' => 0,
+            'reasons' => [],
+        ];
+    }
+
+    if ($byId === []) {
+        return [];
+    }
+
+    foreach ($debtors as $debtor) {
+        $id = (int) ($debtor['student_id'] ?? 0);
+        if (!isset($byId[$id])) {
+            continue;
+        }
+        $debtCount = count($debtor['subjects'] ?? []);
+        if ($debtCount <= 0) {
+            continue;
+        }
+        $byId[$id]['debts'] = $debtCount;
+        $byId[$id]['score'] += $debtCount * 4;
+        $byId[$id]['reasons'][] = 'задолженности: ' . $debtCount;
+    }
+
+    if ($groupId !== null && $groupId > 0) {
+        $year = '';
+        try {
+            $period = get_active_gradebook_period();
+            $year = (string) ($period['academic_year'] ?? '');
+        } catch (Throwable $e) {
+            $year = get_default_academic_year();
+        }
+        if ($year === '') {
+            $year = get_default_academic_year();
+        }
+
+        $attendance = fetch_group_attendance_student_totals($groupId, $year);
+        foreach ($attendance as $studentId => $totals) {
+            if (!isset($byId[$studentId])) {
+                continue;
+            }
+            $unexcused = (int) ($totals['unexcused_lessons'] ?? 0);
+            if ($unexcused <= 0) {
+                continue;
+            }
+            $byId[$studentId]['unexcused'] = $unexcused;
+            $byId[$studentId]['score'] += $unexcused;
+            $byId[$studentId]['reasons'][] = 'пропуски без ув. причины: ' . $unexcused;
+        }
+    }
+
+    foreach ($sanctions as $item) {
+        $id = (int) ($item['student_id'] ?? 0);
+        if (!isset($byId[$id])) {
+            continue;
+        }
+        $byId[$id]['sanctions'] += 1;
+        $byId[$id]['score'] += 5;
+    }
+
+    foreach ($byId as &$row) {
+        if ((int) $row['sanctions'] > 0) {
+            $row['reasons'][] = 'взыскания: ' . (int) $row['sanctions'];
+        }
+    }
+    unset($row);
+
+    $list = array_values(array_filter(
+        $byId,
+        static fn (array $row): bool => (int) $row['score'] > 0
+    ));
+
+    usort($list, static function (array $a, array $b): int {
+        if ((int) $a['score'] !== (int) $b['score']) {
+            return (int) $b['score'] <=> (int) $a['score'];
+        }
+        if ((int) $a['debts'] !== (int) $b['debts']) {
+            return (int) $b['debts'] <=> (int) $a['debts'];
+        }
+        if ((int) $a['unexcused'] !== (int) $b['unexcused']) {
+            return (int) $b['unexcused'] <=> (int) $a['unexcused'];
+        }
+
+        return strcasecmp((string) $a['full_name'], (string) $b['full_name']);
+    });
+
+    return array_slice($list, 0, $limit);
 }
 
 /**
