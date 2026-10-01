@@ -302,7 +302,7 @@ function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course
             'subject_id' => (int) ($mdk['subject_id'] ?? 0),
             'teacher_id' => $mdk['teacher_id'] ?? null,
             'semester' => (string) ($mdk['semester'] ?? 'both'),
-            'sort_order' => 0,
+            'sort_order' => (int) ($mdk['sort_order'] ?? 0),
             'subject_name' => (string) ($mdk['subject_name'] ?? ''),
             'teacher_name' => $mdk['teacher_name'] ?? null,
             'item_type' => 'mdk',
@@ -314,11 +314,7 @@ function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course
         ];
     }
 
-    usort($items, static function (array $a, array $b): int {
-        return strcmp((string) $a['subject_name'], (string) $b['subject_name']);
-    });
-
-    return $items;
+    return sort_curriculum_items_by_order($items);
 }
 
 function curriculum_list_item_in_semester(array $item, string $semester, int $course): bool
@@ -406,11 +402,27 @@ function get_group_curriculum_subjects(int $groupId, string $academicYear, ?stri
         }
     }
 
+    return enrich_curriculum_items(sort_curriculum_items_by_order($items), $plan);
+}
+
+function sort_curriculum_items_by_order(array $items): array
+{
     usort($items, static function (array $a, array $b): int {
-        return strcmp((string) ($a['subject_name'] ?? ''), (string) ($b['subject_name'] ?? ''));
+        $cmp = ((int) ($a['sort_order'] ?? 0)) <=> ((int) ($b['sort_order'] ?? 0));
+        if ($cmp !== 0) {
+            return $cmp;
+        }
+
+        $nameCmp = strcmp((string) ($a['subject_name'] ?? ''), (string) ($b['subject_name'] ?? ''));
+        if ($nameCmp !== 0) {
+            return $nameCmp;
+        }
+
+        return ((int) ($a['id'] ?? $a['curriculum_item_id'] ?? 0))
+            <=> ((int) ($b['id'] ?? $b['curriculum_item_id'] ?? 0));
     });
 
-    return enrich_curriculum_items($items, $plan);
+    return $items;
 }
 
 function enrich_curriculum_items(array $items, array $plan): array
@@ -562,6 +574,93 @@ function get_next_curriculum_sort_order(int $planId): int
     return (int) $stmt->fetchColumn();
 }
 
+function move_curriculum_item(
+    int $planId,
+    int $itemId,
+    string $direction,
+    string $listSemester,
+    int $course
+): array {
+    if (!in_array($direction, ['up', 'down'], true)) {
+        return ['success' => false, 'error' => 'Некорректное направление.'];
+    }
+    if (!in_array($listSemester, ['1', '2'], true)) {
+        return ['success' => false, 'error' => 'Некорректный семестр списка.'];
+    }
+
+    $plan = get_curriculum_plan_by_id($planId);
+    if ($plan === null) {
+        return ['success' => false, 'error' => 'Учебный план не найден.'];
+    }
+
+    $item = get_curriculum_item_by_id($itemId);
+    if ($item === null || (int) $item['group_id'] !== (int) $plan['group_id']) {
+        return ['success' => false, 'error' => 'Запись не найдена.'];
+    }
+
+    $groupId = (int) $plan['group_id'];
+    $full = get_curriculum_subjects_with_mdk($planId, $groupId, $course);
+    $list = array_values(array_filter(
+        $full,
+        static function (array $row) use ($listSemester, $course): bool {
+            return curriculum_list_item_in_semester($row, $listSemester, $course);
+        }
+    ));
+
+    $index = null;
+    foreach ($list as $i => $row) {
+        if ((int) $row['id'] === $itemId) {
+            $index = $i;
+            break;
+        }
+    }
+    if ($index === null) {
+        return ['success' => false, 'error' => 'Предмет не найден в списке семестра.'];
+    }
+
+    $swapIndex = $direction === 'up' ? $index - 1 : $index + 1;
+    if ($swapIndex < 0 || $swapIndex >= count($list)) {
+        return ['success' => true];
+    }
+
+    $idA = (int) $list[$index]['id'];
+    $idB = (int) $list[$swapIndex]['id'];
+    $posA = null;
+    $posB = null;
+    foreach ($full as $i => $row) {
+        $id = (int) $row['id'];
+        if ($id === $idA) {
+            $posA = $i;
+        }
+        if ($id === $idB) {
+            $posB = $i;
+        }
+    }
+    if ($posA === null || $posB === null) {
+        return ['success' => false, 'error' => 'Не удалось определить порядок предметов.'];
+    }
+
+    $tmp = $full[$posA];
+    $full[$posA] = $full[$posB];
+    $full[$posB] = $tmp;
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $stmt = $pdo->prepare('UPDATE curriculum_items SET sort_order = ? WHERE id = ?');
+        foreach ($full as $i => $row) {
+            $stmt->execute([$i + 1, (int) $row['id']]);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+
+        return ['success' => false, 'error' => 'Не удалось сохранить порядок предметов.'];
+    }
+
+    return ['success' => true];
+}
+
 function render_semester_options(string $selected = '1'): string
 {
     $html = '';
@@ -575,8 +674,12 @@ function render_semester_options(string $selected = '1'): string
     return $html;
 }
 
-function render_curriculum_semester_table(array $items, int $groupId, string $academicYear): string
-{
+function render_curriculum_semester_table(
+    array $items,
+    int $groupId,
+    string $academicYear,
+    string $listSemester = '1'
+): string {
     if ($items === []) {
         return '<p class="text-muted">Нет предметов.</p>';
     }
@@ -585,6 +688,7 @@ function render_curriculum_semester_table(array $items, int $groupId, string $ac
         . '<th>№</th><th>Предмет</th><th>Преподаватель</th><th class="table__actions-col">Действия</th>'
         . '</tr></thead><tbody>';
 
+    $total = count($items);
     foreach ($items as $index => $item) {
         $id = (int) $item['id'];
         $year = e(urlencode($academicYear));
@@ -601,7 +705,8 @@ function render_curriculum_semester_table(array $items, int $groupId, string $ac
             $html .= ' ' . render_semester_badge('both');
         }
 
-        $html .= '</td><td>' . e($item['teacher_name'] ?? '—') . '</td><td class="table__actions">';
+        $html .= '</td><td>' . e($item['teacher_name'] ?? '—') . '</td><td class="table__actions">'
+            . render_curriculum_order_buttons($id, $listSemester, $index, $total);
 
         if ($isMdk) {
             require_once __DIR__ . '/curriculum_modules.php';
@@ -654,6 +759,43 @@ function render_curriculum_semester_table(array $items, int $groupId, string $ac
     }
 
     return $html . '</tbody></table></div>';
+}
+
+function render_curriculum_order_buttons(
+    int $itemId,
+    string $listSemester,
+    int $index,
+    int $total
+): string {
+    $html = '<span class="curriculum-order">';
+
+    if ($index > 0) {
+        $html .= '<form method="post" class="inline-form curriculum-order__form">'
+            . csrf_field()
+            . '<input type="hidden" name="action" value="move_item">'
+            . '<input type="hidden" name="item_id" value="' . $itemId . '">'
+            . '<input type="hidden" name="direction" value="up">'
+            . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'
+            . '<button type="submit" class="btn btn--ghost btn--sm" title="Выше" aria-label="Переместить выше">↑</button>'
+            . '</form>';
+    } else {
+        $html .= '<button type="button" class="btn btn--ghost btn--sm" disabled aria-disabled="true" title="Выше">↑</button>';
+    }
+
+    if ($index < $total - 1) {
+        $html .= '<form method="post" class="inline-form curriculum-order__form">'
+            . csrf_field()
+            . '<input type="hidden" name="action" value="move_item">'
+            . '<input type="hidden" name="item_id" value="' . $itemId . '">'
+            . '<input type="hidden" name="direction" value="down">'
+            . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'
+            . '<button type="submit" class="btn btn--ghost btn--sm" title="Ниже" aria-label="Переместить ниже">↓</button>'
+            . '</form>';
+    } else {
+        $html .= '<button type="button" class="btn btn--ghost btn--sm" disabled aria-disabled="true" title="Ниже">↓</button>';
+    }
+
+    return $html . '</span>';
 }
 
 function render_semester_badge(string $semester): string

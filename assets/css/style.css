@@ -760,6 +760,24 @@ body {
     margin-left: 0.25rem;
 }
 
+.curriculum-order {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1rem;
+    margin-right: 0.35rem;
+    vertical-align: middle;
+}
+
+.curriculum-order__form {
+    margin-left: 0;
+}
+
+.curriculum-order .btn {
+    min-width: 1.75rem;
+    padding-left: 0.3rem;
+    padding-right: 0.3rem;
+}
+
 .form--filter {
     margin-bottom: 1.25rem;
 }

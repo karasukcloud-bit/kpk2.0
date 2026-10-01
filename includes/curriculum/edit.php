@@ -95,6 +95,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         } elseif ($action === 'delete_item') {
             $result = delete_curriculum_item((int) ($_POST['item_id'] ?? 0));
+        } elseif ($action === 'move_item') {
+            $result = move_curriculum_item(
+                $planId,
+                (int) ($_POST['item_id'] ?? 0),
+                (string) ($_POST['direction'] ?? ''),
+                (string) ($_POST['list_semester'] ?? ''),
+                get_group_course($group)
+            );
         } elseif ($action === 'add_module') {
             $tabAfter = 'modules';
             $result = create_curriculum_module(
@@ -194,6 +202,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'add_item' => 'Предмет добавлен в учебный план.',
                 'update_item' => 'Предмет обновлён.',
                 'delete_item' => 'Предмет удалён из учебного плана.',
+                'move_item' => 'Порядок предметов обновлён.',
                 'add_module' => 'Профессиональный модуль добавлен.',
                 'update_module' => 'Модуль обновлён.',
                 'delete_module' => 'Модуль удалён.',
@@ -373,11 +382,11 @@ require __DIR__ . '/../header.php';
             <div class="semester-columns">
                 <div class="semester-column">
                     <h3>1 семестр</h3>
-                    <?= render_curriculum_semester_table($semester1Items, $groupId, $academicYear) ?>
+                    <?= render_curriculum_semester_table($semester1Items, $groupId, $academicYear, '1') ?>
                 </div>
                 <div class="semester-column">
                     <h3>2 семестр</h3>
-                    <?= render_curriculum_semester_table($semester2Items, $groupId, $academicYear) ?>
+                    <?= render_curriculum_semester_table($semester2Items, $groupId, $academicYear, '2') ?>
                 </div>
             </div>
         <?php endif; ?>

@@ -789,7 +789,7 @@ function get_group_mdk_for_period(int $groupId, int $course, ?string $semester =
 
     $stmt = db()->prepare(
         'SELECT ci.id AS curriculum_item_id, ci.id, ci.curriculum_plan_id, ci.subject_id,
-                ci.semester, ci.teacher_id,
+                ci.semester, ci.teacher_id, ci.sort_order,
                 ci.item_type, ci.module_id, ci.start_abs_semester, ci.end_abs_semester,
                 ci.component_index, sub.name AS subject_name,
                 g.id AS group_id, g.number AS group_number,
