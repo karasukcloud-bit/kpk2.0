@@ -662,6 +662,45 @@ function fetch_top_unexcused_students(string $academicYear, string $semester, in
 }
 
 /**
+ * @param list<array<string, mixed>> $report
+ * @return list<array<string, mixed>>
+ */
+function pick_attendance_attention_groups(array $report, int $limit = 5): array
+{
+    $limit = max(1, min(50, $limit));
+    $rows = [];
+
+    foreach ($report as $row) {
+        $summary = $row['summary'] ?? [];
+        $unexcused = (int) ($summary['unexcused'] ?? 0);
+        if ($unexcused <= 0) {
+            continue;
+        }
+        $excused = (int) ($summary['excused'] ?? 0);
+        $rows[] = [
+            'group_id' => (int) ($row['group_id'] ?? 0),
+            'group_number' => (string) ($row['group_number'] ?? ''),
+            'unexcused' => $unexcused,
+            'excused' => $excused,
+            'total' => $unexcused + $excused,
+            'per_student_unexcused' => (float) ($summary['per_student_unexcused'] ?? 0),
+            'students_with_unexcused' => count($row['unexcused_students'] ?? []),
+        ];
+    }
+
+    usort($rows, static function (array $a, array $b): int {
+        $byUnexcused = $b['unexcused'] <=> $a['unexcused'];
+        if ($byUnexcused !== 0) {
+            return $byUnexcused;
+        }
+
+        return strcmp((string) $a['group_number'], (string) $b['group_number']);
+    });
+
+    return array_slice($rows, 0, $limit);
+}
+
+/**
  * @return array{semester1: list, semester2: list, academic_year: string}
  */
 function build_attendance_attention_students(string $academicYear, int $limit = 5): array
@@ -670,6 +709,24 @@ function build_attendance_attention_students(string $academicYear, int $limit = 
         'academic_year' => $academicYear,
         'semester1' => fetch_top_unexcused_students($academicYear, '1', $limit),
         'semester2' => fetch_top_unexcused_students($academicYear, '2', $limit),
+    ];
+}
+
+/**
+ * @param list<array<string, mixed>> $semester1Report
+ * @param list<array<string, mixed>> $semester2Report
+ * @return array{semester1: list, semester2: list, academic_year: string}
+ */
+function build_attendance_attention_groups(
+    string $academicYear,
+    array $semester1Report,
+    array $semester2Report,
+    int $limit = 5
+): array {
+    return [
+        'academic_year' => $academicYear,
+        'semester1' => pick_attendance_attention_groups($semester1Report, $limit),
+        'semester2' => pick_attendance_attention_groups($semester2Report, $limit),
     ];
 }
 

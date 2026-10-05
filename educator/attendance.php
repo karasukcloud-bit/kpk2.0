@@ -23,6 +23,7 @@ $perStudentChartData = build_attendance_year_per_student_chart_data($year);
 $compareCharts = build_attendance_three_years_comparison_set($year);
 $compareYearsLabel = implode(', ', array_column($compareCharts['total']['series'], 'year'));
 $reasonAnalysis = build_attendance_reason_analysis($year, $yearReport);
+$attentionGroups = build_attendance_attention_groups($year, $semester1Report, $semester2Report, 5);
 $attentionStudents = build_attendance_attention_students($year, 5);
 
 $pageTitle = 'Сводка по пропускам — Панель воспитателя';
@@ -79,6 +80,7 @@ require __DIR__ . '/../includes/header.php';
         ?>
     </section>
 
+    <?php require __DIR__ . '/../includes/educator/attention_groups.php'; ?>
     <?php require __DIR__ . '/../includes/educator/attention_students.php'; ?>
 
     <section class="panel">
