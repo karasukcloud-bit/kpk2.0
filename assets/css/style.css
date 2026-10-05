@@ -5326,7 +5326,247 @@ code {
     }
 
     @page {
-        size: landscape;
+        size: A4 landscape;
+        margin: 10mm;
+    }
+}
+
+.curator-attendance-page .curator-attendance-print-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin: 1rem 0;
+}
+
+.curator-attendance-page .curator-print-mode {
+    margin: 0;
+    font-size: 0.875rem;
+    color: var(--color-muted);
+}
+
+.curator-attendance-page .curator-print-only {
+    display: none;
+}
+
+.curator-attendance-page .curator-attendance-print-split {
+    display: none;
+}
+
+.curator-attendance-page .curator-attendance-print-org {
+    margin: 0 0 0.5rem;
+    text-align: center;
+    font-size: 12pt;
+    font-weight: 600;
+    line-height: 1.35;
+}
+
+.curator-attendance-page .curator-attendance-print-header h2 {
+    margin: 0 0 0.35rem;
+    text-align: center;
+}
+
+.curator-attendance-page .curator-attendance-print-header p {
+    margin: 0 0 1rem;
+    text-align: center;
+}
+
+@media print {
+    body:has(.curator-attendance-page) .header,
+    body:has(.curator-attendance-page) .footer,
+    body:has(.curator-attendance-page) .curator-no-print {
+        display: none !important;
+    }
+
+    body:has(.curator-attendance-page) .page {
+        min-height: 0;
+        display: block;
+        box-shadow: none;
+        border: none;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.curator-attendance-page) .main {
+        display: block;
+        max-width: none;
+        width: 100%;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    body:has(.curator-attendance-page) .dashboard,
+    body:has(.curator-attendance-page) .panel {
+        box-shadow: none;
+        border: none;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    .curator-attendance-page .curator-print-only {
+        display: block !important;
+    }
+
+    .curator-attendance-page .attendance-table__actions-col,
+    .curator-attendance-page .table__actions {
+        display: none !important;
+    }
+
+    .curator-attendance-page .table-wrap {
+        overflow: visible;
+        margin: 0;
+    }
+
+    .curator-attendance-page .curator-attendance-print-header {
+        break-after: avoid;
+        page-break-after: avoid;
+    }
+
+    .curator-attendance-page .attendance-table {
+        font-size: 9px;
+        min-width: 0;
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .curator-attendance-page .attendance-table th,
+    .curator-attendance-page .attendance-table td {
+        padding: 0.2rem 0.25rem;
+        border: 1px solid #000;
+    }
+
+    .curator-attendance-page .attendance-table__date-col {
+        position: static;
+        min-width: 70px;
+    }
+
+    .curator-attendance-page .attendance-table__student-col {
+        width: auto;
+        min-width: 28px;
+        max-width: none;
+        text-align: center;
+        vertical-align: middle;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
+    }
+
+    .curator-attendance-page .attendance-table__cell {
+        text-align: center;
+        vertical-align: middle;
+        border-left: 1px solid #000;
+        border-right: 1px solid #000;
+    }
+
+    .curator-attendance-page .attendance-student-title {
+        display: inline-block;
+        font-size: 8px;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        text-align: center;
+        margin: 0 auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    .curator-attendance-page .attendance-cell__reason {
+        font-size: 7px;
+    }
+
+    .curator-attendance-page .attendance-summary {
+        break-inside: avoid;
+        font-size: 11px;
+    }
+
+    .curator-attendance-page .attendance-cell--excused,
+    .curator-attendance-page .attendance-cell--unexcused {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .is-print-split-source {
+        display: none !important;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .curator-attendance-print-split {
+        display: block !important;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .curator-attendance-print-sheet--break {
+        break-after: page;
+        page-break-after: always;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet {
+        width: auto;
+        min-width: 0;
+        table-layout: fixed;
+        font-size: 12px;
+        border-collapse: collapse;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet th,
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet td {
+        padding: 0.35rem 0.4rem;
+        border: 1px solid #000;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-table__date-col {
+        position: static;
+        min-width: 80px;
+        width: 80px;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-table__student-col {
+        width: auto;
+        min-width: 52px;
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-table__cell {
+        text-align: center;
+        vertical-align: middle;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-student-title {
+        display: inline-block;
+        font-size: 11px;
+        writing-mode: vertical-rl;
+        transform: rotate(180deg);
+        text-align: center;
+        margin: 0 auto;
+        max-height: none;
+        overflow: visible;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-cell__counts {
+        font-size: 12px;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-table--print-sheet .attendance-cell__reason {
+        font-size: 9px;
+    }
+
+    body.curator-print-multisheet .curator-attendance-page .attendance-legend,
+    body.curator-print-multisheet .curator-attendance-page .attendance-unexcused-list,
+    body.curator-print-multisheet .curator-attendance-page .attendance-summary {
+        display: none !important;
+    }
+
+    .curator-attendance-page .curator-attendance-print-area,
+    .curator-attendance-page .curator-attendance-print-split,
+    .curator-attendance-page .curator-attendance-print-sheet {
+        page: curator-attendance;
+    }
+
+    @page {
+        size: A4 landscape;
+        margin: 10mm;
+    }
+
+    @page curator-attendance {
+        size: A4 landscape;
         margin: 10mm;
     }
 }
@@ -5792,7 +6032,7 @@ code {
     }
 
     @page {
-        size: landscape;
+        size: A4 landscape;
         margin: 10mm;
     }
 }
@@ -6459,9 +6699,14 @@ code {
         print-color-adjust: exact;
     }
 
-    @page {
+    /* Именованная страница — не перебивает landscape у журнала пропусков */
+    @page characteristic {
         size: A4 portrait;
         margin: 15mm 12mm 15mm 20mm;
+    }
+
+    body.characteristic-printing .characteristic-preview {
+        page: characteristic;
     }
 
     body.characteristic-printing .header,

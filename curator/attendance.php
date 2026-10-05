@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../includes/auth.php';
+require_once __DIR__ . '/../includes/organization.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/attendance.php';
 
@@ -18,6 +19,14 @@ $monthOptions = get_academic_year_months($year);
 $month = resolve_attendance_month($year, $_GET['month'] ?? null);
 [$monthStart, $monthEnd] = attendance_month_date_bounds($month);
 $reasons = get_attendance_reasons(true);
+$organizationName = trim((string) (get_organization()['name'] ?? ''));
+$curatorName = '';
+if ($group !== null) {
+    $curatorName = trim((string) ($group['curator_name'] ?? ''));
+    if ($curatorName === '') {
+        $curatorName = trim((string) (current_user()['full_name'] ?? ''));
+    }
+}
 $error = null;
 $editDayId = isset($_GET['edit_day']) ? (int) $_GET['edit_day'] : 0;
 $editDay = null;
@@ -134,8 +143,8 @@ if ($editDayId > 0) {
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
+<div class="dashboard dashboard--wide curator-attendance-page">
+    <section class="panel curator-no-print">
         <div class="panel__header">
             <div>
                 <h1>Панель куратора</h1>
@@ -147,11 +156,11 @@ require __DIR__ . '/../includes/header.php';
 
     <section class="panel">
         <?php if ($success): ?>
-            <div class="alert alert--success"><?= e($success) ?></div>
+            <div class="alert alert--success curator-no-print"><?= e($success) ?></div>
         <?php endif; ?>
 
         <?php if ($error): ?>
-            <div class="alert alert--error"><?= e($error) ?></div>
+            <div class="alert alert--error curator-no-print"><?= e($error) ?></div>
         <?php endif; ?>
 
         <?php if (empty($groups)): ?>
@@ -159,7 +168,7 @@ require __DIR__ . '/../includes/header.php';
         <?php elseif ($group === null): ?>
             <p class="text-muted">Выберите группу, чтобы вести учёт посещаемости.</p>
         <?php else: ?>
-            <form method="get" class="form form--filter">
+            <form method="get" class="form form--filter curator-no-print">
                 <div class="form__row form__row--filter">
                     <input type="hidden" name="group_id" value="<?= $groupId ?>">
                     <div class="form__group">
@@ -180,24 +189,24 @@ require __DIR__ . '/../includes/header.php';
         <?php elseif (empty($students)): ?>
             <p class="text-muted">В группе пока нет студентов.</p>
         <?php else: ?>
-            <p class="attendance-journal-meta">
+            <p class="attendance-journal-meta curator-no-print">
                 Группа <strong><?= e($group['number']) ?></strong>
                 · учебный год <?= e($year) ?>
                 · <?= e(format_attendance_month($month)) ?>
                 · студентов: <?= count($students) ?>
             </p>
-            <p class="text-muted">
+            <p class="text-muted curator-no-print">
                 Все пропуски сохраняются по датам и учебному году — их можно будет вывести в сводной таблице.
             </p>
 
-            <div class="attendance-toolbar">
+            <div class="attendance-toolbar curator-no-print">
                 <button type="button" class="btn btn--primary" data-attendance-add-toggle>
                     <?= $showForm && $editDayId === 0 ? 'Скрыть форму' : 'Добавить дату' ?>
                 </button>
             </div>
 
             <div
-                class="attendance-form<?= $showForm ? '' : ' attendance-form--hidden' ?>"
+                class="attendance-form<?= $showForm ? '' : ' attendance-form--hidden' ?> curator-no-print"
                 data-attendance-form
             >
                 <h2><?= $editDayId > 0 ? 'Изменить дату' : 'Добавить дату' ?></h2>
@@ -293,13 +302,189 @@ require __DIR__ . '/../includes/header.php';
                 </form>
             </div>
 
-            <?php
-            $attendanceReadOnly = false;
-            $attendanceShowIntro = false;
-            require __DIR__ . '/../includes/attendance/group_journal_display.php';
-            ?>
+            <?php if (!empty($journal['days'])): ?>
+            <div class="curator-attendance-print-toolbar curator-no-print">
+                <label class="checkbox-label curator-print-mode">
+                    <input
+                        type="checkbox"
+                        id="curator-attendance-multisheet"
+                        value="1"
+                    >
+                    Крупный шрифт — печать на нескольких листах по ширине
+                </label>
+                <button type="button" class="btn btn--secondary" id="curator-attendance-print-btn">
+                    Печать
+                </button>
+            </div>
+            <?php endif; ?>
+
+            <div class="curator-attendance-print-area" id="curator-attendance-print-area">
+                <div class="curator-attendance-print-header curator-print-only">
+                    <?php if ($organizationName !== ''): ?>
+                    <div class="curator-attendance-print-org"><?= e($organizationName) ?></div>
+                    <?php endif; ?>
+                    <h2>Информация о пропусках занятий</h2>
+                    <p>
+                        Группа <?= e($group['number']) ?>
+                        <?php if (!empty($group['specialty_name'])): ?>
+                        · <?= e($group['specialty_name']) ?><?= !empty($group['specialty_code']) ? ' (' . e($group['specialty_code']) . ')' : '' ?>
+                        <?php endif; ?>
+                        · учебный год <?= e($year) ?>
+                        · <?= e(format_attendance_month($month)) ?>
+                        <?php if ($curatorName !== ''): ?>
+                        · куратор: <?= e(person_last_first_name($curatorName)) ?>
+                        <?php endif; ?>
+                        · студентов: <?= count($students) ?>
+                    </p>
+                </div>
+                <?php
+                $attendanceReadOnly = false;
+                $attendanceShowIntro = false;
+                require __DIR__ . '/../includes/attendance/group_journal_display.php';
+                ?>
+            </div>
         <?php endif; ?>
     </section>
 </div>
+
+<?php if ($group !== null && $students !== [] && !empty($journal['days'])): ?>
+<script>
+(() => {
+    const printBtn = document.getElementById('curator-attendance-print-btn');
+    const multiSheet = document.getElementById('curator-attendance-multisheet');
+    const printArea = document.getElementById('curator-attendance-print-area');
+    if (!printBtn || !printArea) {
+        return;
+    }
+
+    const studentsPerSheet = 15;
+    let splitHost = null;
+
+    const restoreOriginalTable = () => {
+        document.body.classList.remove('curator-print-multisheet');
+        if (splitHost && splitHost.parentNode) {
+            splitHost.parentNode.removeChild(splitHost);
+        }
+        splitHost = null;
+        printArea.classList.remove('is-print-split-source');
+    };
+
+    const buildSplitTables = (sourceTable) => {
+        const headRow = sourceTable.tHead ? sourceTable.tHead.rows[0] : null;
+        if (!headRow) {
+            return null;
+        }
+
+        const studentIndexes = [];
+        Array.from(headRow.cells).forEach((cell, index) => {
+            if (cell.classList.contains('attendance-table__student-col')) {
+                studentIndexes.push(index);
+            }
+        });
+
+        if (studentIndexes.length === 0) {
+            return null;
+        }
+
+        const host = document.createElement('div');
+        host.className = 'curator-attendance-print-split curator-print-only';
+        host.setAttribute('aria-hidden', 'true');
+
+        const headerClone = printArea.querySelector('.curator-attendance-print-header');
+        const totalSheets = Math.ceil(studentIndexes.length / studentsPerSheet);
+
+        for (let sheet = 0; sheet < totalSheets; sheet += 1) {
+            const start = sheet * studentsPerSheet;
+            const chunk = studentIndexes.slice(start, start + studentsPerSheet);
+            const keep = new Set([0, ...chunk]);
+
+            const section = document.createElement('section');
+            section.className = 'curator-attendance-print-sheet';
+            if (sheet < totalSheets - 1) {
+                section.classList.add('curator-attendance-print-sheet--break');
+            }
+
+            if (headerClone) {
+                const sheetHeader = headerClone.cloneNode(true);
+                sheetHeader.classList.remove('curator-print-only');
+                const meta = sheetHeader.querySelector('p');
+                if (meta) {
+                    meta.textContent = (meta.textContent || '').trim()
+                        + ' · лист ' + (sheet + 1) + ' из ' + totalSheets
+                        + ' (студенты ' + (start + 1) + '–' + (start + chunk.length) + ')';
+                }
+                section.appendChild(sheetHeader);
+            }
+
+            const table = sourceTable.cloneNode(true);
+            table.classList.add('attendance-table--print-sheet');
+            Array.from(table.rows).forEach((row) => {
+                Array.from(row.cells).forEach((cell, index) => {
+                    if (!keep.has(index)) {
+                        cell.parentNode.removeChild(cell);
+                    }
+                });
+            });
+
+            const wrap = document.createElement('div');
+            wrap.className = 'table-wrap';
+            wrap.appendChild(table);
+            section.appendChild(wrap);
+            host.appendChild(section);
+        }
+
+        return host;
+    };
+
+    const prepareMultisheetPrint = () => {
+        restoreOriginalTable();
+        const sourceTable = printArea.querySelector('table.attendance-table');
+        if (!sourceTable) {
+            return false;
+        }
+
+        splitHost = buildSplitTables(sourceTable);
+        if (!splitHost) {
+            return false;
+        }
+
+        document.body.classList.add('curator-print-multisheet');
+        printArea.classList.add('is-print-split-source');
+        printArea.parentNode.insertBefore(splitHost, printArea.nextSibling);
+        return true;
+    };
+
+    printBtn.addEventListener('click', () => {
+        const useMulti = multiSheet && multiSheet.checked;
+        if (useMulti) {
+            prepareMultisheetPrint();
+        } else {
+            restoreOriginalTable();
+        }
+
+        let styleEl = document.getElementById('curator-force-landscape');
+        if (!styleEl) {
+            styleEl = document.createElement('style');
+            styleEl.id = 'curator-force-landscape';
+            document.head.appendChild(styleEl);
+        }
+        styleEl.textContent = [
+            '@page { size: A4 landscape; margin: 10mm; }',
+            '@page curator-attendance { size: A4 landscape; margin: 10mm; }',
+        ].join('\n');
+
+        const cleanup = () => {
+            if (styleEl && styleEl.parentNode) {
+                styleEl.parentNode.removeChild(styleEl);
+            }
+            restoreOriginalTable();
+            window.removeEventListener('afterprint', cleanup);
+        };
+        window.addEventListener('afterprint', cleanup);
+        window.setTimeout(() => window.print(), 50);
+    });
+})();
+</script>
+<?php endif; ?>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>
