@@ -524,7 +524,8 @@
       return;
     }
     try {
-      await KpkNotifySchedules.syncFromServer(state.serverUrl);
+      const token = await KpkStorage.getMobileAuthToken();
+      await KpkNotifySchedules.syncFromServer(state.serverUrl, token);
     } catch (e) {
       // сеть / разрешения — не блокируем вход
     }

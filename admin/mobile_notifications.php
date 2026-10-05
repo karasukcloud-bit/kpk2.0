@@ -34,6 +34,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'frequency' => (string) ($_POST['frequency'] ?? 'daily'),
                 'weekday' => $_POST['weekday'] ?? null,
                 'month_day' => $_POST['month_day'] ?? null,
+                'audience' => (string) ($_POST['audience'] ?? 'all'),
                 'is_active' => !empty($_POST['is_active']) ? 1 : 0,
             ];
             $editId = $id;
@@ -75,6 +76,7 @@ $formTime = isset($editRow['notify_time']) ? substr((string) $editRow['notify_ti
 $formFreq = (string) ($editRow['frequency'] ?? 'daily');
 $formWeekday = (int) ($editRow['weekday'] ?? 1);
 $formMonthDay = (int) ($editRow['month_day'] ?? 1);
+$formAudience = normalize_mobile_notification_audience((string) ($editRow['audience'] ?? 'all'));
 $formActive = !isset($editRow['is_active']) || !empty($editRow['is_active']);
 ?>
 
@@ -143,6 +145,21 @@ $formActive = !isset($editRow['is_active']) || !empty($editRow['is_active']);
             </div>
 
             <div class="form__group">
+                <label for="audience">Для кого</label>
+                <select id="audience" name="audience" required>
+                    <?php foreach ([
+                        'all' => 'Для всех',
+                        'teachers' => 'Для преподавателей',
+                        'curators' => 'Для кураторов',
+                        'students' => 'Для студентов',
+                        'teachers_curators' => 'Для преподавателей и кураторов',
+                    ] as $value => $label): ?>
+                    <option value="<?= e($value) ?>"<?= $formAudience === $value ? ' selected' : '' ?>><?= e($label) ?></option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form__group">
                 <label>
                     <input type="checkbox" name="is_active" value="1"<?= $formActive ? ' checked' : '' ?>>
                     Активно
@@ -174,6 +191,7 @@ $formActive = !isset($editRow['is_active']) || !empty($editRow['is_active']);
                             <th>Заголовок / текст</th>
                             <th>Время</th>
                             <th>Периодичность</th>
+                            <th>Для кого</th>
                             <th>Статус</th>
                             <th></th>
                         </tr>
@@ -198,6 +216,7 @@ $formActive = !isset($editRow['is_active']) || !empty($editRow['is_active']);
                                 </td>
                                 <td><?= e(substr((string) $row['notify_time'], 0, 5)) ?></td>
                                 <td><?= e($detail) ?></td>
+                                <td><?= e(mobile_notification_audience_label((string) ($row['audience'] ?? 'all'))) ?></td>
                                 <td><?= !empty($row['is_active']) ? 'Вкл' : 'Выкл' ?></td>
                                 <td>
                                     <div class="form__actions" style="margin:0; flex-wrap:wrap; gap:0.35rem;">

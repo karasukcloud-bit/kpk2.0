@@ -130,14 +130,19 @@
     }
   }
 
-  async function fetchSchedules(serverUrl) {
+  async function fetchSchedules(serverUrl, authToken) {
     const base = String(serverUrl || '').replace(/\/+$/, '');
     if (!base) {
       return [];
     }
+    const headers = { Accept: 'application/json' };
+    const token = String(authToken || '').trim();
+    if (token) {
+      headers.Authorization = 'Bearer ' + token;
+    }
     const response = await fetch(base + '/api/mobile_notification_schedules.php', {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers,
       cache: 'no-store',
     });
     if (!response.ok) {
@@ -150,7 +155,7 @@
     return data.schedules;
   }
 
-  async function syncFromServer(serverUrl) {
+  async function syncFromServer(serverUrl, authToken) {
     const LocalNotifications = plugin('LocalNotifications');
     if (!LocalNotifications) {
       return { ok: false, reason: 'plugin' };
@@ -160,7 +165,7 @@
       return { ok: false, reason: 'permission' };
     }
     await ensureChannel();
-    const schedules = await fetchSchedules(serverUrl);
+    const schedules = await fetchSchedules(serverUrl, authToken);
     await clearScheduled();
     if (schedules.length === 0) {
       return { ok: true, count: 0 };
