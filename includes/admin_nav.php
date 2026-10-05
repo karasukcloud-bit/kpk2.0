@@ -11,7 +11,7 @@ $currentAdminTab = $currentAdminTab ?? 'teachers';
     </a>
     <a href="info.php"
        class="admin-tabs__item<?= $currentAdminTab === 'info' ? ' admin-tabs__item--active' : '' ?>">
-        Информация
+        Инфо
     </a>
     <a href="students.php"
        class="admin-tabs__item<?= $currentAdminTab === 'students' ? ' admin-tabs__item--active' : '' ?>">
@@ -19,16 +19,16 @@ $currentAdminTab = $currentAdminTab ?? 'teachers';
     </a>
     <a href="promote_groups.php"
        class="admin-tabs__item<?= $currentAdminTab === 'promote_groups' ? ' admin-tabs__item--active' : '' ?>">
-        Перевод курсов
+        Перевод
     </a>
     <a href="curriculum.php"
        class="admin-tabs__item<?= $currentAdminTab === 'curriculum' ? ' admin-tabs__item--active' : '' ?>">
-        Учебный план
+        План
     </a>
     <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
     <a href="manual_brs_gradebook.php"
        class="admin-tabs__item<?= $currentAdminTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
-        Ведомости (ручное БРС)
+        БРС
     </a>
     <?php endif; ?>
     <a href="archive.php"
@@ -41,11 +41,11 @@ $currentAdminTab = $currentAdminTab ?? 'teachers';
     </a>
     <a href="mobile_notifications.php"
        class="admin-tabs__item<?= $currentAdminTab === 'mobile_notifications' ? ' admin-tabs__item--active' : '' ?>">
-        Уведомления на телефон
+        Телефон
     </a>
     <a href="logs.php"
        class="admin-tabs__item<?= $currentAdminTab === 'logs' ? ' admin-tabs__item--active' : '' ?>">
-        Журнал действий
+        Журнал
     </a>
     <a href="expelled.php"
        class="admin-tabs__item<?= $currentAdminTab === 'expelled' ? ' admin-tabs__item--active' : '' ?>">
