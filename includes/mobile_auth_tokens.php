@@ -123,8 +123,11 @@ function mobile_auth_exchange_token(string $token): array
         return ['success' => false, 'error' => 'Срок входа истёк. Войдите снова.'];
     }
 
-    $touch = db()->prepare('UPDATE mobile_auth_tokens SET last_used_at = NOW() WHERE id = ?');
-    $touch->execute([(int) $row['id']]);
+    $expiresAt = (new DateTimeImmutable('+' . MOBILE_AUTH_TOKEN_TTL_DAYS . ' days'))->format('Y-m-d H:i:s');
+    $touch = db()->prepare(
+        'UPDATE mobile_auth_tokens SET last_used_at = NOW(), expires_at = ? WHERE id = ?'
+    );
+    $touch->execute([$expiresAt, (int) $row['id']]);
 
     login_user([
         'id' => (int) $row['user_id'],
@@ -136,6 +139,7 @@ function mobile_auth_exchange_token(string $token): array
         'session_name' => session_name(),
         'session_id' => session_id(),
         'user_id' => (int) $row['user_id'],
+        'expires_at' => $expiresAt,
     ];
 }
 

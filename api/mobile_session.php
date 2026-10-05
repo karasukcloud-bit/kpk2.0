@@ -41,9 +41,11 @@ try {
                 session_write_close();
             }
             session_id($forcedSessionId);
+            $sessionLifetime = 60 * 60 * 24 * 30;
             session_start([
                 'cookie_httponly' => true,
                 'cookie_samesite' => 'Lax',
+                'cookie_lifetime' => $sessionLifetime,
                 'use_strict_mode' => false,
             ]);
             clear_current_user_cache();

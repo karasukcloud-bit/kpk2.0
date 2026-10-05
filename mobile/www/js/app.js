@@ -37,6 +37,7 @@
     listenersBound: false,
     authInProgress: false,
     suppressLockResumeUntil: 0,
+    loginRestoreAttempts: 0,
   };
 
   function show(name) {
@@ -79,8 +80,18 @@
     }
   }
 
+  function isLogoutUrl(url) {
+    try {
+      const u = new URL(url);
+      const path = (u.pathname || '').toLowerCase();
+      return path.endsWith('/logout.php') || /\/logout\.php$/i.test(path);
+    } catch (e) {
+      return /logout\.php/i.test(String(url || ''));
+    }
+  }
+
   function isLoggedInUrl(url) {
-    if (!url || isLoginUrl(url)) {
+    if (!url || isLoginUrl(url) || isLogoutUrl(url)) {
       return false;
     }
     try {
@@ -93,9 +104,9 @@
       if (!path || path === '/') {
         return false;
       }
-      return !/logout\.php/i.test(path);
+      return true;
     } catch (e) {
-      return !isLoginUrl(url);
+      return !isLoginUrl(url) && !isLogoutUrl(url);
     }
   }
 
@@ -382,12 +393,16 @@
         await applyServerSession(data.session_name, data.session_id);
         return true;
       }
-      if (response.status === 401) {
-        await KpkStorage.clearMobileAuthToken();
-        await KpkStorage.clearSessionCookies();
+      // 401 только при реально невалидном токене — не трогаем при сетевых сбоях
+      if (response.status === 401 && data && data.error) {
+        const fatal = /истёк|не найдена|заблокирована|Некорректный/i.test(String(data.error));
+        if (fatal) {
+          await KpkStorage.clearMobileAuthToken();
+          await KpkStorage.clearSessionCookies();
+        }
       }
     } catch (e) {
-      // сеть — пробуем старые cookie
+      // сеть — пробуем старые cookie, токен сохраняем
       await restoreSessionCookies();
     }
     return false;
@@ -417,7 +432,16 @@
       if (!url) {
         return;
       }
+
+      // Явный выход с сайта — сбрасываем долгоживущий токен
+      if (isLogoutUrl(url)) {
+        await clearAuthState();
+        state.loginRestoreAttempts = 0;
+        return;
+      }
+
       if (isLoggedInUrl(url)) {
+        state.loginRestoreAttempts = 0;
         await saveSessionCookies();
         await issueMobileAuthToken();
       }
@@ -427,8 +451,18 @@
         show('setup');
         return;
       }
-      if (state.pinSet && isLoginUrl(url)) {
-        await clearAuthState();
+
+      // Нельзя сбрасывать mobile-токен при login.php:
+      // PHP-сессия часто истекает за сутки, а PIN/биометрия должны восстановить вход.
+      if (state.pinSet && isLoginUrl(url) && !state.awaitingPinSetup) {
+        if (state.loginRestoreAttempts >= 2) {
+          return;
+        }
+        state.loginRestoreAttempts += 1;
+        const restored = await ensureMobileSession();
+        if (restored) {
+          await openSite(siteHomeUrl());
+        }
       }
     });
 
@@ -499,8 +533,14 @@
   async function afterUnlock() {
     suppressLockResume(3000);
     state.unlocked = true;
+    state.loginRestoreAttempts = 0;
     showPreloader('Вход…');
-    await ensureMobileSession();
+    const ok = await ensureMobileSession();
+    if (!ok) {
+      // Если токена ещё нет — пробуем выпустить по сохранённым cookie
+      await issueMobileAuthToken();
+      await ensureMobileSession();
+    }
     await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);
@@ -639,8 +679,11 @@
     state.pinSet = true;
     state.bioEnabled = wantBio;
     state.unlocked = true;
+    state.loginRestoreAttempts = 0;
     suppressLockResume(3000);
     showPreloader('Загрузка приложения…');
+    await issueMobileAuthToken();
+    await ensureMobileSession();
     await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);

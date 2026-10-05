@@ -831,8 +831,102 @@ function build_educator_daily_attendance_report(string $date): array
     ];
 }
 
+/**
+ * Сводки со старого сайта (помесячно по колледжу).
+ * Используются для графиков, пока в журнале нет данных за год.
+ * Ключ месяца: 1–12. per_student_* — как в исходной таблице.
+ */
+function get_attendance_historical_summaries(): array
+{
+    return [
+        '2025-2026' => [
+            9 => ['total' => 5007, 'excused' => 4823, 'unexcused' => 184, 'per_student_total' => 13.1, 'per_student_excused' => 12.7, 'per_student_unexcused' => 0.4],
+            10 => ['total' => 5909, 'excused' => 5719, 'unexcused' => 190, 'per_student_total' => 14.8, 'per_student_excused' => 14.3, 'per_student_unexcused' => 0.4],
+            11 => ['total' => 5022, 'excused' => 4845, 'unexcused' => 177, 'per_student_total' => 13.3, 'per_student_excused' => 12.7, 'per_student_unexcused' => 0.5],
+            12 => ['total' => 2980, 'excused' => 2936, 'unexcused' => 44, 'per_student_total' => 7.2, 'per_student_excused' => 7.1, 'per_student_unexcused' => 0.1],
+            1 => ['total' => 3989, 'excused' => 3903, 'unexcused' => 86, 'per_student_total' => 9.7, 'per_student_excused' => 9.5, 'per_student_unexcused' => 0.2],
+            2 => ['total' => 6876, 'excused' => 6584, 'unexcused' => 292, 'per_student_total' => 17.4, 'per_student_excused' => 16.7, 'per_student_unexcused' => 0.7],
+            3 => ['total' => 5293, 'excused' => 5005, 'unexcused' => 288, 'per_student_total' => 13.6, 'per_student_excused' => 12.9, 'per_student_unexcused' => 0.8],
+            4 => ['total' => 5790, 'excused' => 5603, 'unexcused' => 187, 'per_student_total' => 14.9, 'per_student_excused' => 14.5, 'per_student_unexcused' => 0.4],
+            // Май: NaN на старом сайте → пересчёт от среднего числа студентов (~398)
+            5 => ['total' => 3805, 'excused' => 3736, 'unexcused' => 69, 'per_student_total' => 9.6, 'per_student_excused' => 9.4, 'per_student_unexcused' => 0.2],
+            6 => ['total' => 1456, 'excused' => 1244, 'unexcused' => 212, 'per_student_total' => 3.4, 'per_student_excused' => 3.0, 'per_student_unexcused' => 0.4],
+        ],
+    ];
+}
+
+function attendance_year_has_journal_data(string $academicYear): bool
+{
+    $stmt = db()->prepare(
+        'SELECT COALESCE(SUM(ae.excused_lessons + ae.unexcused_lessons), 0)
+         FROM attendance_entries ae
+         INNER JOIN attendance_days ad ON ad.id = ae.attendance_day_id
+         WHERE ad.academic_year = ?'
+    );
+    $stmt->execute([$academicYear]);
+
+    return (int) $stmt->fetchColumn() > 0;
+}
+
+function should_use_attendance_historical_summary(string $academicYear): bool
+{
+    $summaries = get_attendance_historical_summaries();
+
+    return isset($summaries[$academicYear]) && !attendance_year_has_journal_data($academicYear);
+}
+
+function build_attendance_historical_year_chart_data(string $academicYear): ?array
+{
+    $summaries = get_attendance_historical_summaries();
+    if (!isset($summaries[$academicYear])) {
+        return null;
+    }
+
+    $byMonth = $summaries[$academicYear];
+    $data = [];
+
+    foreach (get_academic_year_months($academicYear) as $month) {
+        [, $mon] = array_map('intval', explode('-', (string) $month['value']));
+        $row = $byMonth[$mon] ?? null;
+        $excused = (int) ($row['excused'] ?? 0);
+        $unexcused = (int) ($row['unexcused'] ?? 0);
+        $total = (int) ($row['total'] ?? ($excused + $unexcused));
+
+        $data[] = [
+            'value' => $month['value'],
+            'label' => $month['label'],
+            'total' => $total,
+            'excused' => $excused,
+            'unexcused' => $unexcused,
+            'per_student_total' => (float) ($row['per_student_total'] ?? 0),
+            'per_student_excused' => (float) ($row['per_student_excused'] ?? 0),
+            'per_student_unexcused' => (float) ($row['per_student_unexcused'] ?? 0),
+            'from_historical' => true,
+        ];
+    }
+
+    return $data;
+}
+
 function build_attendance_year_chart_data(string $academicYear): array
 {
+    if (should_use_attendance_historical_summary($academicYear)) {
+        $historical = build_attendance_historical_year_chart_data($academicYear);
+
+        return array_map(
+            static function (array $row): array {
+                return [
+                    'value' => $row['value'],
+                    'label' => $row['label'],
+                    'total' => (int) $row['total'],
+                    'excused' => (int) $row['excused'],
+                    'unexcused' => (int) $row['unexcused'],
+                ];
+            },
+            $historical ?? []
+        );
+    }
+
     $months = get_academic_year_months($academicYear);
     $data = [];
 
@@ -875,6 +969,10 @@ function get_college_students_count(): int
 
 function build_attendance_year_per_student_chart_data(string $academicYear, ?int $studentCount = null): array
 {
+    if (should_use_attendance_historical_summary($academicYear)) {
+        return build_attendance_historical_year_chart_data($academicYear) ?? [];
+    }
+
     $studentCount = $studentCount ?? get_college_students_count();
     $data = [];
 
@@ -914,17 +1012,29 @@ function build_attendance_three_years_comparison_data(string $baseYear, string $
     foreach ($years as $year) {
         $monthData = build_attendance_year_per_student_chart_data($year, $studentCount);
         $values = array_map(static fn (array $row): float => (float) $row[$field], $monthData);
-        $yearRaw = build_attendance_year_chart_data($year);
-        $yearExcused = (int) array_sum(array_column($yearRaw, 'excused'));
-        $yearUnexcused = (int) array_sum(array_column($yearRaw, 'unexcused'));
-        $yearTotal = $yearExcused + $yearUnexcused;
+        $fromHistorical = should_use_attendance_historical_summary($year);
 
-        if ($metric === 'excused') {
-            $yearValue = $studentCount > 0 ? round($yearExcused / $studentCount, 1) : 0.0;
-        } elseif ($metric === 'unexcused') {
-            $yearValue = $studentCount > 0 ? round($yearUnexcused / $studentCount, 1) : 0.0;
+        if ($fromHistorical) {
+            $nonzero = array_values(array_filter(
+                $values,
+                static fn (float $v): bool => $v > 0.0
+            ));
+            $yearValue = $nonzero !== []
+                ? round(array_sum($nonzero) / count($nonzero), 1)
+                : 0.0;
         } else {
-            $yearValue = $studentCount > 0 ? round($yearTotal / $studentCount, 1) : 0.0;
+            $yearRaw = build_attendance_year_chart_data($year);
+            $yearExcused = (int) array_sum(array_column($yearRaw, 'excused'));
+            $yearUnexcused = (int) array_sum(array_column($yearRaw, 'unexcused'));
+            $yearTotal = $yearExcused + $yearUnexcused;
+
+            if ($metric === 'excused') {
+                $yearValue = $studentCount > 0 ? round($yearExcused / $studentCount, 1) : 0.0;
+            } elseif ($metric === 'unexcused') {
+                $yearValue = $studentCount > 0 ? round($yearUnexcused / $studentCount, 1) : 0.0;
+            } else {
+                $yearValue = $studentCount > 0 ? round($yearTotal / $studentCount, 1) : 0.0;
+            }
         }
 
         $series[] = [
