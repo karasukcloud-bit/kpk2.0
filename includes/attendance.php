@@ -79,6 +79,34 @@ function delete_attendance_reason(int $id): array
     return ['success' => true, 'deactivated' => false];
 }
 
+/**
+ * Сохраняет ФИО в записях пропусков перед удалением студента.
+ * Нужно, чтобы сводки не теряли часы и подписи после отчисления/удаления.
+ */
+function preserve_attendance_history_before_student_delete(int $studentId): void
+{
+    if ($studentId <= 0) {
+        return;
+    }
+
+    require_once __DIR__ . '/migrations.php';
+    ensure_attendance_schema(db());
+    ensure_attendance_entries_history_schema(db());
+
+    $stmt = db()->prepare('SELECT full_name FROM students WHERE id = ? LIMIT 1');
+    $stmt->execute([$studentId]);
+    $name = trim((string) ($stmt->fetchColumn() ?: ''));
+    if ($name === '') {
+        return;
+    }
+
+    db()->prepare(
+        'UPDATE attendance_entries
+         SET student_name = ?
+         WHERE student_id = ? AND (student_name IS NULL OR student_name = \'\')'
+    )->execute([$name, $studentId]);
+}
+
 function get_attendance_journal(int $groupId, string $academicYear, ?string $month = null): array
 {
     $sql = 'SELECT id, attendance_date
@@ -142,8 +170,12 @@ function build_attendance_month_totals(array $students, array $journal): array
 
     foreach ($journal['entries'] as $dayEntries) {
         foreach ($dayEntries as $studentId => $entry) {
+            $studentId = (int) $studentId;
             if (!isset($totals[$studentId])) {
-                continue;
+                $totals[$studentId] = [
+                    'excused_lessons' => 0,
+                    'unexcused_lessons' => 0,
+                ];
             }
 
             $totals[$studentId]['excused_lessons'] += (int) $entry['excused_lessons'];
@@ -304,6 +336,10 @@ function get_attendance_day(int $dayId, int $groupId): ?array
 
 function save_attendance_day(int $groupId, string $date, string $academicYear, array $entries, ?int $dayId = null): array
 {
+    require_once __DIR__ . '/migrations.php';
+    ensure_attendance_schema(db());
+    ensure_attendance_entries_history_schema(db());
+
     if (!can_manage_group($groupId)) {
         return ['success' => false, 'error' => 'Нет доступа к группе.'];
     }
@@ -396,18 +432,35 @@ function save_attendance_day(int $groupId, string $date, string $academicYear, a
         $dayId = (int) $pdo->lastInsertId();
     }
 
-    $pdo->prepare('DELETE FROM attendance_entries WHERE attendance_day_id = ?')->execute([$dayId]);
+    // Не трогаем пропуски удалённых/переведённых студентов — только текущий состав группы.
+    if ($studentIds === []) {
+        $pdo->prepare(
+            'DELETE FROM attendance_entries WHERE attendance_day_id = ? AND student_id IS NOT NULL'
+        )->execute([$dayId]);
+    } else {
+        $placeholders = implode(',', array_fill(0, count($studentIds), '?'));
+        $pdo->prepare(
+            "DELETE FROM attendance_entries
+             WHERE attendance_day_id = ? AND student_id IN ($placeholders)"
+        )->execute(array_merge([$dayId], $studentIds));
+    }
 
     $insert = $pdo->prepare(
         'INSERT INTO attendance_entries
-         (attendance_day_id, student_id, excused_lessons, unexcused_lessons, reason_id)
-         VALUES (?, ?, ?, ?, ?)'
+         (attendance_day_id, student_id, student_name, excused_lessons, unexcused_lessons, reason_id)
+         VALUES (?, ?, ?, ?, ?, ?)'
     );
+
+    $nameById = [];
+    foreach ($students as $student) {
+        $nameById[(int) $student['id']] = (string) ($student['full_name'] ?? '');
+    }
 
     foreach ($normalized as $studentId => $entry) {
         $insert->execute([
             $dayId,
             $studentId,
+            $nameById[$studentId] ?? '',
             $entry['excused_lessons'],
             $entry['unexcused_lessons'],
             $entry['reason_id'],
@@ -542,29 +595,56 @@ function build_educator_group_attendance_row(
     ?string $semester = null
 ): array {
     $totalsByStudent = fetch_group_attendance_student_totals($groupId, $academicYear, $month, $semester);
-    $monthTotals = [];
+    // Все записи периода (включая удалённых/отчисленных), иначе сводки «теряют» часы.
+    $monthTotals = $totalsByStudent;
 
+    $activeNames = [];
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
-        $monthTotals[$studentId] = $totalsByStudent[$studentId] ?? [
-            'excused_lessons' => 0,
-            'unexcused_lessons' => 0,
-        ];
+        $activeNames[$studentId] = (string) $student['full_name'];
+        if (!isset($monthTotals[$studentId])) {
+            $monthTotals[$studentId] = [
+                'excused_lessons' => 0,
+                'unexcused_lessons' => 0,
+            ];
+        }
     }
 
+    $orphanNames = fetch_attendance_orphan_student_names(
+        $groupId,
+        $academicYear,
+        $month,
+        $semester,
+        array_keys($activeNames)
+    );
+
     $unexcusedStudents = [];
-    foreach ($students as $student) {
-        $studentId = (int) $student['id'];
-        $unexcused = (int) ($monthTotals[$studentId]['unexcused_lessons'] ?? 0);
+    foreach ($monthTotals as $studentId => $totals) {
+        $unexcused = (int) ($totals['unexcused_lessons'] ?? 0);
         if ($unexcused <= 0) {
             continue;
         }
 
+        $studentId = (int) $studentId;
+        if (isset($activeNames[$studentId])) {
+            $name = $activeNames[$studentId];
+        } elseif (isset($orphanNames[$studentId])) {
+            $name = $orphanNames[$studentId];
+        } else {
+            $name = 'Удалённый студент';
+        }
+
         $unexcusedStudents[] = [
-            'full_name' => person_last_first_name((string) $student['full_name']),
+            'full_name' => person_last_first_name($name),
             'count' => $unexcused,
         ];
     }
+
+    usort(
+        $unexcusedStudents,
+        static fn (array $a, array $b): int => $b['count'] <=> $a['count']
+            ?: strcmp((string) $a['full_name'], (string) $b['full_name'])
+    );
 
     return [
         'group_id' => $groupId,
@@ -572,6 +652,68 @@ function build_educator_group_attendance_row(
         'summary' => build_attendance_month_summary($students, $monthTotals),
         'unexcused_students' => $unexcusedStudents,
     ];
+}
+
+/**
+ * ФИО для записей пропусков студентов, которых уже нет в текущем составе группы.
+ *
+ * @param list<int> $excludeStudentIds
+ * @return array<int, string>
+ */
+function fetch_attendance_orphan_student_names(
+    int $groupId,
+    string $academicYear,
+    ?string $month,
+    ?string $semester,
+    array $excludeStudentIds
+): array {
+    $sql = 'SELECT ae.student_id,
+                   COALESCE(NULLIF(ae.student_name, \'\'), s.full_name, \'Удалённый студент\') AS full_name
+            FROM attendance_entries ae
+            INNER JOIN attendance_days ad ON ad.id = ae.attendance_day_id
+            LEFT JOIN students s ON s.id = ae.student_id
+            WHERE ad.group_id = ? AND ad.academic_year = ?';
+    $params = [$groupId, $academicYear];
+
+    if ($month !== null) {
+        $normalized = normalize_attendance_month($month);
+        if ($normalized === null) {
+            return [];
+        }
+        $sql .= ' AND DATE_FORMAT(ad.attendance_date, "%Y-%m") = ?';
+        $params[] = $normalized;
+    } elseif ($semester !== null) {
+        $bounds = get_attendance_semester_bounds($academicYear, $semester);
+        if ($bounds === null) {
+            return [];
+        }
+        $sql .= ' AND ad.attendance_date BETWEEN ? AND ?';
+        $params[] = $bounds[0];
+        $params[] = $bounds[1];
+    }
+
+    $excludeStudentIds = array_values(array_filter(
+        array_map('intval', $excludeStudentIds),
+        static fn (int $id): bool => $id > 0
+    ));
+    if ($excludeStudentIds !== []) {
+        $placeholders = implode(',', array_fill(0, count($excludeStudentIds), '?'));
+        $sql .= " AND (ae.student_id IS NULL OR ae.student_id NOT IN ($placeholders))";
+        $params = array_merge($params, $excludeStudentIds);
+    }
+
+    $sql .= ' GROUP BY ae.student_id, full_name';
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+
+    $names = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $studentId = (int) ($row['student_id'] ?? 0);
+        $names[$studentId] = (string) ($row['full_name'] ?? 'Удалённый студент');
+    }
+
+    return $names;
 }
 
 function build_educator_attendance_report(
@@ -627,19 +769,20 @@ function fetch_top_unexcused_students(string $academicYear, string $semester, in
     $limit = max(1, min(50, $limit));
     $stmt = db()->prepare(
         'SELECT ae.student_id,
-                s.full_name,
-                g.number AS group_number,
+                COALESCE(NULLIF(ae.student_name, \'\'), s.full_name, \'Удалённый студент\') AS full_name,
+                COALESCE(g.number, dg.number, \'\') AS group_number,
                 COALESCE(SUM(ae.unexcused_lessons), 0) AS unexcused_lessons,
                 COALESCE(SUM(ae.excused_lessons), 0) AS excused_lessons
          FROM attendance_entries ae
          INNER JOIN attendance_days ad ON ad.id = ae.attendance_day_id
-         INNER JOIN students s ON s.id = ae.student_id
-         INNER JOIN study_groups g ON g.id = s.group_id
+         LEFT JOIN students s ON s.id = ae.student_id
+         LEFT JOIN study_groups g ON g.id = s.group_id
+         LEFT JOIN study_groups dg ON dg.id = ad.group_id
          WHERE ad.academic_year = ?
            AND ad.attendance_date BETWEEN ? AND ?
-         GROUP BY ae.student_id, s.full_name, g.number
+         GROUP BY ae.student_id, full_name, group_number
          HAVING unexcused_lessons > 0
-         ORDER BY unexcused_lessons DESC, s.full_name ASC
+         ORDER BY unexcused_lessons DESC, full_name ASC
          LIMIT ' . $limit
     );
     $stmt->execute([$academicYear, $bounds[0], $bounds[1]]);
@@ -820,10 +963,11 @@ function build_educator_daily_attendance_report(string $date): array
 
     $stmt = db()->prepare(
         'SELECT ad.group_id, ae.student_id, ae.excused_lessons, ae.unexcused_lessons,
-                ae.reason_id, s.full_name
+                ae.reason_id,
+                COALESCE(NULLIF(ae.student_name, \'\'), s.full_name, \'Удалённый студент\') AS full_name
          FROM attendance_days ad
          INNER JOIN attendance_entries ae ON ae.attendance_day_id = ad.id
-         INNER JOIN students s ON s.id = ae.student_id
+         LEFT JOIN students s ON s.id = ae.student_id
          WHERE ad.attendance_date = ?'
     );
     $stmt->execute([$date]);

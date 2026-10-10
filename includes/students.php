@@ -255,7 +255,9 @@ function require_group_access(int $groupId): array
 function get_students_by_group(int $groupId): array
 {
     $stmt = db()->prepare(
-        'SELECT * FROM students WHERE group_id = ? ORDER BY full_name ASC'
+        'SELECT * FROM students
+         WHERE group_id = ? AND removed_at IS NULL
+         ORDER BY full_name ASC'
     );
     $stmt->execute([$groupId]);
 
@@ -267,11 +269,12 @@ function get_students_list(?int $groupId = null): array
     $sql = 'SELECT s.*, g.number AS group_number, sp.name AS group_specialty_name
             FROM students s
             INNER JOIN study_groups g ON g.id = s.group_id
-            INNER JOIN specialties sp ON sp.id = g.specialty_id';
+            INNER JOIN specialties sp ON sp.id = g.specialty_id
+            WHERE s.removed_at IS NULL';
     $params = [];
 
     if ($groupId !== null && $groupId > 0) {
-        $sql .= ' WHERE s.group_id = ?';
+        $sql .= ' AND s.group_id = ?';
         $params[] = $groupId;
     }
 
@@ -281,6 +284,11 @@ function get_students_list(?int $groupId = null): array
     $stmt->execute($params);
 
     return $stmt->fetchAll();
+}
+
+function is_student_removed(?array $student): bool
+{
+    return $student !== null && !empty($student['removed_at']);
 }
 
 function get_student_by_id(int $id): ?array
@@ -939,9 +947,13 @@ function delete_student(int $id): array
     if ($student === null) {
         return ['success' => false, 'error' => 'Студент не найден.'];
     }
+    if (is_student_removed($student)) {
+        return ['success' => true];
+    }
 
     $userId = (int) ($student['user_id'] ?? 0);
     require_once __DIR__ . '/activity_log.php';
+    require_once __DIR__ . '/attendance.php';
     $group = get_group_by_id((int) $student['group_id']);
     log_activity(
         'student.delete',
@@ -954,8 +966,15 @@ function delete_student(int $id): array
         ]
     );
 
-    $stmt = db()->prepare('DELETE FROM students WHERE id = ?');
-    $stmt->execute([$id]);
+    require_once __DIR__ . '/migrations.php';
+    ensure_students_schema(db());
+
+    // Пропуски оставляем в истории (мягкое удаление).
+    preserve_attendance_history_before_student_delete($id);
+
+    db()->prepare(
+        'UPDATE students SET removed_at = NOW(), user_id = NULL WHERE id = ? AND removed_at IS NULL'
+    )->execute([$id]);
 
     if ($userId > 0) {
         db()->prepare('DELETE FROM users WHERE id = ? AND role = \'student\'')

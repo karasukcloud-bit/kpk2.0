@@ -99,7 +99,7 @@ function get_student_by_user_id(int $userId): ?array
          FROM students s
          INNER JOIN study_groups g ON g.id = s.group_id
          INNER JOIN specialties sp ON sp.id = g.specialty_id
-         WHERE s.user_id = ?
+         WHERE s.user_id = ? AND s.removed_at IS NULL
          LIMIT 1'
     );
     $stmt->execute([$userId]);

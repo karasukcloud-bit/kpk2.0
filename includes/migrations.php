@@ -920,6 +920,15 @@ function ensure_students_schema(PDO $pdo): void
 
     $stmt = $pdo->query("SHOW TABLES LIKE 'students'");
     if ($stmt->fetch()) {
+        $removedCol = $pdo->query("SHOW COLUMNS FROM students LIKE 'removed_at'")->fetch();
+        if (!$removedCol) {
+            $pdo->exec(
+                'ALTER TABLE students
+                 ADD removed_at DATETIME NULL DEFAULT NULL AFTER updated_at,
+                 ADD KEY idx_students_removed (removed_at)'
+            );
+        }
+
         return;
     }
 
@@ -937,6 +946,8 @@ function ensure_students_schema(PDO $pdo): void
             address_actual     VARCHAR(500) NOT NULL DEFAULT '',
             created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
             updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            removed_at         DATETIME NULL DEFAULT NULL,
+            KEY idx_students_removed (removed_at),
             CONSTRAINT fk_students_group
                 FOREIGN KEY (group_id) REFERENCES study_groups(id)
                 ON DELETE RESTRICT
@@ -1106,46 +1117,109 @@ function ensure_attendance_schema(PDO $pdo): void
     }
 
     $stmt = $pdo->query("SHOW TABLES LIKE 'attendance_days'");
-    if ($stmt->fetch()) {
+    if (!$stmt->fetch()) {
+        $pdo->exec("
+            CREATE TABLE attendance_days (
+                id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                group_id        INT UNSIGNED NOT NULL,
+                attendance_date DATE NOT NULL,
+                academic_year   VARCHAR(9) NOT NULL,
+                created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_attendance_group_date_year (group_id, attendance_date, academic_year),
+                CONSTRAINT fk_attendance_days_group
+                    FOREIGN KEY (group_id) REFERENCES study_groups(id)
+                    ON DELETE CASCADE
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    }
+
+    $stmt = $pdo->query("SHOW TABLES LIKE 'attendance_entries'");
+    if (!$stmt->fetch()) {
+        $pdo->exec("
+            CREATE TABLE attendance_entries (
+                id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                attendance_day_id  INT UNSIGNED NOT NULL,
+                student_id         INT UNSIGNED NULL,
+                student_name       VARCHAR(255) NOT NULL DEFAULT '',
+                excused_lessons    SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+                unexcused_lessons  SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+                reason_id          INT UNSIGNED NULL DEFAULT NULL,
+                created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                UNIQUE KEY uq_attendance_day_student (attendance_day_id, student_id),
+                CONSTRAINT fk_attendance_entries_day
+                    FOREIGN KEY (attendance_day_id) REFERENCES attendance_days(id)
+                    ON DELETE CASCADE,
+                CONSTRAINT fk_attendance_entries_student
+                    FOREIGN KEY (student_id) REFERENCES students(id)
+                    ON DELETE SET NULL,
+                CONSTRAINT fk_attendance_entries_reason
+                    FOREIGN KEY (reason_id) REFERENCES attendance_reasons(id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
+    } else {
+        ensure_attendance_entries_history_schema($pdo);
+    }
+}
+
+/** Пропуски сохраняются после удаления/отчисления студента. */
+function ensure_attendance_entries_history_schema(PDO $pdo): void
+{
+    static $done = false;
+    if ($done) {
+        return;
+    }
+    $done = true;
+
+    if (!$pdo->query("SHOW TABLES LIKE 'attendance_entries'")->fetch()) {
         return;
     }
 
-    $pdo->exec("
-        CREATE TABLE attendance_days (
-            id              INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            group_id        INT UNSIGNED NOT NULL,
-            attendance_date DATE NOT NULL,
-            academic_year   VARCHAR(9) NOT NULL,
-            created_at      DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_attendance_group_date_year (group_id, attendance_date, academic_year),
-            CONSTRAINT fk_attendance_days_group
-                FOREIGN KEY (group_id) REFERENCES study_groups(id)
-                ON DELETE CASCADE
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+    $nameCol = $pdo->query("SHOW COLUMNS FROM attendance_entries LIKE 'student_name'")->fetch();
+    if (!$nameCol) {
+        $pdo->exec(
+            "ALTER TABLE attendance_entries
+             ADD student_name VARCHAR(255) NOT NULL DEFAULT '' AFTER student_id"
+        );
+    }
 
-    $pdo->exec("
-        CREATE TABLE attendance_entries (
-            id                 INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            attendance_day_id  INT UNSIGNED NOT NULL,
-            student_id         INT UNSIGNED NOT NULL,
-            excused_lessons    SMALLINT UNSIGNED NOT NULL DEFAULT 0,
-            unexcused_lessons  SMALLINT UNSIGNED NOT NULL DEFAULT 0,
-            reason_id          INT UNSIGNED NULL DEFAULT NULL,
-            created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-            UNIQUE KEY uq_attendance_day_student (attendance_day_id, student_id),
-            CONSTRAINT fk_attendance_entries_day
-                FOREIGN KEY (attendance_day_id) REFERENCES attendance_days(id)
-                ON DELETE CASCADE,
-            CONSTRAINT fk_attendance_entries_student
-                FOREIGN KEY (student_id) REFERENCES students(id)
-                ON DELETE CASCADE,
-            CONSTRAINT fk_attendance_entries_reason
-                FOREIGN KEY (reason_id) REFERENCES attendance_reasons(id)
-                ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+    $studentCol = $pdo->query("SHOW COLUMNS FROM attendance_entries LIKE 'student_id'")->fetch();
+    $isNullable = $studentCol && strtoupper((string) ($studentCol['Null'] ?? '')) === 'YES';
+
+    $fkRow = $pdo->query(
+        "SELECT CONSTRAINT_NAME, DELETE_RULE
+         FROM information_schema.REFERENTIAL_CONSTRAINTS
+         WHERE CONSTRAINT_SCHEMA = DATABASE()
+           AND TABLE_NAME = 'attendance_entries'
+           AND CONSTRAINT_NAME = 'fk_attendance_entries_student'
+         LIMIT 1"
+    )->fetch();
+
+    $needsFkFix = !$fkRow || strtoupper((string) ($fkRow['DELETE_RULE'] ?? '')) !== 'SET NULL';
+
+    if ($needsFkFix || !$isNullable) {
+        if ($fkRow) {
+            $pdo->exec('ALTER TABLE attendance_entries DROP FOREIGN KEY fk_attendance_entries_student');
+        }
+        $pdo->exec(
+            'ALTER TABLE attendance_entries
+             MODIFY student_id INT UNSIGNED NULL'
+        );
+        $pdo->exec(
+            'ALTER TABLE attendance_entries
+             ADD CONSTRAINT fk_attendance_entries_student
+             FOREIGN KEY (student_id) REFERENCES students(id)
+             ON DELETE SET NULL'
+        );
+    }
+
+    $pdo->exec(
+        "UPDATE attendance_entries ae
+         INNER JOIN students s ON s.id = ae.student_id
+         SET ae.student_name = s.full_name
+         WHERE ae.student_name = '' OR ae.student_name IS NULL"
+    );
 }
 
 function ensure_journal_schema(PDO $pdo): void

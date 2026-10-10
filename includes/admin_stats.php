@@ -55,10 +55,10 @@ function build_admin_app_statistics(): array
     }
 
     $studentsTotal = admin_table_exists('students')
-        ? admin_count('SELECT COUNT(*) FROM students')
+        ? admin_count('SELECT COUNT(*) FROM students WHERE removed_at IS NULL')
         : 0;
     $studentsWithAccount = admin_table_exists('students')
-        ? admin_count('SELECT COUNT(*) FROM students WHERE user_id IS NOT NULL')
+        ? admin_count('SELECT COUNT(*) FROM students WHERE user_id IS NOT NULL AND removed_at IS NULL')
         : 0;
 
     $specialties = admin_table_exists('specialties')

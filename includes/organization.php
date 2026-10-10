@@ -382,7 +382,7 @@ function delete_group(int $id): array
         return ['success' => false, 'error' => 'Группа не найдена.'];
     }
 
-    $stmt = db()->prepare('SELECT COUNT(*) FROM students WHERE group_id = ?');
+    $stmt = db()->prepare('SELECT COUNT(*) FROM students WHERE group_id = ? AND removed_at IS NULL');
     $stmt->execute([$id]);
     if ((int) $stmt->fetchColumn() > 0) {
         return ['success' => false, 'error' => 'Нельзя удалить группу: в ней есть студенты.'];

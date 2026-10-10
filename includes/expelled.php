@@ -217,6 +217,9 @@ function purge_student_data_completely(int $studentId, ?PDO $pdo = null): void
     $student = get_student_by_id($studentId);
     $userId = $student ? (int) ($student['user_id'] ?? 0) : 0;
 
+    require_once __DIR__ . '/attendance.php';
+    preserve_attendance_history_before_student_delete($studentId);
+    // Жёсткое удаление: пропуски остаются (FK ON DELETE SET NULL + student_name).
     $pdo->prepare('DELETE FROM students WHERE id = ?')->execute([$studentId]);
 
     if ($userId > 0) {
@@ -542,7 +545,14 @@ function expel_student(
         }
 
         $userId = (int) ($student['user_id'] ?? 0);
-        $pdo->prepare('DELETE FROM students WHERE id = ?')->execute([$studentId]);
+        require_once __DIR__ . '/attendance.php';
+        require_once __DIR__ . '/migrations.php';
+        ensure_students_schema($pdo);
+        preserve_attendance_history_before_student_delete($studentId);
+        // Мягкое удаление: пропуски остаются в сводках и привязке к группе.
+        $pdo->prepare(
+            'UPDATE students SET removed_at = NOW(), user_id = NULL WHERE id = ? AND removed_at IS NULL'
+        )->execute([$studentId]);
         if ($userId > 0) {
             $pdo->prepare("DELETE FROM users WHERE id = ? AND role = 'student'")->execute([$userId]);
         }

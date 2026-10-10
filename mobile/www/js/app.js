@@ -34,10 +34,13 @@
     unlocked: false,
     awaitingPinSetup: false,
     browserOpen: false,
+    openingBrowser: false,
+    pendingUrl: null,
     listenersBound: false,
     authInProgress: false,
     suppressLockResumeUntil: 0,
     loginRestoreAttempts: 0,
+    restoringLogin: false,
   };
 
   function show(name) {
@@ -418,6 +421,8 @@
       } catch (e) { /* ignore */ }
     }
     state.browserOpen = false;
+    state.openingBrowser = false;
+    state.pendingUrl = null;
   }
 
   async function ensureBrowserListeners() {
@@ -442,6 +447,7 @@
 
       if (isLoggedInUrl(url)) {
         state.loginRestoreAttempts = 0;
+        state.restoringLogin = false;
         await saveSessionCookies();
         await issueMobileAuthToken();
       }
@@ -452,22 +458,32 @@
         return;
       }
 
-      // Нельзя сбрасывать mobile-токен при login.php:
-      // PHP-сессия часто истекает за сутки, а PIN/биометрия должны восстановить вход.
-      if (state.pinSet && isLoginUrl(url) && !state.awaitingPinSetup) {
+      // PHP-сессия истекла — восстанавливаем по mobile-токену без второго openWebView
+      if (
+        state.pinSet
+        && isLoginUrl(url)
+        && !state.awaitingPinSetup
+        && !state.restoringLogin
+      ) {
         if (state.loginRestoreAttempts >= 2) {
           return;
         }
         state.loginRestoreAttempts += 1;
-        const restored = await ensureMobileSession();
-        if (restored) {
-          await openSite(siteHomeUrl());
+        state.restoringLogin = true;
+        try {
+          const restored = await ensureMobileSession();
+          if (restored) {
+            await navigateSite(siteHomeUrl());
+          }
+        } finally {
+          state.restoringLogin = false;
         }
       }
     });
 
     await InAppBrowser.addListener('closeEvent', async () => {
       state.browserOpen = false;
+      state.openingBrowser = false;
       await saveSessionCookies();
       await issueMobileAuthToken();
       if (state.awaitingPinSetup) {
@@ -486,30 +502,99 @@
     show('boot');
   }
 
-  async function openSite(startUrl) {
+  async function waitForInAppBrowser(timeoutMs = 8000) {
+    const start = Date.now();
+    while (Date.now() - start < timeoutMs) {
+      const browser = plugin('InAppBrowser');
+      if (browser && typeof browser.openWebView === 'function') {
+        return browser;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    return plugin('InAppBrowser');
+  }
+
+  /** Переход внутри уже открытого WebView (без второго окна / внешнего браузера). */
+  async function navigateSite(url) {
     const InAppBrowser = plugin('InAppBrowser');
+    if (!InAppBrowser || !url) {
+      return false;
+    }
+    await restoreSessionCookies();
+    if (state.browserOpen && typeof InAppBrowser.setUrl === 'function') {
+      try {
+        await InAppBrowser.setUrl({ url });
+        return true;
+      } catch (e) {
+        // fallback ниже
+      }
+    }
+    await openSite(url);
+    return true;
+  }
+
+  async function openSite(startUrl) {
     const url = startUrl || siteHomeUrl();
-    if (!InAppBrowser) {
-      window.open(url, '_blank');
+    const InAppBrowser = await waitForInAppBrowser();
+    if (!InAppBrowser || typeof InAppBrowser.openWebView !== 'function') {
+      showPreloader('Не удалось открыть приложение. Перезапустите.');
       return;
     }
-    showPreloader('Загрузка приложения…');
-    await ensureBrowserListeners();
-    const cookies = await restoreSessionCookies();
-    const cookieHeader = cookiesToHeader(cookies);
-    state.browserOpen = true;
-    const options = {
-      url,
-      backgroundColor: 'white',
-      toolbarType: 'blank',
-      isPresentAfterPageLoad: true,
-      disableGoBackOnNativeApplication: false,
-      activeNativeNavigationForWebview: true,
-    };
-    if (cookieHeader) {
-      options.headers = { Cookie: cookieHeader };
+
+    // Уже открыт — только смена URL, иначе зависание / внешний браузер
+    if (state.browserOpen) {
+      state.pendingUrl = null;
+      await restoreSessionCookies();
+      if (typeof InAppBrowser.setUrl === 'function') {
+        try {
+          await InAppBrowser.setUrl({ url });
+          return;
+        } catch (e) {
+          try {
+            await InAppBrowser.close();
+          } catch (closeErr) { /* ignore */ }
+          state.browserOpen = false;
+        }
+      }
     }
-    await InAppBrowser.openWebView(options);
+
+    if (state.openingBrowser) {
+      state.pendingUrl = url;
+      return;
+    }
+
+    state.openingBrowser = true;
+    state.pendingUrl = null;
+    showPreloader('Загрузка приложения…');
+    try {
+      await ensureBrowserListeners();
+      const cookies = await restoreSessionCookies();
+      const cookieHeader = cookiesToHeader(cookies);
+      state.browserOpen = true;
+      const options = {
+        url,
+        backgroundColor: 'white',
+        toolbarType: 'blank',
+        // false: WebView показывается сразу, не зависает на «Загрузка…»
+        isPresentAfterPageLoad: false,
+        disableGoBackOnNativeApplication: false,
+        activeNativeNavigationForWebview: true,
+      };
+      if (cookieHeader) {
+        options.headers = { Cookie: cookieHeader };
+      }
+      await InAppBrowser.openWebView(options);
+    } catch (e) {
+      state.browserOpen = false;
+      showPreloader('Ошибка загрузки. Попробуйте ещё раз.');
+    } finally {
+      state.openingBrowser = false;
+      if (state.pendingUrl) {
+        const next = state.pendingUrl;
+        state.pendingUrl = null;
+        await openSite(next);
+      }
+    }
   }
 
   async function openLoginFlow() {
@@ -525,7 +610,11 @@
     }
     try {
       const token = await KpkStorage.getMobileAuthToken();
-      await KpkNotifySchedules.syncFromServer(state.serverUrl, token);
+      // Таймаут: диалог разрешений/сеть не должны блокировать вход
+      await Promise.race([
+        KpkNotifySchedules.syncFromServer(state.serverUrl, token),
+        new Promise((resolve) => setTimeout(resolve, 2500)),
+      ]);
     } catch (e) {
       // сеть / разрешения — не блокируем вход
     }
@@ -535,15 +624,17 @@
     suppressLockResume(3000);
     state.unlocked = true;
     state.loginRestoreAttempts = 0;
+    state.restoringLogin = false;
     showPreloader('Вход…');
-    const ok = await ensureMobileSession();
+    let ok = await ensureMobileSession();
     if (!ok) {
       // Если токена ещё нет — пробуем выпустить по сохранённым cookie
       await issueMobileAuthToken();
-      await ensureMobileSession();
+      ok = await ensureMobileSession();
     }
     await syncNotificationSchedules();
-    await openSite(siteHomeUrl());
+    // Без сессии сразу login — иначе dashboard→login и зависание WebView
+    await openSite(ok ? siteHomeUrl() : loginUrl());
     suppressLockResume(2000);
   }
 
