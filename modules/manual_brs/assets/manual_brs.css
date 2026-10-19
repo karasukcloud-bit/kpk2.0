@@ -28,6 +28,38 @@
     background: #f1f5f9;
 }
 
+.manual-brs-stages {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+@media (min-width: 720px) {
+    .manual-brs-stages {
+        grid-template-columns: 1fr 1fr;
+        gap: 1.25rem;
+    }
+
+    .modal__dialog--wide {
+        max-width: 52rem;
+        width: calc(100% - 2rem);
+    }
+}
+
+.manual-brs-stage {
+    border: 1px solid var(--color-border, #d0d7de);
+    border-radius: 8px;
+    padding: 0.85rem 1rem 0.5rem;
+    background: #fff;
+}
+
+.manual-brs-stage__title {
+    margin: 0 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 700;
+}
+
 .manual-brs-result {
     margin: 0.75rem 0 1rem;
     padding: 0.75rem 1rem;

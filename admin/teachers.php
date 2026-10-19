@@ -11,6 +11,12 @@ $teachers = get_all_teachers();
 $success = flash_get('success');
 $error = flash_get('error');
 
+$https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+    || ((int) ($_SERVER['SERVER_PORT'] ?? 0) === 443);
+$loginUrl = ($https ? 'https' : 'http') . '://'
+    . ($_SERVER['HTTP_HOST'] ?? 'localhost')
+    . app_base_path() . 'login.php';
+
 $pageTitle = 'Преподаватели — Администрирование';
 $showHeader = true;
 $basePath = '../';
@@ -18,8 +24,8 @@ $currentAdminTab = 'teachers';
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
+<div class="dashboard dashboard--wide teachers-page">
+    <section class="panel teachers-no-print">
         <div class="panel__header">
             <div>
                 <h1>Панель администратора</h1>
@@ -32,20 +38,29 @@ require __DIR__ . '/../includes/header.php';
     </section>
 
     <?php if ($success): ?>
-        <div class="alert alert--success"><?= e($success) ?></div>
+        <div class="alert alert--success teachers-no-print"><?= e($success) ?></div>
     <?php endif; ?>
 
     <?php if ($error): ?>
-        <div class="alert alert--error"><?= e($error) ?></div>
+        <div class="alert alert--error teachers-no-print"><?= e($error) ?></div>
     <?php endif; ?>
 
     <section class="panel">
-        <h2>Список преподавателей</h2>
+        <div class="panel__header teachers-no-print">
+            <div>
+                <h2>Список преподавателей</h2>
+            </div>
+            <?php if (!empty($teachers)): ?>
+                <button type="button" class="btn btn--ghost" data-teachers-print>
+                    Печать с данными доступа
+                </button>
+            <?php endif; ?>
+        </div>
 
         <?php if (empty($teachers)): ?>
-            <p class="text-muted">Преподаватели пока не зарегистрированы.</p>
+            <p class="text-muted teachers-no-print">Преподаватели пока не зарегистрированы.</p>
         <?php else: ?>
-            <div class="form__group teachers-search">
+            <div class="form__group teachers-search teachers-no-print">
                 <label for="teachers_search">Поиск по ФИО</label>
                 <input
                     type="search"
@@ -55,7 +70,7 @@ require __DIR__ . '/../includes/header.php';
                     data-teachers-search
                 >
             </div>
-            <div class="table-wrap">
+            <div class="table-wrap teachers-no-print">
                 <table
                     class="table"
                     data-teachers-table
@@ -71,12 +86,16 @@ require __DIR__ . '/../includes/header.php';
                             <th>Курируемые группы</th>
                             <th>Специальность</th>
                             <th class="table__check-col" title="Отметка об отправке логина и пароля">Данные отправлены</th>
+                            <th class="table__share-col">Поделиться</th>
                             <th class="table__status-col">Статус</th>
                             <th>Дата регистрации</th>
                         </tr>
                     </thead>
                     <tbody>
                         <?php foreach ($teachers as $index => $teacher): ?>
+                        <?php
+                        $shareText = teacher_credentials_share_text($teacher, $loginUrl);
+                        ?>
                         <tr
                             class="table__row--clickable"
                             onclick="location.href='teacher_edit.php?id=<?= (int) $teacher['id'] ?>'"
@@ -99,6 +118,17 @@ require __DIR__ . '/../includes/header.php';
                                         aria-label="Данные для авторизации отправлены: <?= e($teacher['full_name']) ?>"
                                     >
                                 </label>
+                            </td>
+                            <td class="table__share-col" onclick="event.stopPropagation()">
+                                <button
+                                    type="button"
+                                    class="btn btn--ghost btn--small"
+                                    data-teacher-share-max
+                                    data-share-text="<?= e(rawurlencode($shareText)) ?>"
+                                    title="Отправить данные в MAX (временно)"
+                                >
+                                    MAX
+                                </button>
                             </td>
                             <td class="table__status-col">
                                 <?php if ((int) $teacher['is_active']): ?>
@@ -123,8 +153,46 @@ require __DIR__ . '/../includes/header.php';
                     </tbody>
                 </table>
             </div>
-            <p class="text-muted teachers-search-empty" data-teachers-empty hidden>Ничего не найдено по запросу.</p>
-            <p class="text-muted table-hint">Нажмите на строку, чтобы редактировать данные преподавателя. Отметку об отправке данных можно поставить прямо в таблице.</p>
+            <p class="text-muted teachers-search-empty teachers-no-print" data-teachers-empty hidden>Ничего не найдено по запросу.</p>
+            <p class="text-muted table-hint teachers-no-print">
+                Нажмите на строку, чтобы редактировать. «MAX» — временно: отправка логина/пароля в мессенджер.
+                Печать — список с регистрационными данными.
+            </p>
+
+            <div class="teachers-print-only" hidden>
+                <div class="teachers-print-header">
+                    <h2>СПО-ПРОГРЕСС — регистрационные данные преподавателей</h2>
+                    <p><?= e($loginUrl) ?></p>
+                    <p>Дата печати: <?= e(date('d.m.Y H:i')) ?></p>
+                </div>
+                <table class="table teachers-print-table">
+                    <thead>
+                        <tr>
+                            <th>№</th>
+                            <th>ФИО</th>
+                            <th>Телефон</th>
+                            <th>Логин</th>
+                            <th>Пароль</th>
+                            <th>Статус</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($teachers as $index => $teacher): ?>
+                        <tr>
+                            <td><?= $index + 1 ?></td>
+                            <td><?= e($teacher['full_name']) ?></td>
+                            <td><?= e(($teacher['phone'] ?? '') !== '' ? $teacher['phone'] : '—') ?></td>
+                            <td><?php
+                                $printLogin = teacher_display_login($teacher);
+                                echo e($printLogin !== '' ? $printLogin : '—');
+                            ?></td>
+                            <td><?= e(($teacher['password_plain'] ?? '') !== '' ? $teacher['password_plain'] : '—') ?></td>
+                            <td><?= (int) $teacher['is_active'] ? 'Активен' : 'Неактивен' ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
         <?php endif; ?>
     </section>
 </div>

@@ -11,23 +11,55 @@
     mobileAuthToken: 'mobile_auth_token',
   };
 
-  async function prefs() {
-    if (global.Capacitor && global.Capacitor.Plugins && global.Capacitor.Plugins.Preferences) {
-      return global.Capacitor.Plugins.Preferences;
-    }
-    const memory = global.__kpkPrefsMemory || (global.__kpkPrefsMemory = {});
+  const LS_PREFIX = 'kpk_pref_';
+
+  function localStoragePrefs() {
     return {
       async get({ key }) {
-        const v = memory[key];
-        return { value: v === undefined ? null : v };
+        try {
+          const v = global.localStorage.getItem(LS_PREFIX + key);
+          return { value: v };
+        } catch (e) {
+          return { value: null };
+        }
       },
       async set({ key, value }) {
-        memory[key] = String(value);
+        global.localStorage.setItem(LS_PREFIX + key, String(value));
       },
       async remove({ key }) {
-        delete memory[key];
+        global.localStorage.removeItem(LS_PREFIX + key);
       },
     };
+  }
+
+  function resolvePreferences() {
+    const cap = global.Capacitor;
+    if (!cap) {
+      return localStoragePrefs();
+    }
+    if (cap.Plugins && cap.Plugins.Preferences) {
+      return cap.Plugins.Preferences;
+    }
+    if (typeof cap.registerPlugin === 'function') {
+      try {
+        const registered = cap.registerPlugin('Preferences');
+        if (registered) {
+          return registered;
+        }
+      } catch (e) {
+        // fall through
+      }
+    }
+    return localStoragePrefs();
+  }
+
+  let prefsApi = null;
+
+  async function prefs() {
+    if (!prefsApi) {
+      prefsApi = resolvePreferences();
+    }
+    return prefsApi;
   }
 
   async function get(key, fallback = null) {
@@ -51,6 +83,10 @@
     get,
     set,
     remove,
+    async ready() {
+      prefsApi = null;
+      await prefs();
+    },
     async getServerUrl() {
       return get(KEYS.serverUrl, '');
     },

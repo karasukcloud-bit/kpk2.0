@@ -251,7 +251,7 @@ $currentTeacherTab = 'manual_brs';
 require __DIR__ . '/../../../includes/header.php';
 ?>
 
-<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>">
+<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261014a">
 
 <div class="dashboard dashboard--wide">
     <section class="panel">
@@ -344,17 +344,26 @@ require __DIR__ . '/../../../includes/header.php';
                         </thead>
                         <tbody>
                             <?php foreach ($rows as $index => $row): ?>
-                                <?php $st = $row['student']; ?>
+                                <?php
+                                $st = $row['student'];
+                                $s1 = $row['stages'][1];
+                                $s2 = $row['stages'][2];
+                                ?>
                                 <tr
                                     class="manual-brs-row"
                                     data-manual-brs-open
                                     data-student-id="<?= (int) $st['id'] ?>"
                                     data-student-name="<?= e($st['full_name']) ?>"
-                                    data-current-marks="<?= e($row['current_marks_input']) ?>"
-                                    data-control-marks="<?= e($row['control_marks_input']) ?>"
-                                    data-absent="<?= (int) $row['absent_count'] ?>"
-                                    data-late="<?= (int) $row['late_count'] ?>"
-                                    data-activity="<?= (int) $row['activity_count'] ?>"
+                                    data-s1-current="<?= e($s1['current_input']) ?>"
+                                    data-s1-control="<?= e($s1['control_input']) ?>"
+                                    data-s1-absent="<?= (int) $s1['absent_count'] ?>"
+                                    data-s1-late="<?= (int) $s1['late_count'] ?>"
+                                    data-s1-activity="<?= (int) $s1['activity_count'] ?>"
+                                    data-s2-current="<?= e($s2['current_input']) ?>"
+                                    data-s2-control="<?= e($s2['control_input']) ?>"
+                                    data-s2-absent="<?= (int) $s2['absent_count'] ?>"
+                                    data-s2-late="<?= (int) $s2['late_count'] ?>"
+                                    data-s2-activity="<?= (int) $s2['activity_count'] ?>"
                                     data-pa-grade="<?= $row['pa_grade'] !== null ? (int) $row['pa_grade'] : '' ?>"
                                     data-points="<?= $row['points'] !== null ? e(manual_brs_format_number($row['points'], 1)) : '' ?>"
                                     data-grade="<?= $row['grade'] !== null ? (int) $row['grade'] : '' ?>"
@@ -383,15 +392,15 @@ require __DIR__ . '/../../../includes/header.php';
                     </table>
                 </div>
                 <p class="text-muted">
-                    Нажмите на строку студента, чтобы заполнить данные выбранного семестра.
-                    ПА: пусто — итог по баллам БРС; «2» — итог 2; «3–5» — среднее оценки БРС и ПА.
+                    Нажмите на строку студента, чтобы заполнить два этапа семестра.
+                    Итог считается сразу по данным обоих этапов. ПА — только на 2 этапе.
                 </p>
             <?php endif; ?>
         </section>
 
         <div class="modal" data-manual-brs-modal hidden>
             <div class="modal__backdrop" data-manual-brs-close></div>
-            <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="manual-brs-modal-title">
+            <div class="modal__dialog modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="manual-brs-modal-title">
                 <div class="modal__header">
                     <h2 id="manual-brs-modal-title">БРС · <span data-manual-brs-student-label></span></h2>
                     <button type="button" class="modal__close" data-manual-brs-close aria-label="Закрыть">&times;</button>
@@ -402,51 +411,94 @@ require __DIR__ . '/../../../includes/header.php';
                     <input type="hidden" name="ajax" value="1">
                     <input type="hidden" name="student_id" value="" data-manual-brs-student-id>
 
-                    <div class="form__group">
-                        <label for="mbrs_current">Текущие отметки (2–5)</label>
-                        <input type="text" id="mbrs_current" name="current_marks" data-manual-brs-current
-                               placeholder="5453" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
-                        <p class="form__hint">Только цифры 2–5, без пробелов. Среднее: <strong data-manual-brs-current-avg>—</strong></p>
-                    </div>
+                    <div class="manual-brs-stages">
+                        <section class="manual-brs-stage">
+                            <h3 class="manual-brs-stage__title">1 период (Контрольная неделя)</h3>
+                            <div class="form__group">
+                                <label for="mbrs_s1_current">Текущие отметки (2–5)</label>
+                                <input type="text" id="mbrs_s1_current" name="stage1_current_marks"
+                                       data-manual-brs-stage="1" data-manual-brs-field="current"
+                                       placeholder="5453" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
+                                <p class="form__hint">Среднее: <strong data-manual-brs-stage-avg="1-current">—</strong></p>
+                            </div>
+                            <div class="form__group">
+                                <label for="mbrs_s1_control">Контрольные работы (2–5)</label>
+                                <input type="text" id="mbrs_s1_control" name="stage1_control_marks"
+                                       data-manual-brs-stage="1" data-manual-brs-field="control"
+                                       placeholder="45" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
+                                <p class="form__hint">Среднее: <strong data-manual-brs-stage-avg="1-control">—</strong></p>
+                            </div>
+                            <div class="form__row">
+                                <div class="form__group">
+                                    <label for="mbrs_s1_absent">Пропуски (Н)</label>
+                                    <input type="number" id="mbrs_s1_absent" name="stage1_absent_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="1" data-manual-brs-field="absent">
+                                </div>
+                                <div class="form__group">
+                                    <label for="mbrs_s1_late">Опоздания</label>
+                                    <input type="number" id="mbrs_s1_late" name="stage1_late_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="1" data-manual-brs-field="late">
+                                </div>
+                                <div class="form__group">
+                                    <label for="mbrs_s1_activity">Активность</label>
+                                    <input type="number" id="mbrs_s1_activity" name="stage1_activity_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="1" data-manual-brs-field="activity">
+                                </div>
+                            </div>
+                        </section>
 
-                    <div class="form__group">
-                        <label for="mbrs_control">Контрольные работы (2–5)</label>
-                        <input type="text" id="mbrs_control" name="control_marks" data-manual-brs-control
-                               placeholder="45" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
-                        <p class="form__hint">Только цифры 2–5, без пробелов. Среднее: <strong data-manual-brs-control-avg>—</strong></p>
-                    </div>
-
-                    <div class="form__row">
-                        <div class="form__group">
-                            <label for="mbrs_absent">Пропуски (Н)</label>
-                            <input type="number" id="mbrs_absent" name="absent_count" min="0" max="200"
-                                   value="0" data-manual-brs-absent>
-                        </div>
-                        <div class="form__group">
-                            <label for="mbrs_late">Опоздания</label>
-                            <input type="number" id="mbrs_late" name="late_count" min="0" max="200"
-                                   value="0" data-manual-brs-late>
-                        </div>
-                        <div class="form__group">
-                            <label for="mbrs_activity">Активность (уроков)</label>
-                            <input type="number" id="mbrs_activity" name="activity_count" min="0" max="200"
-                                   value="0" data-manual-brs-activity>
-                        </div>
-                    </div>
-
-                    <div class="form__group">
-                        <label for="mbrs_pa">Промежуточная аттестация (ПА)</label>
-                        <select id="mbrs_pa" name="pa_grade" data-manual-brs-pa-modal>
-                            <option value="">— Не выставлена —</option>
-                            <option value="2">2</option>
-                            <option value="3">3</option>
-                            <option value="4">4</option>
-                            <option value="5">5</option>
-                        </select>
+                        <section class="manual-brs-stage">
+                            <h3 class="manual-brs-stage__title">2 период (Семестр)</h3>
+                            <div class="form__group">
+                                <label for="mbrs_s2_current">Текущие отметки (2–5)</label>
+                                <input type="text" id="mbrs_s2_current" name="stage2_current_marks"
+                                       data-manual-brs-stage="2" data-manual-brs-field="current"
+                                       placeholder="5453" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
+                                <p class="form__hint">Среднее: <strong data-manual-brs-stage-avg="2-current">—</strong></p>
+                            </div>
+                            <div class="form__group">
+                                <label for="mbrs_s2_control">Контрольные работы (2–5)</label>
+                                <input type="text" id="mbrs_s2_control" name="stage2_control_marks"
+                                       data-manual-brs-stage="2" data-manual-brs-field="control"
+                                       placeholder="45" inputmode="numeric" pattern="[2-5]*" autocomplete="off">
+                                <p class="form__hint">Среднее: <strong data-manual-brs-stage-avg="2-control">—</strong></p>
+                            </div>
+                            <div class="form__row">
+                                <div class="form__group">
+                                    <label for="mbrs_s2_absent">Пропуски (Н)</label>
+                                    <input type="number" id="mbrs_s2_absent" name="stage2_absent_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="2" data-manual-brs-field="absent">
+                                </div>
+                                <div class="form__group">
+                                    <label for="mbrs_s2_late">Опоздания</label>
+                                    <input type="number" id="mbrs_s2_late" name="stage2_late_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="2" data-manual-brs-field="late">
+                                </div>
+                                <div class="form__group">
+                                    <label for="mbrs_s2_activity">Активность</label>
+                                    <input type="number" id="mbrs_s2_activity" name="stage2_activity_count" min="0" max="200"
+                                           value="0" data-manual-brs-stage="2" data-manual-brs-field="activity">
+                                </div>
+                            </div>
+                            <div class="form__group">
+                                <label for="mbrs_pa">Промежуточная аттестация (ПА)</label>
+                                <select id="mbrs_pa" name="pa_grade" data-manual-brs-pa-modal>
+                                    <option value="">— Не выставлена —</option>
+                                    <option value="2">2</option>
+                                    <option value="3">3</option>
+                                    <option value="4">4</option>
+                                    <option value="5">5</option>
+                                </select>
+                            </div>
+                        </section>
                     </div>
 
                     <div class="manual-brs-result" data-manual-brs-preview>
-                        <div>Итог периода: <strong data-manual-brs-total>—</strong></div>
+                        <div>Итог за семестр (оба этапа): <strong data-manual-brs-total>—</strong></div>
+                        <div class="text-muted">
+                            Среднее текущих: <strong data-manual-brs-current-avg>—</strong>
+                            · контрольных: <strong data-manual-brs-control-avg>—</strong>
+                        </div>
                         <div class="text-muted">Занятий в периоде: <span data-manual-brs-lessons-label><?= (int) $sheet['lessons_total'] ?></span></div>
                     </div>
 
@@ -474,7 +526,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20260916c"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261014a"></script>
 
     <?php elseif ($selectedGroup !== null): ?>
         <section class="panel">

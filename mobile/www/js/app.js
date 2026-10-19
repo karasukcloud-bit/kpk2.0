@@ -1,6 +1,8 @@
 /* global Capacitor, KpkStorage, KpkPin */
 (function () {
-  const DEFAULT_SERVER = 'https://спо-прогресс.рф';
+  const APP_VERSION = '1.5.10';
+  // ASCII IDN: часть Android DNS плохо резолвит кириллические .рф
+  const DEFAULT_SERVER = 'https://xn----ftbg7abdciccja.xn--p1ai';
 
   const screens = {
     boot: document.getElementById('screen-boot'),
@@ -25,6 +27,7 @@
     setupError: document.getElementById('setup-error'),
     btnSavePin: document.getElementById('btn-save-pin'),
     bootStatus: document.getElementById('boot-status'),
+    btnBootRetry: document.getElementById('btn-boot-retry'),
   };
 
   let state = {
@@ -70,7 +73,14 @@
     if (!/^https?:\/\//i.test(url)) {
       url = 'https://' + url;
     }
-    return url.replace(/\/+$/, '');
+    url = url.replace(/\/+$/, '');
+    try {
+      const u = new URL(url);
+      // hostname через URL → punycode (Android DNS стабильнее с ASCII)
+      return u.protocol + '//' + u.hostname + (u.port ? ':' + u.port : '');
+    } catch (e) {
+      return url;
+    }
   }
 
   function isLoginUrl(url) {
@@ -142,6 +152,17 @@
     if (cap.Plugins && cap.Plugins[name]) {
       return cap.Plugins[name];
     }
+    // Capacitor 6: без бандлера плагины нужно зарегистрировать явно
+    if (typeof cap.registerPlugin === 'function') {
+      try {
+        const registered = cap.registerPlugin(name);
+        if (registered) {
+          return registered;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
     if (typeof cap.getPlugin === 'function') {
       try {
         return cap.getPlugin(name);
@@ -152,11 +173,15 @@
     return null;
   }
 
-  function waitForCapacitor(timeoutMs = 3000) {
+  function waitForCapacitor(timeoutMs = 8000) {
     return new Promise((resolve) => {
       const start = Date.now();
       const tick = () => {
-        if (globalThis.Capacitor && globalThis.Capacitor.Plugins) {
+        const cap = globalThis.Capacitor;
+        if (cap && (cap.Plugins || typeof cap.registerPlugin === 'function' || typeof cap.getPlugin === 'function')) {
+          if (!globalThis.capacitorExports) {
+            globalThis.capacitorExports = cap;
+          }
           resolve(true);
           return;
         }
@@ -168,6 +193,48 @@
       };
       tick();
     });
+  }
+
+  function ensureNativePlugins() {
+    const cap = globalThis.Capacitor;
+    if (!cap || typeof cap.registerPlugin !== 'function') {
+      return;
+    }
+    ['App', 'Preferences', 'NativeBiometric', 'InAppBrowser', 'LocalNotifications', 'SessionCookie'].forEach((name) => {
+      if (cap.Plugins && cap.Plugins[name]) {
+        return;
+      }
+      try {
+        cap.registerPlugin(name);
+      } catch (e) {
+        // ignore
+      }
+    });
+  }
+
+  function pluginDiag() {
+    const cap = globalThis.Capacitor;
+    const iab = plugin('InAppBrowser');
+    const names = cap && cap.Plugins ? Object.keys(cap.Plugins).join(',') : '-';
+    return 'v' + APP_VERSION
+      + ' Cap=' + (cap ? '1' : '0')
+      + ' reg=' + (cap && typeof cap.registerPlugin === 'function' ? '1' : '0')
+      + ' IAB=' + (iab ? '1' : '0')
+      + ' [' + names + ']';
+  }
+
+  function withTimeout(promise, ms, fallback) {
+    let timer = null;
+    return Promise.race([
+      Promise.resolve(promise).finally(() => {
+        if (timer) {
+          clearTimeout(timer);
+        }
+      }),
+      new Promise((resolve) => {
+        timer = setTimeout(() => resolve(fallback), ms);
+      }),
+    ]);
   }
 
   async function bioAvailable() {
@@ -290,17 +357,36 @@
     }
   }
 
+  async function markAppClientCookie() {
+    const SessionCookie = plugin('SessionCookie');
+    if (!SessionCookie || !SessionCookie.setCookies || !state.serverUrl) {
+      return;
+    }
+    try {
+      await SessionCookie.setCookies({
+        url: cookieUrl(),
+        cookies: { kpk_client: 'app' },
+      });
+      if (SessionCookie.flush) {
+        await SessionCookie.flush();
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
   async function restoreSessionCookies() {
     const SessionCookie = plugin('SessionCookie');
     const cookies = await KpkStorage.getSessionCookies();
-    if (!cookies || Object.keys(cookies).length === 0 || !state.serverUrl) {
+    if (!state.serverUrl) {
       return {};
     }
+    const merged = Object.assign({}, cookies || {}, { kpk_client: 'app' });
     if (SessionCookie && SessionCookie.setCookies) {
       try {
         await SessionCookie.setCookies({
           url: cookieUrl(),
-          cookies,
+          cookies: Object.keys(merged).length ? merged : { kpk_client: 'app' },
         });
         if (SessionCookie.flush) {
           await SessionCookie.flush();
@@ -309,7 +395,7 @@
         // ignore
       }
     }
-    return cookies;
+    return merged;
   }
 
   function cookiesToHeader(cookies) {
@@ -344,22 +430,32 @@
     if (!state.serverUrl) {
       return false;
     }
-    const cookies = await KpkStorage.getSessionCookies();
+    // Свежие cookie из CookieManager, затем fallback на сохранённые
+    let cookies = await saveSessionCookies();
+    if (!pickPhpSessionId(cookies)) {
+      cookies = await KpkStorage.getSessionCookies();
+    }
     const sessionId = pickPhpSessionId(cookies);
     if (!sessionId) {
       return false;
     }
     try {
-      const response = await fetch(apiUrl('/api/mobile_session.php'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-          Cookie: cookiesToHeader(cookies),
-        },
-        body: JSON.stringify({ action: 'issue', session_id: sessionId }),
-        cache: 'no-store',
-      });
+      const response = await withTimeout(
+        fetch(apiUrl('/api/mobile_session.php'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ action: 'issue', session_id: sessionId }),
+          cache: 'no-store',
+        }),
+        8000,
+        null
+      );
+      if (!response) {
+        return false;
+      }
       const data = await response.json();
       if (data && data.success && data.token) {
         await KpkStorage.setMobileAuthToken(data.token);
@@ -382,15 +478,23 @@
       return false;
     }
     try {
-      const response = await fetch(apiUrl('/api/mobile_session.php'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Accept: 'application/json',
-        },
-        body: JSON.stringify({ action: 'exchange', token }),
-        cache: 'no-store',
-      });
+      const response = await withTimeout(
+        fetch(apiUrl('/api/mobile_session.php'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Accept: 'application/json',
+          },
+          body: JSON.stringify({ action: 'exchange', token }),
+          cache: 'no-store',
+        }),
+        8000,
+        null
+      );
+      if (!response) {
+        await restoreSessionCookies();
+        return false;
+      }
       const data = await response.json();
       if (data && data.success && data.session_id) {
         await applyServerSession(data.session_name, data.session_id);
@@ -495,18 +599,22 @@
     });
   }
 
-  function showPreloader(message) {
+  function showPreloader(message, showRetry) {
     if (els.bootStatus) {
       els.bootStatus.textContent = message || 'Загрузка…';
+    }
+    if (els.btnBootRetry) {
+      els.btnBootRetry.hidden = !showRetry;
     }
     show('boot');
   }
 
-  async function waitForInAppBrowser(timeoutMs = 8000) {
+  async function waitForInAppBrowser(timeoutMs = 5000) {
     const start = Date.now();
     while (Date.now() - start < timeoutMs) {
       const browser = plugin('InAppBrowser');
-      if (browser && typeof browser.openWebView === 'function') {
+      // Capacitor Proxy: не проверяем typeof openWebView === 'function'
+      if (browser) {
         return browser;
       }
       await new Promise((resolve) => setTimeout(resolve, 50));
@@ -521,7 +629,7 @@
       return false;
     }
     await restoreSessionCookies();
-    if (state.browserOpen && typeof InAppBrowser.setUrl === 'function') {
+    if (state.browserOpen && InAppBrowser.setUrl) {
       try {
         await InAppBrowser.setUrl({ url });
         return true;
@@ -535,17 +643,19 @@
 
   async function openSite(startUrl) {
     const url = startUrl || siteHomeUrl();
+    showPreloader('Загрузка приложения…', false);
+
     const InAppBrowser = await waitForInAppBrowser();
-    if (!InAppBrowser || typeof InAppBrowser.openWebView !== 'function') {
-      showPreloader('Не удалось открыть приложение. Перезапустите.');
+    if (!InAppBrowser) {
+      showPreloader('Не удалось открыть приложение.\n' + pluginDiag(), true);
       return;
     }
 
-    // Уже открыт — только смена URL, иначе зависание / внешний браузер
+    // Уже открыт — только смена URL
     if (state.browserOpen) {
       state.pendingUrl = null;
       await restoreSessionCookies();
-      if (typeof InAppBrowser.setUrl === 'function') {
+      if (InAppBrowser.setUrl) {
         try {
           await InAppBrowser.setUrl({ url });
           return;
@@ -565,17 +675,15 @@
 
     state.openingBrowser = true;
     state.pendingUrl = null;
-    showPreloader('Загрузка приложения…');
     try {
       await ensureBrowserListeners();
+      await markAppClientCookie();
       const cookies = await restoreSessionCookies();
       const cookieHeader = cookiesToHeader(cookies);
-      state.browserOpen = true;
       const options = {
         url,
         backgroundColor: 'white',
         toolbarType: 'blank',
-        // false: WebView показывается сразу, не зависает на «Загрузка…»
         isPresentAfterPageLoad: false,
         disableGoBackOnNativeApplication: false,
         activeNativeNavigationForWebview: true,
@@ -583,10 +691,16 @@
       if (cookieHeader) {
         options.headers = { Cookie: cookieHeader };
       }
-      await InAppBrowser.openWebView(options);
+      const opened = await withTimeout(InAppBrowser.openWebView(options), 15000, null);
+      if (opened === null) {
+        state.browserOpen = false;
+        showPreloader('Долгая загрузка. Проверьте сеть.', true);
+        return;
+      }
+      state.browserOpen = true;
     } catch (e) {
       state.browserOpen = false;
-      showPreloader('Ошибка загрузки. Попробуйте ещё раз.');
+      showPreloader('Ошибка загрузки.', true);
     } finally {
       state.openingBrowser = false;
       if (state.pendingUrl) {
@@ -597,9 +711,22 @@
     }
   }
 
+  async function retryBoot() {
+    showPreloader('Загрузка…', false);
+    if (state.pinSet && state.unlocked) {
+      await afterUnlock();
+      return;
+    }
+    if (state.pinSet) {
+      await showLock();
+      return;
+    }
+    await openLoginFlow();
+  }
+
   async function openLoginFlow() {
     state.awaitingPinSetup = !(await KpkStorage.isPinSet());
-    showPreloader('Загрузка приложения…');
+    showPreloader('Загрузка приложения…', false);
     await syncNotificationSchedules();
     await openSite(loginUrl());
   }
@@ -625,7 +752,7 @@
     state.unlocked = true;
     state.loginRestoreAttempts = 0;
     state.restoringLogin = false;
-    showPreloader('Вход…');
+    showPreloader('Вход…', false);
     let ok = await ensureMobileSession();
     if (!ok) {
       // Если токена ещё нет — пробуем выпустить по сохранённым cookie
@@ -663,8 +790,12 @@
   }
 
   async function boot() {
-    showPreloader('Загрузка…');
-    state.serverUrl = (await KpkStorage.getServerUrl()) || DEFAULT_SERVER;
+    showPreloader('Загрузка…', false);
+    const stored = await KpkStorage.getServerUrl();
+    state.serverUrl = normalizeUrl(stored || DEFAULT_SERVER) || DEFAULT_SERVER;
+    if (stored && state.serverUrl && stored.replace(/\/+$/, '') !== state.serverUrl) {
+      await KpkStorage.setServerUrl(state.serverUrl);
+    }
     state.pinSet = await KpkStorage.isPinSet();
     state.bioEnabled = await KpkStorage.isBioEnabled();
 
@@ -773,13 +904,19 @@
     state.unlocked = true;
     state.loginRestoreAttempts = 0;
     suppressLockResume(3000);
-    showPreloader('Загрузка приложения…');
+    showPreloader('Загрузка приложения…', false);
     await issueMobileAuthToken();
     await ensureMobileSession();
     await syncNotificationSchedules();
     await openSite(siteHomeUrl());
     suppressLockResume(2000);
   });
+
+  if (els.btnBootRetry) {
+    els.btnBootRetry.addEventListener('click', () => {
+      retryBoot();
+    });
+  }
 
   async function bindAppLifecycle() {
     const App = plugin('App');
@@ -810,6 +947,10 @@
   document.addEventListener('DOMContentLoaded', async () => {
     renderPinDots(0);
     await waitForCapacitor();
+    ensureNativePlugins();
+    if (globalThis.KpkStorage && typeof KpkStorage.ready === 'function') {
+      await KpkStorage.ready();
+    }
     await bindAppLifecycle();
     await boot();
   });

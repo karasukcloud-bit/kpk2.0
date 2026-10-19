@@ -264,10 +264,15 @@ body {
   line-height: 1.45;
 }
 
+.preloader .btn {
+  margin-top: 1rem;
+}
+
 .boot-status {
   margin: 0;
   color: var(--color-muted);
   font-size: 0.95rem;
+  white-space: pre-line;
 }
 
 .screen--boot {

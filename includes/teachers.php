@@ -10,7 +10,7 @@ require_once __DIR__ . '/students.php';
 function get_all_teachers(): array
 {
     $stmt = db()->query(
-        "SELECT id, email, full_name, phone, is_active, auth_credentials_sent, created_at
+        "SELECT id, email, full_name, phone, password_plain, is_active, auth_credentials_sent, created_at
          FROM users
          WHERE role = 'teacher'
          ORDER BY full_name COLLATE utf8mb4_unicode_ci ASC"
@@ -19,6 +19,7 @@ function get_all_teachers(): array
 
     foreach ($teachers as &$teacher) {
         $teacher['phone'] = (string) ($teacher['phone'] ?? '');
+        $teacher['password_plain'] = (string) ($teacher['password_plain'] ?? '');
         $teacher['auth_credentials_sent'] = (int) ($teacher['auth_credentials_sent'] ?? 0);
         $teacher['staff_roles'] = get_user_staff_roles((int) $teacher['id']);
         $curatorGroups = in_array('curator', $teacher['staff_roles'], true)
@@ -41,6 +42,43 @@ function get_all_teachers(): array
     unset($teacher);
 
     return $teachers;
+}
+
+/** Логин для выдачи преподавателю: телефон без @phone.local. */
+function teacher_display_login(array $teacher): string
+{
+    $phone = trim((string) ($teacher['phone'] ?? ''));
+    $email = trim((string) ($teacher['email'] ?? ''));
+
+    if ($phone !== '') {
+        return $phone;
+    }
+
+    if ($email !== '' && preg_match('/^(\d+)@phone\.local$/i', $email, $m)) {
+        return '+' . $m[1];
+    }
+
+    return $email;
+}
+
+/** Текст регистрационных данных для печати / шаринга (временная функция). */
+function teacher_credentials_share_text(array $teacher, string $loginUrl): string
+{
+    $name = trim((string) ($teacher['full_name'] ?? ''));
+    $phone = trim((string) ($teacher['phone'] ?? ''));
+    $login = teacher_display_login($teacher);
+    $password = trim((string) ($teacher['password_plain'] ?? ''));
+
+    $lines = [
+        'СПО-ПРОГРЕСС — доступ преподавателя',
+        'ФИО: ' . ($name !== '' ? $name : '—'),
+        'Телефон: ' . ($phone !== '' ? $phone : '—'),
+        'Логин: ' . ($login !== '' ? $login : '—'),
+        'Пароль: ' . ($password !== '' ? $password : '— (смените в карточке преподавателя)'),
+        'Сайт: ' . $loginUrl,
+    ];
+
+    return implode("\n", $lines);
 }
 
 function get_teacher_by_id(int $id): ?array
@@ -150,7 +188,7 @@ function update_teacher(
     }
     $staffRoles = $rolesCheck['roles'];
 
-    $specialtyCheck = validate_specialty_head_roles($staffRoles, $specialtyHeadId);
+    $specialtyCheck = validate_specialty_head_roles($staffRoles, $specialtyHeadId, $id);
     if (!$specialtyCheck['success']) {
         return $specialtyCheck;
     }

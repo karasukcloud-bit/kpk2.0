@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
-    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css">
+    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261019b">
 </head>
 <body>
     <div class="page">
@@ -30,6 +30,27 @@
                 </span>
                 <span class="header__title" aria-label="СПО-ПРОГРЕСС">
                     <span class="header__title-spo">СПО-</span><span class="header__title-progress">ПРОГРЕСС</span>
+                </span>
+            </a>
+            <a
+                class="header__rustore"
+                href="https://www.rustore.ru/catalog/app/ru.kpk.attendance"
+                target="_blank"
+                rel="noopener noreferrer"
+                hidden
+                data-rustore-link
+                title="Скачать приложение в RuStore"
+            >
+                <span class="header__rustore-badge" aria-hidden="true">
+                    <svg viewBox="0 0 24 24" width="18" height="18" focusable="false">
+                        <rect x="5" y="2" width="14" height="20" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/>
+                        <circle cx="12" cy="17.5" r="1.1" fill="currentColor"/>
+                        <path d="M9 8.2h6M9 11h6" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>
+                    </svg>
+                </span>
+                <span class="header__rustore-text">
+                    <span class="header__rustore-label">Приложение</span>
+                    <span class="header__rustore-name">RuStore</span>
                 </span>
             </a>
             <?php if (is_logged_in()): ?>

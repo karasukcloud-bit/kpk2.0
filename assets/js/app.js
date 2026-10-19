@@ -51,7 +51,36 @@
     });
 })();
 
+function isKpkMobileAppClient() {
+    try {
+        const cap = globalThis.Capacitor;
+        if (cap && typeof cap.isNativePlatform === 'function' && cap.isNativePlatform()) {
+            return true;
+        }
+    } catch (e) {
+        // ignore
+    }
+    try {
+        if (document.cookie.split(';').some((part) => part.trim() === 'kpk_client=app')) {
+            return true;
+        }
+    } catch (e) {
+        // ignore
+    }
+    // InAppBrowser / системный WebView Android (в обычном Chrome маркера wv нет)
+    try {
+        return /;\s*wv\)/i.test(navigator.userAgent || '');
+    } catch (e) {
+        return false;
+    }
+}
+
 document.addEventListener('DOMContentLoaded', () => {
+    const rustoreLink = document.querySelector('[data-rustore-link]');
+    if (rustoreLink && !isKpkMobileAppClient()) {
+        rustoreLink.hidden = false;
+    }
+
     const passwordForms = document.querySelectorAll('form');
 
     passwordForms.forEach((form) => {
@@ -2552,6 +2581,33 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         teachersSearch.addEventListener('input', filterTeachers);
+
+        const printBtn = document.querySelector('[data-teachers-print]');
+        if (printBtn) {
+            printBtn.addEventListener('click', () => {
+                window.print();
+            });
+        }
+
+        teachersTable.querySelectorAll('[data-teacher-share-max]').forEach((button) => {
+            button.addEventListener('click', (event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                let text = '';
+                try {
+                    text = decodeURIComponent(button.dataset.shareText || '');
+                } catch (e) {
+                    text = button.dataset.shareText || '';
+                }
+                if (!text) {
+                    window.alert('Нет данных для отправки.');
+                    return;
+                }
+                // Временный шаринг в MAX: https://max.ru/:share?text=
+                const shareUrl = 'https://max.ru/:share?text=' + encodeURIComponent(text);
+                window.open(shareUrl, '_blank', 'noopener,noreferrer');
+            });
+        });
 
         const credentialsUrl = teachersTable.dataset.teachersCredentialsUrl;
         const csrfToken = teachersTable.dataset.csrf;

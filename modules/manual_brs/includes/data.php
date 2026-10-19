@@ -62,25 +62,163 @@ function manual_brs_update_lessons_total(int $sheetId, int $lessonsTotal): array
 
     $entries = manual_brs_get_entries_map($sheetId);
     foreach ($entries as $entry) {
+        $stages = manual_brs_entry_stages($entry);
         manual_brs_save_entry(
             $sheetId,
             (int) $entry['student_id'],
             [
-                'current_marks' => manual_brs_marks_to_input(
-                    manual_brs_parse_marks((string) $entry['current_marks'])
-                ),
-                'control_marks' => manual_brs_marks_to_input(
-                    manual_brs_parse_marks((string) $entry['control_marks'])
-                ),
-                'absent_count' => (int) $entry['absent_count'],
-                'late_count' => (int) $entry['late_count'],
-                'activity_count' => (int) $entry['activity_count'],
+                'stage1_current_marks' => $stages[1]['current_input'],
+                'stage1_control_marks' => $stages[1]['control_input'],
+                'stage1_absent_count' => $stages[1]['absent_count'],
+                'stage1_late_count' => $stages[1]['late_count'],
+                'stage1_activity_count' => $stages[1]['activity_count'],
+                'stage2_current_marks' => $stages[2]['current_input'],
+                'stage2_control_marks' => $stages[2]['control_input'],
+                'stage2_absent_count' => $stages[2]['absent_count'],
+                'stage2_late_count' => $stages[2]['late_count'],
+                'stage2_activity_count' => $stages[2]['activity_count'],
             ],
             $lessonsTotal
         );
     }
 
     return ['success' => true, 'lessons_total' => $lessonsTotal];
+}
+
+/**
+ * Данные двух этапов из записи (с миграцией старых полей в этап 1).
+ *
+ * @return array{1: array, 2: array}
+ */
+function manual_brs_entry_stages(?array $entry): array
+{
+    $empty = static function (): array {
+        return [
+            'current_input' => '',
+            'control_input' => '',
+            'absent_count' => 0,
+            'late_count' => 0,
+            'activity_count' => 0,
+        ];
+    };
+
+    if ($entry === null) {
+        return [1 => $empty(), 2 => $empty()];
+    }
+
+    $hasStageCols = array_key_exists('stage1_current_marks', $entry)
+        || array_key_exists('stage2_current_marks', $entry);
+    $stage1Empty = trim((string) ($entry['stage1_current_marks'] ?? '')) === ''
+        && trim((string) ($entry['stage1_control_marks'] ?? '')) === ''
+        && (int) ($entry['stage1_absent_count'] ?? 0) === 0
+        && (int) ($entry['stage1_late_count'] ?? 0) === 0
+        && (int) ($entry['stage1_activity_count'] ?? 0) === 0;
+    $stage2Empty = trim((string) ($entry['stage2_current_marks'] ?? '')) === ''
+        && trim((string) ($entry['stage2_control_marks'] ?? '')) === ''
+        && (int) ($entry['stage2_absent_count'] ?? 0) === 0
+        && (int) ($entry['stage2_late_count'] ?? 0) === 0
+        && (int) ($entry['stage2_activity_count'] ?? 0) === 0;
+
+    if (!$hasStageCols || ($stage1Empty && $stage2Empty)) {
+        return [
+            1 => [
+                'current_input' => manual_brs_marks_to_input(
+                    manual_brs_parse_marks((string) ($entry['current_marks'] ?? ''))
+                ),
+                'control_input' => manual_brs_marks_to_input(
+                    manual_brs_parse_marks((string) ($entry['control_marks'] ?? ''))
+                ),
+                'absent_count' => (int) ($entry['absent_count'] ?? 0),
+                'late_count' => (int) ($entry['late_count'] ?? 0),
+                'activity_count' => (int) ($entry['activity_count'] ?? 0),
+            ],
+            2 => $empty(),
+        ];
+    }
+
+    return [
+        1 => [
+            'current_input' => manual_brs_marks_to_input(
+                manual_brs_parse_marks((string) ($entry['stage1_current_marks'] ?? ''))
+            ),
+            'control_input' => manual_brs_marks_to_input(
+                manual_brs_parse_marks((string) ($entry['stage1_control_marks'] ?? ''))
+            ),
+            'absent_count' => (int) ($entry['stage1_absent_count'] ?? 0),
+            'late_count' => (int) ($entry['stage1_late_count'] ?? 0),
+            'activity_count' => (int) ($entry['stage1_activity_count'] ?? 0),
+        ],
+        2 => [
+            'current_input' => manual_brs_marks_to_input(
+                manual_brs_parse_marks((string) ($entry['stage2_current_marks'] ?? ''))
+            ),
+            'control_input' => manual_brs_marks_to_input(
+                manual_brs_parse_marks((string) ($entry['stage2_control_marks'] ?? ''))
+            ),
+            'absent_count' => (int) ($entry['stage2_absent_count'] ?? 0),
+            'late_count' => (int) ($entry['stage2_late_count'] ?? 0),
+            'activity_count' => (int) ($entry['stage2_activity_count'] ?? 0),
+        ],
+    ];
+}
+
+/** @return array{current_marks: string, control_marks: string, absent_count: int, late_count: int, activity_count: int, stages: array} */
+function manual_brs_merge_stages_input(array $input): array
+{
+    $stage1Current = manual_brs_parse_marks((string) ($input['stage1_current_marks'] ?? $input['current_marks'] ?? ''));
+    $stage1Control = manual_brs_parse_marks((string) ($input['stage1_control_marks'] ?? $input['control_marks'] ?? ''));
+    $stage2Current = manual_brs_parse_marks((string) ($input['stage2_current_marks'] ?? ''));
+    $stage2Control = manual_brs_parse_marks((string) ($input['stage2_control_marks'] ?? ''));
+
+    $hasStagePost = array_key_exists('stage1_current_marks', $input)
+        || array_key_exists('stage2_current_marks', $input);
+
+    if ($hasStagePost) {
+        $stage1Absent = max(0, (int) ($input['stage1_absent_count'] ?? 0));
+        $stage1Late = max(0, (int) ($input['stage1_late_count'] ?? 0));
+        $stage1Activity = max(0, (int) ($input['stage1_activity_count'] ?? 0));
+        $stage2Absent = max(0, (int) ($input['stage2_absent_count'] ?? 0));
+        $stage2Late = max(0, (int) ($input['stage2_late_count'] ?? 0));
+        $stage2Activity = max(0, (int) ($input['stage2_activity_count'] ?? 0));
+    } else {
+        $stage1Absent = max(0, (int) ($input['absent_count'] ?? 0));
+        $stage1Late = max(0, (int) ($input['late_count'] ?? 0));
+        $stage1Activity = max(0, (int) ($input['activity_count'] ?? 0));
+        $stage2Absent = 0;
+        $stage2Late = 0;
+        $stage2Activity = 0;
+    }
+
+    $mergedCurrent = array_merge($stage1Current, $stage2Current);
+    $mergedControl = array_merge($stage1Control, $stage2Control);
+
+    return [
+        'current_marks' => manual_brs_marks_to_input($mergedCurrent),
+        'control_marks' => manual_brs_marks_to_input($mergedControl),
+        'absent_count' => $stage1Absent + $stage2Absent,
+        'late_count' => $stage1Late + $stage2Late,
+        'activity_count' => $stage1Activity + $stage2Activity,
+        'stages' => [
+            1 => [
+                'current_marks' => $stage1Current,
+                'control_marks' => $stage1Control,
+                'current_input' => manual_brs_marks_to_input($stage1Current),
+                'control_input' => manual_brs_marks_to_input($stage1Control),
+                'absent_count' => $stage1Absent,
+                'late_count' => $stage1Late,
+                'activity_count' => $stage1Activity,
+            ],
+            2 => [
+                'current_marks' => $stage2Current,
+                'control_marks' => $stage2Control,
+                'current_input' => manual_brs_marks_to_input($stage2Current),
+                'control_input' => manual_brs_marks_to_input($stage2Control),
+                'absent_count' => $stage2Absent,
+                'late_count' => $stage2Late,
+                'activity_count' => $stage2Activity,
+            ],
+        ],
+    ];
 }
 
 function manual_brs_get_entries_map(int $sheetId): array
@@ -129,23 +267,34 @@ function manual_brs_save_entry(
         return ['success' => false, 'error' => 'Студент не из этой группы.'];
     }
 
+    $merged = manual_brs_merge_stages_input($input);
+    $stages = $merged['stages'];
+
     $calc = manual_brs_calculate([
-        'current_marks' => (string) ($input['current_marks'] ?? ''),
-        'control_marks' => (string) ($input['control_marks'] ?? ''),
-        'absent_count' => (int) ($input['absent_count'] ?? 0),
-        'late_count' => (int) ($input['late_count'] ?? 0),
-        'activity_count' => (int) ($input['activity_count'] ?? 0),
+        'current_marks' => $merged['current_marks'],
+        'control_marks' => $merged['control_marks'],
+        'absent_count' => $merged['absent_count'],
+        'late_count' => $merged['late_count'],
+        'activity_count' => $merged['activity_count'],
         'lessons_total' => $lessonsTotal,
     ]);
 
     $currentStorage = manual_brs_marks_to_storage($calc['current_marks']);
     $controlStorage = manual_brs_marks_to_storage($calc['control_marks']);
+    $s1Current = manual_brs_marks_to_storage($stages[1]['current_marks']);
+    $s1Control = manual_brs_marks_to_storage($stages[1]['control_marks']);
+    $s2Current = manual_brs_marks_to_storage($stages[2]['current_marks']);
+    $s2Control = manual_brs_marks_to_storage($stages[2]['control_marks']);
 
     $existing = manual_brs_get_entry($sheetId, $studentId);
     if ($existing) {
         $stmt = db()->prepare(
             'UPDATE manual_brs_entries
              SET current_marks = ?, control_marks = ?,
+                 stage1_current_marks = ?, stage1_control_marks = ?,
+                 stage1_absent_count = ?, stage1_late_count = ?, stage1_activity_count = ?,
+                 stage2_current_marks = ?, stage2_control_marks = ?,
+                 stage2_absent_count = ?, stage2_late_count = ?, stage2_activity_count = ?,
                  absent_count = ?, late_count = ?, activity_count = ?,
                  current_avg = ?, control_avg = ?, points = ?, grade = ?
              WHERE id = ?'
@@ -153,6 +302,16 @@ function manual_brs_save_entry(
         $stmt->execute([
             $currentStorage,
             $controlStorage,
+            $s1Current,
+            $s1Control,
+            $stages[1]['absent_count'],
+            $stages[1]['late_count'],
+            $stages[1]['activity_count'],
+            $s2Current,
+            $s2Control,
+            $stages[2]['absent_count'],
+            $stages[2]['late_count'],
+            $stages[2]['activity_count'],
             $calc['absent_count'],
             $calc['late_count'],
             $calc['activity_count'],
@@ -166,15 +325,29 @@ function manual_brs_save_entry(
         $stmt = db()->prepare(
             'INSERT INTO manual_brs_entries
              (sheet_id, student_id, current_marks, control_marks,
+              stage1_current_marks, stage1_control_marks,
+              stage1_absent_count, stage1_late_count, stage1_activity_count,
+              stage2_current_marks, stage2_control_marks,
+              stage2_absent_count, stage2_late_count, stage2_activity_count,
               absent_count, late_count, activity_count,
               current_avg, control_avg, points, grade)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
         );
         $stmt->execute([
             $sheetId,
             $studentId,
             $currentStorage,
             $controlStorage,
+            $s1Current,
+            $s1Control,
+            $stages[1]['absent_count'],
+            $stages[1]['late_count'],
+            $stages[1]['activity_count'],
+            $s2Current,
+            $s2Control,
+            $stages[2]['absent_count'],
+            $stages[2]['late_count'],
+            $stages[2]['activity_count'],
             $calc['absent_count'],
             $calc['late_count'],
             $calc['activity_count'],
@@ -188,6 +361,7 @@ function manual_brs_save_entry(
     return [
         'success' => true,
         'calc' => $calc,
+        'stages' => $stages,
         'entry' => manual_brs_get_entry($sheetId, $studentId),
     ];
 }
@@ -357,6 +531,7 @@ function manual_brs_build_student_rows(
             'absent_count' => $entry ? (int) $entry['absent_count'] : 0,
             'late_count' => $entry ? (int) $entry['late_count'] : 0,
             'activity_count' => $entry ? (int) $entry['activity_count'] : 0,
+            'stages' => manual_brs_entry_stages($entry),
         ];
     }
 

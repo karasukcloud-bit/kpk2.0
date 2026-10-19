@@ -169,11 +169,6 @@
     const form = modal.querySelector('[data-manual-brs-form]');
     const studentIdInput = modal.querySelector('[data-manual-brs-student-id]');
     const studentLabel = modal.querySelector('[data-manual-brs-student-label]');
-    const currentInput = modal.querySelector('[data-manual-brs-current]');
-    const controlInput = modal.querySelector('[data-manual-brs-control]');
-    const absentInput = modal.querySelector('[data-manual-brs-absent]');
-    const lateInput = modal.querySelector('[data-manual-brs-late]');
-    const activityInput = modal.querySelector('[data-manual-brs-activity]');
     const paModalSelect = modal.querySelector('[data-manual-brs-pa-modal]');
     const currentAvgNode = modal.querySelector('[data-manual-brs-current-avg]');
     const controlAvgNode = modal.querySelector('[data-manual-brs-control-avg]');
@@ -183,6 +178,16 @@
     const paStudentInput = paForm ? paForm.querySelector('[data-manual-brs-pa-student]') : null;
     const paValueInput = paForm ? paForm.querySelector('[data-manual-brs-pa-value]') : null;
     let activeRow = null;
+
+    function stageField(stage, field) {
+        return modal.querySelector(
+            '[data-manual-brs-stage="' + stage + '"][data-manual-brs-field="' + field + '"]'
+        );
+    }
+
+    function stageAvgNode(stage, field) {
+        return modal.querySelector('[data-manual-brs-stage-avg="' + stage + '-' + field + '"]');
+    }
 
     function parseMarks(raw) {
         return String(raw || '')
@@ -225,15 +230,38 @@
         return 2;
     }
 
+    function readStage(stage) {
+        const current = stageField(stage, 'current');
+        const control = stageField(stage, 'control');
+        const absent = stageField(stage, 'absent');
+        const late = stageField(stage, 'late');
+        const activity = stageField(stage, 'activity');
+        return {
+            currentMarks: parseMarks(current ? current.value : ''),
+            controlMarks: parseMarks(control ? control.value : ''),
+            currentInput: current ? String(current.value || '').trim() : '',
+            controlInput: control ? String(control.value || '').trim() : '',
+            absent: Math.max(0, parseInt(absent ? absent.value : '0', 10) || 0),
+            late: Math.max(0, parseInt(late ? late.value : '0', 10) || 0),
+            activity: Math.max(0, parseInt(activity ? activity.value : '0', 10) || 0),
+        };
+    }
+
     function calculate() {
-        const currentMarks = parseMarks(currentInput.value);
-        const controlMarks = parseMarks(controlInput.value);
+        const s1 = readStage(1);
+        const s2 = readStage(2);
+        const currentMarks = s1.currentMarks.concat(s2.currentMarks);
+        const controlMarks = s1.controlMarks.concat(s2.controlMarks);
         const currentAvg = avg(currentMarks);
         const controlAvg = avg(controlMarks);
+        const s1CurrentAvg = avg(s1.currentMarks);
+        const s1ControlAvg = avg(s1.controlMarks);
+        const s2CurrentAvg = avg(s2.currentMarks);
+        const s2ControlAvg = avg(s2.controlMarks);
         const lessonsTotal = Math.max(0, Number(config.lessonsTotal) || 0);
-        let absent = Math.max(0, parseInt(absentInput.value, 10) || 0);
-        let late = Math.max(0, parseInt(lateInput.value, 10) || 0);
-        let activity = Math.max(0, parseInt(activityInput.value, 10) || 0);
+        let absent = s1.absent + s2.absent;
+        let late = s1.late + s2.late;
+        let activity = s1.activity + s2.activity;
 
         if (lessonsTotal > 0 && absent > lessonsTotal) {
             absent = lessonsTotal;
@@ -247,8 +275,17 @@
         }
         const notLate = Math.max(0, attended - late);
 
-        currentAvgNode.textContent = currentAvg === null ? '—' : formatNum(currentAvg, 2);
-        controlAvgNode.textContent = controlAvg === null ? '—' : formatNum(controlAvg, 2);
+        const setAvg = (node, value) => {
+            if (node) {
+                node.textContent = value === null ? '—' : formatNum(value, 2);
+            }
+        };
+        setAvg(stageAvgNode(1, 'current'), s1CurrentAvg);
+        setAvg(stageAvgNode(1, 'control'), s1ControlAvg);
+        setAvg(stageAvgNode(2, 'current'), s2CurrentAvg);
+        setAvg(stageAvgNode(2, 'control'), s2ControlAvg);
+        setAvg(currentAvgNode, currentAvg);
+        setAvg(controlAvgNode, controlAvg);
 
         const hasData = currentMarks.length || controlMarks.length || lessonsTotal > 0;
         if (!hasData) {
@@ -283,11 +320,34 @@
         activeRow = row;
         studentIdInput.value = row.getAttribute('data-student-id') || '';
         studentLabel.textContent = row.getAttribute('data-student-name') || '';
-        currentInput.value = row.getAttribute('data-current-marks') || '';
-        controlInput.value = row.getAttribute('data-control-marks') || '';
-        absentInput.value = row.getAttribute('data-absent') || '0';
-        lateInput.value = row.getAttribute('data-late') || '0';
-        activityInput.value = row.getAttribute('data-activity') || '0';
+        const map = {
+            1: {
+                current: 'data-s1-current',
+                control: 'data-s1-control',
+                absent: 'data-s1-absent',
+                late: 'data-s1-late',
+                activity: 'data-s1-activity',
+            },
+            2: {
+                current: 'data-s2-current',
+                control: 'data-s2-control',
+                absent: 'data-s2-absent',
+                late: 'data-s2-late',
+                activity: 'data-s2-activity',
+            },
+        };
+        [1, 2].forEach((stage) => {
+            Object.keys(map[stage]).forEach((field) => {
+                const input = stageField(stage, field);
+                if (!input) {
+                    return;
+                }
+                const raw = row.getAttribute(map[stage][field]);
+                input.value = field === 'current' || field === 'control'
+                    ? (raw || '')
+                    : (raw || '0');
+            });
+        });
         if (paModalSelect) {
             paModalSelect.value = row.getAttribute('data-pa-grade') || '';
         }
@@ -297,7 +357,10 @@
         calculate();
         modal.removeAttribute('hidden');
         document.body.classList.add('modal-open');
-        currentInput.focus();
+        const first = stageField(1, 'current');
+        if (first) {
+            first.focus();
+        }
     }
 
     function closeModal() {
@@ -320,17 +383,16 @@
         }
     });
 
-    [currentInput, controlInput].forEach((input) => {
+    modal.querySelectorAll('[data-manual-brs-field="current"], [data-manual-brs-field="control"]').forEach((input) => {
         input.addEventListener('input', () => {
             filterMarksInput(input);
             calculate();
         });
-        input.setAttribute('inputmode', 'numeric');
-        input.setAttribute('pattern', '[2-5]*');
-        input.setAttribute('autocomplete', 'off');
     });
 
-    [absentInput, lateInput, activityInput].forEach((input) => {
+    modal.querySelectorAll(
+        '[data-manual-brs-field="absent"], [data-manual-brs-field="late"], [data-manual-brs-field="activity"]'
+    ).forEach((input) => {
         input.addEventListener('input', calculate);
     });
 
@@ -352,12 +414,19 @@
                 throw new Error(data.error || 'Ошибка сохранения');
             }
             const calc = data.calc || {};
+            const s1 = readStage(1);
+            const s2 = readStage(2);
             if (activeRow) {
-                activeRow.setAttribute('data-current-marks', currentInput.value.trim());
-                activeRow.setAttribute('data-control-marks', controlInput.value.trim());
-                activeRow.setAttribute('data-absent', String(absentInput.value || '0'));
-                activeRow.setAttribute('data-late', String(lateInput.value || '0'));
-                activeRow.setAttribute('data-activity', String(activityInput.value || '0'));
+                activeRow.setAttribute('data-s1-current', s1.currentInput);
+                activeRow.setAttribute('data-s1-control', s1.controlInput);
+                activeRow.setAttribute('data-s1-absent', String(s1.absent));
+                activeRow.setAttribute('data-s1-late', String(s1.late));
+                activeRow.setAttribute('data-s1-activity', String(s1.activity));
+                activeRow.setAttribute('data-s2-current', s2.currentInput);
+                activeRow.setAttribute('data-s2-control', s2.controlInput);
+                activeRow.setAttribute('data-s2-absent', String(s2.absent));
+                activeRow.setAttribute('data-s2-late', String(s2.late));
+                activeRow.setAttribute('data-s2-activity', String(s2.activity));
                 activeRow.setAttribute('data-points', calc.points != null ? String(calc.points) : '');
                 activeRow.setAttribute('data-grade', calc.grade != null ? String(calc.grade) : '');
                 updateRowSemester(activeRow, data);

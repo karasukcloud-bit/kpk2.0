@@ -18,6 +18,7 @@
         </div>
         <div class="preloader__spinner" aria-hidden="true"></div>
         <p class="boot-status" id="boot-status">Загрузка…</p>
+        <button type="button" id="btn-boot-retry" class="btn btn--primary" hidden>Повторить</button>
       </div>
     </section>
 
@@ -97,6 +98,14 @@
     </section>
   </div>
 
+  <script>
+    // UMD-плагины Capgo/Capacitor ждут глобал capacitorExports (= Capacitor)
+    window.capacitorExports = window.Capacitor;
+  </script>
+  <script src="js/vendor/capacitor-app.js"></script>
+  <script src="js/vendor/capacitor-preferences.js"></script>
+  <script src="js/vendor/capgo-native-biometric.js"></script>
+  <script src="js/vendor/capgo-inappbrowser.js"></script>
   <script src="js/storage.js"></script>
   <script src="js/crypto-pin.js"></script>
   <script src="js/notify-schedules.js"></script>
