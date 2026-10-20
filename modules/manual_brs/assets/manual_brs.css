@@ -178,8 +178,28 @@
         border-color: #ccc !important;
     }
 
-    .gradebook-table th,
-    .gradebook-table td {
+    .manual-brs-gradebook-print-area .table-wrap {
+        overflow: visible !important;
+    }
+
+    .manual-brs-gradebook-print-area .gradebook-table {
+        min-width: 0 !important;
+        border-collapse: collapse !important;
+    }
+
+    /* sticky при печати обрывает горизонтальные линии у колонки ФИО */
+    .manual-brs-gradebook-print-area .gradebook-table__student-col {
+        position: static !important;
+        left: auto !important;
+        z-index: auto !important;
+        background: #fff !important;
+    }
+
+    .manual-brs-gradebook-print-area .gradebook-table th,
+    .manual-brs-gradebook-print-area .gradebook-table td {
         border: 1px solid #333 !important;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
     }
 }

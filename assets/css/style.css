@@ -1762,6 +1762,32 @@ body {
     z-index: 2;
 }
 
+@media print {
+    .table-wrap:has(.gradebook-table) {
+        overflow: visible !important;
+    }
+
+    .gradebook-table {
+        min-width: 0 !important;
+        border-collapse: collapse !important;
+    }
+
+    .gradebook-table__student-col {
+        position: static !important;
+        left: auto !important;
+        z-index: auto !important;
+        background: #fff !important;
+    }
+
+    .gradebook-table th,
+    .gradebook-table td {
+        border: 1px solid #333 !important;
+        background: #fff !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
 .gradebook-table__subject-col {
     width: 42px;
     min-width: 42px;

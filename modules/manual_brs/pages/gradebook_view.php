@@ -106,7 +106,7 @@ $basePath = '../';
 require __DIR__ . '/../../../includes/header.php';
 ?>
 
-<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20260913e">
+<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261020b">
 
 <div class="dashboard dashboard--wide">
     <section class="panel manual-brs-no-print">
@@ -133,10 +133,12 @@ require __DIR__ . '/../../../includes/header.php';
     <?php endif; ?>
 
     <section class="panel">
+        <?php if ($group !== null): ?>
         <p class="text-muted manual-brs-no-print">
             Оценки — текущие итоги из модуля «Ручное БРС» (баллы периода + ПА;
             для составных дисциплин — разделы + ПА). Только просмотр.
         </p>
+        <?php endif; ?>
 
         <?php if ($manualBrsPanel === 'curator' && empty($groups)): ?>
             <p class="text-muted">Вам ещё не назначена группа.</p>
@@ -145,6 +147,16 @@ require __DIR__ . '/../../../includes/header.php';
                 <p class="text-muted">Выберите группу, чтобы открыть ведомость ручного БРС.</p>
             <?php else: ?>
                 <h2>Выберите группу</h2>
+                <p class="text-muted">
+                    Период ведомости: учебный год <?= e($year) ?> · <?= e(semester_label($semester)) ?>.
+                    Оценки из временного модуля «Ручное БРС».
+                </p>
+                <?php
+                $periodHint = gradebook_period_mismatch_hint($period);
+                if ($periodHint):
+                ?>
+                    <div class="alert alert--error"><?= e($periodHint) ?></div>
+                <?php endif; ?>
                 <?php if ($groups === []): ?>
                     <p class="text-muted">Группы пока не добавлены.</p>
                 <?php else: ?>
@@ -154,25 +166,55 @@ require __DIR__ . '/../../../includes/header.php';
                                 <tr>
                                     <th>№</th>
                                     <th>Группа</th>
-                                    <th>Курс</th>
                                     <th>Специальность</th>
+                                    <th>Куратор</th>
+                                    <th>Студентов</th>
+                                    <th>Статус</th>
                                     <th class="table__actions-col">Действия</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($groups as $index => $gRow): ?>
+                                <?php
+                                $gId = (int) $gRow['id'];
+                                $status = get_gradebook_completion_status(
+                                    $gId,
+                                    $year,
+                                    $semester,
+                                    'manual_brs'
+                                );
+                                $studentCount = (int) ($status['students'] ?? 0);
+                                ?>
                                 <tr>
                                     <td><?= $index + 1 ?></td>
-                                    <td><strong><?= e($gRow['number']) ?></strong></td>
-                                    <td><?= (int) get_group_course($gRow) ?></td>
-                                    <td><?= e($gRow['specialty_name'] ?? '') ?></td>
+                                    <td><?= e($gRow['number']) ?></td>
+                                    <td>
+                                        <?= e((string) ($gRow['specialty_name'] ?? '')) ?>
+                                        <?php if (($gRow['specialty_code'] ?? '') !== ''): ?>
+                                            (<?= e((string) $gRow['specialty_code']) ?>)
+                                        <?php endif; ?>
+                                    </td>
+                                    <td><?= e(($gRow['curator_name'] ?? '') !== '' ? $gRow['curator_name'] : '—') ?></td>
+                                    <td><?= $studentCount ?></td>
+                                    <td>
+                                        <?php if (!empty($status['empty'])): ?>
+                                            <span class="badge badge--inactive">Нет данных</span>
+                                        <?php elseif (!empty($status['complete'])): ?>
+                                            <span class="badge badge--gradebook-complete">Все оценки</span>
+                                        <?php else: ?>
+                                            <span class="badge badge--gradebook-incomplete">Не все оценки</span>
+                                            <span class="text-muted gradebook-status-count">
+                                                <?= (int) $status['filled'] ?>/<?= (int) $status['expected'] ?>
+                                            </span>
+                                        <?php endif; ?>
+                                    </td>
                                     <td class="table__actions">
                                         <a
                                             href="<?= e(manual_brs_gradebook_url($manualBrsPanel, [
-                                                'group_id' => (int) $gRow['id'],
+                                                'group_id' => $gId,
                                             ])) ?>"
                                             class="btn btn--primary btn--sm"
-                                        >Открыть</a>
+                                        >Открыть ведомость</a>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
