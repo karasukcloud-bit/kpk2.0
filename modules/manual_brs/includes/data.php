@@ -162,8 +162,10 @@ function manual_brs_entry_stages(?array $entry): array
     ];
 }
 
-/** @return array{current_marks: string, control_marks: string, absent_count: int, late_count: int, activity_count: int, stages: array} */
-function manual_brs_merge_stages_input(array $input): array
+/**
+ * @return array{current_marks: string, control_marks: string, absent_count: int, late_count: int, activity_count: int, stages: array}
+ */
+function manual_brs_merge_stages_input(array $input, int $lessonsTotal = 0): array
 {
     $stage1Current = manual_brs_parse_marks((string) ($input['stage1_current_marks'] ?? $input['current_marks'] ?? ''));
     $stage1Control = manual_brs_parse_marks((string) ($input['stage1_control_marks'] ?? $input['control_marks'] ?? ''));
@@ -173,17 +175,26 @@ function manual_brs_merge_stages_input(array $input): array
     $hasStagePost = array_key_exists('stage1_current_marks', $input)
         || array_key_exists('stage2_current_marks', $input);
 
+    $cap = static function (int $value) use ($lessonsTotal): int {
+        $value = max(0, $value);
+        if ($lessonsTotal > 0) {
+            return min($value, $lessonsTotal);
+        }
+
+        return 0;
+    };
+
     if ($hasStagePost) {
-        $stage1Absent = max(0, (int) ($input['stage1_absent_count'] ?? 0));
-        $stage1Late = max(0, (int) ($input['stage1_late_count'] ?? 0));
-        $stage1Activity = max(0, (int) ($input['stage1_activity_count'] ?? 0));
-        $stage2Absent = max(0, (int) ($input['stage2_absent_count'] ?? 0));
-        $stage2Late = max(0, (int) ($input['stage2_late_count'] ?? 0));
-        $stage2Activity = max(0, (int) ($input['stage2_activity_count'] ?? 0));
+        $stage1Absent = $cap((int) ($input['stage1_absent_count'] ?? 0));
+        $stage1Late = $cap((int) ($input['stage1_late_count'] ?? 0));
+        $stage1Activity = $cap((int) ($input['stage1_activity_count'] ?? 0));
+        $stage2Absent = $cap((int) ($input['stage2_absent_count'] ?? 0));
+        $stage2Late = $cap((int) ($input['stage2_late_count'] ?? 0));
+        $stage2Activity = $cap((int) ($input['stage2_activity_count'] ?? 0));
     } else {
-        $stage1Absent = max(0, (int) ($input['absent_count'] ?? 0));
-        $stage1Late = max(0, (int) ($input['late_count'] ?? 0));
-        $stage1Activity = max(0, (int) ($input['activity_count'] ?? 0));
+        $stage1Absent = $cap((int) ($input['absent_count'] ?? 0));
+        $stage1Late = $cap((int) ($input['late_count'] ?? 0));
+        $stage1Activity = $cap((int) ($input['activity_count'] ?? 0));
         $stage2Absent = 0;
         $stage2Late = 0;
         $stage2Activity = 0;
@@ -277,7 +288,7 @@ function manual_brs_save_entry(
         ];
     }
 
-    $merged = manual_brs_merge_stages_input($input);
+    $merged = manual_brs_merge_stages_input($input, $lessonsTotal);
     $stages = $merged['stages'];
 
     $calc = manual_brs_calculate([
@@ -391,7 +402,7 @@ function manual_brs_calc_from_entry(array $entry, int $lessonsTotal, ?array $brs
         'stage2_absent_count' => $stages[2]['absent_count'],
         'stage2_late_count' => $stages[2]['late_count'],
         'stage2_activity_count' => $stages[2]['activity_count'],
-    ]);
+    ], $lessonsTotal);
 
     return manual_brs_calculate([
         'current_marks' => $merged['current_marks'],

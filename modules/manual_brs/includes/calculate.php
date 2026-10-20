@@ -187,8 +187,20 @@ function manual_brs_calculate(array $input, ?array $brs = null): array
     $late = max(0, (int) ($input['late_count'] ?? 0));
     $activity = max(0, (int) ($input['activity_count'] ?? 0));
 
-    if ($lessonsTotal > 0 && $absent > $lessonsTotal) {
-        $absent = $lessonsTotal;
+    if ($lessonsTotal > 0) {
+        if ($absent > $lessonsTotal) {
+            $absent = $lessonsTotal;
+        }
+        if ($late > $lessonsTotal) {
+            $late = $lessonsTotal;
+        }
+        if ($activity > $lessonsTotal) {
+            $activity = $lessonsTotal;
+        }
+    } else {
+        $absent = 0;
+        $late = 0;
+        $activity = 0;
     }
     $attended = max(0, $lessonsTotal - $absent);
     if ($late > $attended) {

@@ -88,6 +88,7 @@
     const lessonsInput = document.querySelector('[data-manual-brs-lessons-input]');
     const lessonsStatus = document.querySelector('[data-manual-brs-lessons-status]');
     const lessonsLabel = document.querySelector('[data-manual-brs-lessons-label]');
+    let runCalculate = function () {};
     let lessonsTimer = null;
     let lessonsSaving = false;
     let lessonsLastSaved = lessonsInput
@@ -100,12 +101,51 @@
         }
     }
 
+    function attendanceMax() {
+        return Math.max(0, Number(config.lessonsTotal) || 0);
+    }
+
+    function syncAttendanceFieldLimits() {
+        const max = attendanceMax();
+        document.querySelectorAll(
+            '[data-manual-brs-field="absent"], [data-manual-brs-field="late"], [data-manual-brs-field="activity"]'
+        ).forEach((input) => {
+            input.setAttribute('max', String(max));
+            let n = parseInt(input.value, 10);
+            if (Number.isNaN(n) || n < 0) {
+                n = 0;
+            }
+            if (n > max) {
+                n = max;
+            }
+            if (String(n) !== String(input.value)) {
+                input.value = String(n);
+            }
+        });
+    }
+
+    function clampAttendanceInput(input) {
+        const max = attendanceMax();
+        let n = parseInt(input.value, 10);
+        if (Number.isNaN(n) || n < 0) {
+            n = 0;
+        }
+        if (n > max) {
+            n = max;
+        }
+        if (String(n) !== String(input.value)) {
+            input.value = String(n);
+        }
+    }
+
     function applyLessonsTotal(value) {
         const n = Math.max(0, Math.min(200, parseInt(value, 10) || 0));
         config.lessonsTotal = n;
         if (lessonsLabel) {
             lessonsLabel.textContent = String(n);
         }
+        syncAttendanceFieldLimits();
+        runCalculate();
         return n;
     }
 
@@ -245,14 +285,25 @@
         const absent = stageField(stage, 'absent');
         const late = stageField(stage, 'late');
         const activity = stageField(stage, 'activity');
+        const max = attendanceMax();
+        const cap = (input) => {
+            let n = Math.max(0, parseInt(input ? input.value : '0', 10) || 0);
+            if (n > max) {
+                n = max;
+                if (input) {
+                    input.value = String(n);
+                }
+            }
+            return n;
+        };
         return {
             currentMarks: parseMarks(current ? current.value : ''),
             controlMarks: parseMarks(control ? control.value : ''),
             currentInput: current ? String(current.value || '').trim() : '',
             controlInput: control ? String(control.value || '').trim() : '',
-            absent: Math.max(0, parseInt(absent ? absent.value : '0', 10) || 0),
-            late: Math.max(0, parseInt(late ? late.value : '0', 10) || 0),
-            activity: Math.max(0, parseInt(activity ? activity.value : '0', 10) || 0),
+            absent: cap(absent),
+            late: cap(late),
+            activity: cap(activity),
         };
     }
 
@@ -267,13 +318,25 @@
         const s1ControlAvg = avg(s1.controlMarks);
         const s2CurrentAvg = avg(s2.currentMarks);
         const s2ControlAvg = avg(s2.controlMarks);
-        const lessonsTotal = Math.max(0, Number(config.lessonsTotal) || 0);
+        const lessonsTotal = attendanceMax();
         let absent = s1.absent + s2.absent;
         let late = s1.late + s2.late;
         let activity = s1.activity + s2.activity;
 
-        if (lessonsTotal > 0 && absent > lessonsTotal) {
-            absent = lessonsTotal;
+        if (lessonsTotal > 0) {
+            if (absent > lessonsTotal) {
+                absent = lessonsTotal;
+            }
+            if (late > lessonsTotal) {
+                late = lessonsTotal;
+            }
+            if (activity > lessonsTotal) {
+                activity = lessonsTotal;
+            }
+        } else {
+            absent = 0;
+            late = 0;
+            activity = 0;
         }
         const attended = Math.max(0, lessonsTotal - absent);
         if (late > attended) {
@@ -324,6 +387,7 @@
         totalNode.textContent = formatNum(points, 1) + ' → ' + grade;
         return { points: points, grade: grade, display: formatNum(points, 1) + ' → ' + grade };
     }
+    runCalculate = calculate;
 
     function openModal(row) {
         activeRow = row;
@@ -363,6 +427,7 @@
         if (statusNode) {
             statusNode.textContent = '';
         }
+        syncAttendanceFieldLimits();
         calculate();
         modal.removeAttribute('hidden');
         document.body.classList.add('modal-open');
@@ -402,8 +467,17 @@
     modal.querySelectorAll(
         '[data-manual-brs-field="absent"], [data-manual-brs-field="late"], [data-manual-brs-field="activity"]'
     ).forEach((input) => {
-        input.addEventListener('input', calculate);
+        input.addEventListener('input', () => {
+            clampAttendanceInput(input);
+            calculate();
+        });
+        input.addEventListener('change', () => {
+            clampAttendanceInput(input);
+            calculate();
+        });
     });
+
+    syncAttendanceFieldLimits();
 
     form.addEventListener('submit', async (event) => {
         event.preventDefault();

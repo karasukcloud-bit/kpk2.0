@@ -557,17 +557,20 @@ require __DIR__ . '/../../../includes/header.php';
                             <div class="form__row">
                                 <div class="form__group">
                                     <label for="mbrs_s1_absent">Пропуски (Н)</label>
-                                    <input type="number" id="mbrs_s1_absent" name="stage1_absent_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s1_absent" name="stage1_absent_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="1" data-manual-brs-field="absent">
                                 </div>
                                 <div class="form__group">
                                     <label for="mbrs_s1_late">Опоздания</label>
-                                    <input type="number" id="mbrs_s1_late" name="stage1_late_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s1_late" name="stage1_late_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="1" data-manual-brs-field="late">
                                 </div>
                                 <div class="form__group">
                                     <label for="mbrs_s1_activity">Активность</label>
-                                    <input type="number" id="mbrs_s1_activity" name="stage1_activity_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s1_activity" name="stage1_activity_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="1" data-manual-brs-field="activity">
                                 </div>
                             </div>
@@ -592,17 +595,20 @@ require __DIR__ . '/../../../includes/header.php';
                             <div class="form__row">
                                 <div class="form__group">
                                     <label for="mbrs_s2_absent">Пропуски (Н)</label>
-                                    <input type="number" id="mbrs_s2_absent" name="stage2_absent_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s2_absent" name="stage2_absent_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="2" data-manual-brs-field="absent">
                                 </div>
                                 <div class="form__group">
                                     <label for="mbrs_s2_late">Опоздания</label>
-                                    <input type="number" id="mbrs_s2_late" name="stage2_late_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s2_late" name="stage2_late_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="2" data-manual-brs-field="late">
                                 </div>
                                 <div class="form__group">
                                     <label for="mbrs_s2_activity">Активность</label>
-                                    <input type="number" id="mbrs_s2_activity" name="stage2_activity_count" min="0" max="200"
+                                    <input type="number" id="mbrs_s2_activity" name="stage2_activity_count" min="0"
+                                           max="<?= (int) $sheet['lessons_total'] ?>"
                                            value="0" data-manual-brs-stage="2" data-manual-brs-field="activity">
                                 </div>
                             </div>
@@ -654,7 +660,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020b"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020c"></script>
 
     <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
         <section class="panel">
