@@ -9,6 +9,9 @@ $glazEditable = $glazEditable ?? false;
 $glazHighlightGroupNumbers = $glazHighlightGroupNumbers ?? [];
 $glazHighlightTeacherId = $glazHighlightTeacherId ?? null;
 $glazShowLegend = $glazShowLegend ?? false;
+$glazSourceNote = $glazSourceNote
+    ?? 'Только архивированные ведомости. Незавершённые семестры в график не включаются.';
+$glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
 ?>
 <section class="panel glaz-print-block">
     <div class="glaz-print-header">
@@ -16,7 +19,7 @@ $glazShowLegend = $glazShowLegend ?? false;
         <?php if ($organization['name'] !== ''): ?>
             <p><?= e($organization['name']) ?></p>
         <?php endif; ?>
-        <p class="text-muted">Только архивированные ведомости. Незавершённые семестры в график не включаются.</p>
+        <p class="text-muted"><?= e($glazSourceNote) ?></p>
         <?php if ($glazShowLegend): ?>
             <p class="text-muted glaz-legend glaz-no-print">
                 <span class="glaz-legend__sample glaz-legend__sample--group"></span> — ваша группа (куратор)
@@ -71,7 +74,12 @@ $glazShowLegend = $glazShowLegend ?? false;
                             </td>
                             <?php $studentRendered = true; endif; ?>
 
-                            <td class="glaz-cell-subject"><?= e($item['subject_name']) ?></td>
+                            <td class="glaz-cell-subject">
+                                <?= e($item['subject_name']) ?>
+                                <?php if (!empty($item['cause_detail'])): ?>
+                                    <div class="glaz-cause text-muted"><?= e((string) $item['cause_detail']) ?></div>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <?php if (!empty($item['is_expired'])): ?>
                                 <span
@@ -100,7 +108,7 @@ $glazShowLegend = $glazShowLegend ?? false;
                                 <form
                                     class="glaz-schedule-form glaz-no-print"
                                     data-glaz-form
-                                    data-save-url="glaz_save.php"
+                                    data-save-url="<?= e($glazSaveUrl) ?>"
                                     data-debt-key="<?= e($item['debt_key']) ?>"
                                 >
                                     <?= csrf_field() ?>
@@ -132,7 +140,10 @@ $glazShowLegend = $glazShowLegend ?? false;
                                         <span class="glaz-schedule-form__label">Состав комиссии</span>
                                         <div class="glaz-commission__list" data-glaz-commission-list>
                                             <?php
-                                            $commissionIds = glaz_commission_teacher_ids($schedule);
+                                            $commissionIds = glaz_commission_teacher_ids(
+                                                $schedule,
+                                                $item['suggested_commission_ids'] ?? []
+                                            );
                                             foreach ($commissionIds as $index => $teacherId):
                                                 $selectedId = (int) $teacherId;
                                                 $withRemove = $index > 0;

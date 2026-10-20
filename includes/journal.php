@@ -22,6 +22,8 @@ function get_journal_assignments_for_user(
 
     $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
 
+    $parentCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'parent_item_id'")->fetch();
+
     $sql = 'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
                    sub.name AS subject_name,
                    g.id AS group_id, g.number AS group_number,
@@ -31,17 +33,24 @@ function get_journal_assignments_for_user(
     if ($typeCol) {
         $sql .= ', ci.item_type, ci.start_abs_semester, ci.end_abs_semester';
     }
+    if ($parentCol) {
+        $sql .= ', ci.parent_item_id, parent_sub.name AS parent_subject_name';
+    }
     $sql .= ' FROM curriculum_items ci
             INNER JOIN subjects sub ON sub.id = ci.subject_id
             INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
             INNER JOIN study_groups g ON g.id = cp.group_id
             INNER JOIN specialties sp ON sp.id = g.specialty_id
-            LEFT JOIN users u ON u.id = ci.teacher_id
-            WHERE cp.academic_year = ?';
+            LEFT JOIN users u ON u.id = ci.teacher_id';
+    if ($parentCol) {
+        $sql .= ' LEFT JOIN curriculum_items parent_ci ON parent_ci.id = ci.parent_item_id
+                  LEFT JOIN subjects parent_sub ON parent_sub.id = parent_ci.subject_id';
+    }
+    $sql .= ' WHERE cp.academic_year = ?';
     $params = [$academicYear];
 
     if ($typeCol) {
-        $sql .= " AND (ci.item_type = 'subject' OR ci.item_type = '' OR ci.item_type IS NULL)";
+        $sql .= " AND (ci.item_type IN ('subject', 'composite') OR ci.item_type = '' OR ci.item_type IS NULL)";
     }
 
     if ($semester !== null && in_array($semester, ['1', '2'], true)) {
@@ -79,7 +88,9 @@ function get_journal_assignments_for_user(
         });
     }
 
-    return $rows;
+    require_once __DIR__ . '/curriculum_composites.php';
+
+    return annotate_curriculum_items_for_teacher($rows, $semester);
 }
 
 function get_journal_mdk_assignments(string $academicYear, ?string $semester = null): array
@@ -87,9 +98,12 @@ function get_journal_mdk_assignments(string $academicYear, ?string $semester = n
     $courseCol = db()->query("SHOW COLUMNS FROM study_groups LIKE 'course'")->fetch();
     $courseSelect = $courseCol ? ', g.course AS group_course' : ', 1 AS group_course';
 
+    $parentCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'parent_item_id'")->fetch();
+    $parentSelect = $parentCol ? ', ci.parent_item_id' : '';
+
     $stmt = db()->prepare(
         'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
-                ci.item_type, ci.start_abs_semester, ci.end_abs_semester,
+                ci.item_type, ci.start_abs_semester, ci.end_abs_semester' . $parentSelect . ',
                 sub.name AS subject_name,
                 g.id AS group_id, g.number AS group_number' . $courseSelect . ',
                 sp.name AS specialty_name,
@@ -653,6 +667,28 @@ function save_journal_lesson_data(
     }
 
     $gradeType = normalize_journal_grade_type($gradeType);
+    require_once __DIR__ . '/curriculum_composites.php';
+    require_once __DIR__ . '/gradebook.php';
+    $activeSemester = (string) (get_active_gradebook_period()['semester'] ?? '');
+    if (
+        curriculum_item_has_children(
+            $curriculumItemId,
+            in_array($activeSemester, ['1', '2'], true) ? $activeSemester : null
+        )
+        && $gradeType !== 'attestation'
+    ) {
+        return [
+            'success' => false,
+            'error' => 'У составной дисциплины / МДК с разделами в журнале родителя допускается только ПА.',
+        ];
+    }
+    $itemMeta = get_curriculum_item_by_id($curriculumItemId);
+    if ($itemMeta !== null && (int) ($itemMeta['parent_item_id'] ?? 0) > 0 && $gradeType === 'attestation') {
+        return [
+            'success' => false,
+            'error' => 'ПА выставляется по родительской дисциплине (МДК / БВС), а не по разделу.',
+        ];
+    }
     $note = normalize_journal_lesson_note($note);
     $workType = normalize_journal_work_type($workType);
     $hours = normalize_journal_lesson_hours($hours);
@@ -826,6 +862,23 @@ function save_journal_grade(
 
     if (!can_access_journal_item((int) $lesson['curriculum_item_id'])) {
         return ['success' => false, 'error' => 'Нет доступа к журналу.'];
+    }
+
+    require_once __DIR__ . '/curriculum_composites.php';
+    require_once __DIR__ . '/gradebook.php';
+    $itemId = (int) $lesson['curriculum_item_id'];
+    $activeSemester = (string) (get_active_gradebook_period()['semester'] ?? '');
+    if (
+        curriculum_item_has_children(
+            $itemId,
+            in_array($activeSemester, ['1', '2'], true) ? $activeSemester : null
+        )
+        && (string) ($lesson['grade_type'] ?? '') !== 'attestation'
+    ) {
+        return [
+            'success' => false,
+            'error' => 'У дисциплины с разделами можно выставлять только ПА.',
+        ];
     }
 
     $student = get_student_by_id($studentId);

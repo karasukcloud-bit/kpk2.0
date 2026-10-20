@@ -122,6 +122,8 @@ function run_migrations(PDO $pdo): void
     ensure_ktp_constructor_schema($pdo);
     ensure_specialty_head_schema($pdo);
     ensure_curriculum_modules_schema($pdo);
+    require_once __DIR__ . '/curriculum_composites.php';
+    ensure_curriculum_composites_schema($pdo);
 
     $manualBrsBootstrap = __DIR__ . '/../modules/manual_brs/bootstrap.php';
     if (is_file($manualBrsBootstrap)) {
@@ -1735,11 +1737,12 @@ function ensure_glaz_schema(PDO $pdo): void
                 curriculum_item_id INT UNSIGNED NOT NULL,
                 academic_year      VARCHAR(9) NOT NULL,
                 semester           ENUM('1', '2') NOT NULL,
+                source             VARCHAR(20) NOT NULL DEFAULT 'journal',
                 liquidation_date   DATE NULL,
                 liquidation_time   TIME NULL,
                 updated_by         INT UNSIGNED NULL,
                 updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-                UNIQUE KEY uq_glaz_debt (student_id, curriculum_item_id, academic_year, semester),
+                UNIQUE KEY uq_glaz_debt_source (student_id, curriculum_item_id, academic_year, semester, source),
                 KEY idx_glaz_period (academic_year, semester),
                 CONSTRAINT fk_glaz_student
                     FOREIGN KEY (student_id) REFERENCES students(id)
@@ -1772,6 +1775,42 @@ function ensure_glaz_schema(PDO $pdo): void
                     ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+
+    // Разделение расписаний обычного ГЛАЗ и ГЛАЗ Ручное БРС.
+    if ($pdo->query("SHOW TABLES LIKE 'glaz_schedules'")->fetch()) {
+        $sourceCol = $pdo->query("SHOW COLUMNS FROM glaz_schedules LIKE 'source'")->fetch();
+        if (!$sourceCol) {
+            $pdo->exec(
+                "ALTER TABLE glaz_schedules
+                 ADD source VARCHAR(20) NOT NULL DEFAULT 'journal' AFTER semester"
+            );
+        }
+        $indexes = $pdo->query('SHOW INDEX FROM glaz_schedules')->fetchAll(PDO::FETCH_ASSOC);
+        $indexNames = [];
+        foreach ($indexes as $idx) {
+            $indexNames[(string) ($idx['Key_name'] ?? '')] = true;
+        }
+        // Перед сменой UNIQUE нужны отдельные индексы под FK.
+        if (empty($indexNames['idx_glaz_student_id'])) {
+            $pdo->exec('ALTER TABLE glaz_schedules ADD KEY idx_glaz_student_id (student_id)');
+            $indexNames['idx_glaz_student_id'] = true;
+        }
+        if (empty($indexNames['idx_glaz_item_id'])) {
+            $pdo->exec('ALTER TABLE glaz_schedules ADD KEY idx_glaz_item_id (curriculum_item_id)');
+            $indexNames['idx_glaz_item_id'] = true;
+        }
+        if (empty($indexNames['uq_glaz_debt_source'])) {
+            $pdo->exec(
+                'ALTER TABLE glaz_schedules
+                 ADD UNIQUE KEY uq_glaz_debt_source
+                 (student_id, curriculum_item_id, academic_year, semester, source)'
+            );
+            $indexNames['uq_glaz_debt_source'] = true;
+        }
+        if (!empty($indexNames['uq_glaz_debt'])) {
+            $pdo->exec('ALTER TABLE glaz_schedules DROP INDEX uq_glaz_debt');
+        }
     }
 }
 

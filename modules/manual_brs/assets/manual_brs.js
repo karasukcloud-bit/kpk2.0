@@ -409,7 +409,13 @@
                 },
                 body: new FormData(form),
             });
-            const data = await response.json();
+            const raw = await response.text();
+            let data;
+            try {
+                data = JSON.parse(raw);
+            } catch (parseErr) {
+                throw new Error('Сервер вернул не JSON. Обновите страницу и попробуйте снова.');
+            }
             if (!data.success) {
                 throw new Error(data.error || 'Ошибка сохранения');
             }

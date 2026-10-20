@@ -80,7 +80,14 @@ if ($group !== null) {
     $subjects = get_group_curriculum_subjects($groupId, $year, $semester);
     $grades = manual_brs_get_gradebook_grades($groupId, $year, $semester);
     $summary = build_gradebook_summary($students, $subjects, $grades);
-    $studentLists = build_gradebook_student_lists($students, $subjects, $grades);
+    $studentLists = manual_brs_build_gradebook_student_lists(
+        $groupId,
+        $year,
+        $semester,
+        $students,
+        $subjects,
+        $grades
+    );
     $sheetTitle = manual_brs_gradebook_title((string) $group['number'], $semester, $year);
     $isControlWeek = $subjects !== []
         && manual_brs_is_control_week($groupId, $year, $semester, $subjects);
@@ -127,7 +134,8 @@ require __DIR__ . '/../../../includes/header.php';
 
     <section class="panel">
         <p class="text-muted manual-brs-no-print">
-            Оценки — итог семестра из модуля «Ручное БРС» (периоды + ПА). Только просмотр.
+            Оценки — текущие итоги из модуля «Ручное БРС» (баллы периода + ПА;
+            для составных дисциплин — разделы + ПА). Только просмотр.
         </p>
 
         <?php if ($manualBrsPanel === 'curator' && empty($groups)): ?>
@@ -277,21 +285,10 @@ require __DIR__ . '/../../../includes/header.php';
                 <div class="gradebook-lists">
                     <h2>Списки студентов</h2>
                     <div class="gradebook-lists__grid">
-                        <div class="gradebook-lists__col">
-                            <h3>Оценка «2»</h3>
+                        <div class="gradebook-lists__col gradebook-lists__col--wide">
+                            <h3>Неуспевающие (оценка «2»)</h3>
                             <div>
-                                <?php if ($studentLists['with_twos'] === []): ?>
-                                    <p class="text-muted">Нет студентов</p>
-                                <?php else: ?>
-                                    <ul class="gradebook-lists__items">
-                                        <?php foreach ($studentLists['with_twos'] as $item): ?>
-                                        <li class="gradebook-lists__item">
-                                            <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
-                                            <span class="gradebook-lists__subjects text-muted"><?= e(implode(', ', $item['subjects'])) ?></span>
-                                        </li>
-                                        <?php endforeach; ?>
-                                    </ul>
-                                <?php endif; ?>
+                                <?= manual_brs_render_failing_students_html($studentLists['with_twos']) ?>
                             </div>
                         </div>
                         <div class="gradebook-lists__col">

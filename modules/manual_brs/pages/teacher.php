@@ -6,6 +6,7 @@ require_once __DIR__ . '/../../../includes/auth.php';
 require_once __DIR__ . '/../../../includes/students.php';
 require_once __DIR__ . '/../../../includes/journal.php';
 require_once __DIR__ . '/../../../includes/grading.php';
+require_once __DIR__ . '/../../../includes/curriculum_composites.php';
 require_once __DIR__ . '/../bootstrap.php';
 
 require_teacher_panel();
@@ -24,6 +25,7 @@ $semester = manual_brs_semester_from_period($period);
 $groups = get_journal_groups($academicYear, $semester);
 $groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
 $itemId = isset($_GET['item_id']) ? (int) $_GET['item_id'] : 0;
+$parentId = isset($_GET['parent_id']) ? (int) $_GET['parent_id'] : 0;
 $error = null;
 $success = null;
 
@@ -38,6 +40,26 @@ if ($groupId > 0 && $selectedGroup === null) {
     $error = 'Группа не найдена или недоступна.';
     $groupId = 0;
     $itemId = 0;
+    $parentId = 0;
+}
+
+$subjectTree = $selectedGroup !== null
+    ? group_journal_subjects_tree($selectedGroup['subjects'])
+    : [];
+$selectedParent = null;
+if ($selectedGroup !== null && $parentId > 0 && $itemId === 0) {
+    foreach ($subjectTree as $node) {
+        if ((int) ($node['curriculum_item_id'] ?? 0) === $parentId
+            && ($node['children'] ?? []) !== []
+        ) {
+            $selectedParent = $node;
+            break;
+        }
+    }
+    if ($selectedParent === null) {
+        $error = 'Дисциплина с разделами не найдена.';
+        $parentId = 0;
+    }
 }
 
 $assignment = null;
@@ -59,6 +81,7 @@ $url = static function (array $params = []) use ($period): string {
         'period' => $period,
         'group_id' => $params['group_id'] ?? null,
         'item_id' => $params['item_id'] ?? null,
+        'parent_id' => $params['parent_id'] ?? null,
     ];
     foreach ($params as $key => $value) {
         $base[$key] = $value;
@@ -79,159 +102,218 @@ if ($assignment !== null) {
     $sheet = manual_brs_get_or_create_sheet($academicYear, $period, $groupId, $itemId);
 }
 
+$isAjaxPost = $_SERVER['REQUEST_METHOD'] === 'POST'
+    && (
+        (
+            !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
+            && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest'
+        )
+        || (($_POST['ajax'] ?? '') === '1')
+    );
+
+$manualBrsJsonExit = static function (array $payload) : void {
+    header('Content-Type: application/json; charset=utf-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE);
+    exit;
+};
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== null) {
+    $isJournalPartPost = (int) ($assignment['parent_item_id'] ?? 0) > 0;
+
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
+        if ($isAjaxPost) {
+            $manualBrsJsonExit(['success' => false, 'error' => $error]);
+        }
     } else {
         $action = (string) ($_POST['action'] ?? '');
-        if ($action === 'save_lessons_total') {
-            $result = manual_brs_update_lessons_total(
-                (int) $sheet['id'],
-                (int) ($_POST['lessons_total'] ?? 0)
-            );
-            if ($result['success']) {
-                $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-                    && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-                if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
-                    $entries = manual_brs_get_entries_map((int) $sheet['id']);
-                    $students = get_students_by_group($groupId);
-                    $builtRows = manual_brs_build_student_rows(
-                        $students,
-                        $entries,
-                        $academicYear,
-                        $itemId,
-                        $period
-                    );
-                    $rowsPayload = [];
-                    foreach ($builtRows as $row) {
-                        $sid = (int) $row['student']['id'];
-                        $rowsPayload[$sid] = [
-                            'period_display' => $row['display'],
-                            'points' => $row['points'],
-                            'grade' => $row['grade'],
-                            'pa_grade' => $row['pa_grade'],
-                            'semester_html' => $row['semester_html'],
-                            'semester_grade' => $row['semester_grade'],
-                            'semester_points' => $row['semester_points'],
-                        ];
+        try {
+            if ($action === 'save_lessons_total') {
+                $result = manual_brs_update_lessons_total(
+                    (int) $sheet['id'],
+                    (int) ($_POST['lessons_total'] ?? 0)
+                );
+                if (!$result['success']) {
+                    $error = $result['error'] ?? 'Не удалось сохранить.';
+                    if ($isAjaxPost) {
+                        $manualBrsJsonExit(['success' => false, 'error' => $error]);
                     }
-                    header('Content-Type: application/json; charset=utf-8');
-                    echo json_encode([
-                        'success' => true,
-                        'lessons_total' => (int) ($result['lessons_total'] ?? 0),
-                        'rows' => $rowsPayload,
-                    ], JSON_UNESCAPED_UNICODE);
+                } else {
+                    if ($isAjaxPost) {
+                        $entries = manual_brs_get_entries_map((int) $sheet['id']);
+                        $students = get_students_by_group($groupId);
+                        $builtRows = manual_brs_build_student_rows(
+                            $students,
+                            $entries,
+                            $academicYear,
+                            $itemId,
+                            $period
+                        );
+                        $rowsPayload = [];
+                        foreach ($builtRows as $row) {
+                            $sid = (int) $row['student']['id'];
+                            $rowsPayload[$sid] = [
+                                'period_display' => $row['display'],
+                                'points' => $row['points'],
+                                'grade' => $row['grade'],
+                                'pa_grade' => $row['pa_grade'],
+                                'semester_html' => $row['semester_html'],
+                                'semester_grade' => $row['semester_grade'],
+                                'semester_points' => $row['semester_points'],
+                            ];
+                        }
+                        $manualBrsJsonExit([
+                            'success' => true,
+                            'lessons_total' => (int) ($result['lessons_total'] ?? 0),
+                            'rows' => $rowsPayload,
+                        ]);
+                    }
+                    flash_set('success', 'Число занятий периода сохранено.');
+                    header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
                     exit;
                 }
-                flash_set('success', 'Число занятий периода сохранено.');
-                header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
-                exit;
-            }
-            $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-                && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-            if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
-                header('Content-Type: application/json; charset=utf-8');
-                echo json_encode([
-                    'success' => false,
-                    'error' => $result['error'] ?? 'Не удалось сохранить.',
-                ], JSON_UNESCAPED_UNICODE);
-                exit;
-            }
-            $error = $result['error'] ?? 'Не удалось сохранить.';
-        } elseif ($action === 'save_entry') {
-            $studentId = (int) ($_POST['student_id'] ?? 0);
-            $result = manual_brs_save_entry(
-                (int) $sheet['id'],
-                $studentId,
-                $_POST,
-                (int) ($sheet['lessons_total'] ?? 0)
-            );
-            if ($result['success']) {
+            } elseif ($action === 'save_entry') {
+                $studentId = (int) ($_POST['student_id'] ?? 0);
+                $result = manual_brs_save_entry(
+                    (int) $sheet['id'],
+                    $studentId,
+                    $_POST,
+                    (int) ($sheet['lessons_total'] ?? 0)
+                );
+                if (!$result['success']) {
+                    $error = $result['error'] ?? 'Не удалось сохранить.';
+                    if ($isAjaxPost) {
+                        $manualBrsJsonExit(['success' => false, 'error' => $error]);
+                    }
+                } else {
+                    $paGrade = null;
+                    // ПА только у самостоятельной дисциплины / родителя, не у раздела.
+                    if (!$isJournalPartPost && array_key_exists('pa_grade', $_POST)) {
+                        $paRaw = $_POST['pa_grade'] ?? '';
+                        $paResult = manual_brs_save_attestation(
+                            $academicYear,
+                            $semester,
+                            $itemId,
+                            $studentId,
+                            $paRaw === '' ? null : $paRaw
+                        );
+                        if (!$paResult['success']) {
+                            $error = $paResult['error'] ?? 'Не удалось сохранить ПА.';
+                            if ($isAjaxPost) {
+                                $manualBrsJsonExit(['success' => false, 'error' => $error]);
+                            }
+                        } else {
+                            $paGrade = $paResult['grade'];
+                        }
+                    } else {
+                        $paGrade = manual_brs_get_attestation(
+                            $academicYear,
+                            $semester,
+                            $itemId,
+                            $studentId
+                        );
+                    }
+
+                    if ($error === null) {
+                        $periodPoints = isset($result['calc']['points'])
+                            ? (float) $result['calc']['points']
+                            : null;
+                        $sem = manual_brs_resolve_semester_grade(
+                            $academicYear,
+                            $semester,
+                            $itemId,
+                            $studentId
+                        );
+                        if (($sem['display'] ?? '') === '' && $periodPoints !== null) {
+                            $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+                        }
+                        if ($isAjaxPost) {
+                            $manualBrsJsonExit([
+                                'success' => true,
+                                'calc' => $result['calc'],
+                                'current_period' => $period,
+                                'period_display' => $result['calc']['display'] ?? '',
+                                'pa_grade' => $paGrade,
+                                'semester_display' => $sem['display'] ?? '',
+                                'semester_grade' => $sem['grade'] ?? null,
+                                'semester_points' => $sem['points'] ?? null,
+                                'semester_html' => $sem['html'] ?? '',
+                            ]);
+                        }
+                        flash_set('success', 'Данные БРС сохранены.');
+                        header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
+                        exit;
+                    }
+                }
+            } elseif ($action === 'save_pa') {
+                $studentId = (int) ($_POST['student_id'] ?? 0);
                 $paRaw = $_POST['pa_grade'] ?? '';
-                $paResult = manual_brs_save_attestation(
+                $result = manual_brs_save_attestation(
                     $academicYear,
                     $semester,
                     $itemId,
                     $studentId,
                     $paRaw === '' ? null : $paRaw
                 );
-                if (!$paResult['success']) {
-                    $error = $paResult['error'] ?? 'Не удалось сохранить ПА.';
+                if (!$result['success']) {
+                    $error = $result['error'] ?? 'Не удалось сохранить ПА.';
+                    if ($isAjaxPost) {
+                        $manualBrsJsonExit(['success' => false, 'error' => $error]);
+                    }
                 } else {
-                    $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-                        && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-                    if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
-                        header('Content-Type: application/json; charset=utf-8');
-                        $paGrade = $paResult['grade'];
-                        $periodPoints = isset($result['calc']['points'])
-                            ? (float) $result['calc']['points']
-                            : null;
-                        $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
-                        $periodDisplay = $result['calc']['display'] ?? '';
-                        echo json_encode([
+                    if ($isAjaxPost) {
+                        $sem = manual_brs_resolve_semester_grade(
+                            $academicYear,
+                            $semester,
+                            $itemId,
+                            $studentId
+                        );
+                        $periodDisplay = ($sem['brs_grade'] ?? null) !== null
+                            ? ('разделы → ' . (int) $sem['brs_grade'])
+                            : '';
+                        if ($periodDisplay === '') {
+                            $periodData = manual_brs_points_for_periods(
+                                $academicYear,
+                                $itemId,
+                                $studentId,
+                                [$period]
+                            );
+                            $periodDisplay = $periodData[$period]['display'] ?? '';
+                        }
+                        $manualBrsJsonExit([
                             'success' => true,
-                            'calc' => $result['calc'],
-                            'current_period' => $period,
+                            'pa_grade' => $result['grade'],
                             'period_display' => $periodDisplay,
-                            'pa_grade' => $paGrade,
                             'semester_display' => $sem['display'],
                             'semester_grade' => $sem['grade'],
-                            'semester_points' => $sem['points'],
+                            'semester_points' => $sem['points'] ?? null,
                             'semester_html' => $sem['html'],
-                        ], JSON_UNESCAPED_UNICODE);
-                        exit;
+                        ]);
                     }
-                    flash_set('success', 'Данные БРС сохранены.');
+                    flash_set('success', 'ПА сохранена.');
                     header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
                     exit;
                 }
-            } else {
-                $error = $result['error'] ?? 'Не удалось сохранить.';
             }
-        } elseif ($action === 'save_pa') {
-            $studentId = (int) ($_POST['student_id'] ?? 0);
-            $paRaw = $_POST['pa_grade'] ?? '';
-            $result = manual_brs_save_attestation(
-                $academicYear,
-                $semester,
-                $itemId,
-                $studentId,
-                $paRaw === '' ? null : $paRaw
-            );
-            if ($result['success']) {
-                $isAjax = !empty($_SERVER['HTTP_X_REQUESTED_WITH'])
-                    && strtolower((string) $_SERVER['HTTP_X_REQUESTED_WITH']) === 'xmlhttprequest';
-                if ($isAjax || (($_POST['ajax'] ?? '') === '1')) {
-                    header('Content-Type: application/json; charset=utf-8');
-                    $periodData = manual_brs_points_for_periods(
-                        $academicYear,
-                        $itemId,
-                        $studentId,
-                        [$period]
-                    );
-                    $periodPoints = $periodData[$period]['points'] ?? null;
-                    $sem = manual_brs_semester_total($periodPoints, null, $result['grade']);
-                    $periodDisplay = $periodData[$period]['display'] ?? '';
-                    echo json_encode([
-                        'success' => true,
-                        'pa_grade' => $result['grade'],
-                        'period_display' => $periodDisplay,
-                        'semester_display' => $sem['display'],
-                        'semester_grade' => $sem['grade'],
-                        'semester_points' => $sem['points'],
-                        'semester_html' => $sem['html'],
-                    ], JSON_UNESCAPED_UNICODE);
-                    exit;
-                }
-                flash_set('success', 'ПА сохранена.');
-                header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
-                exit;
+        } catch (Throwable $e) {
+            $error = 'Ошибка сохранения: ' . $e->getMessage();
+            if ($isAjaxPost) {
+                $manualBrsJsonExit(['success' => false, 'error' => $error]);
             }
-            $error = $result['error'] ?? 'Не удалось сохранить ПА.';
         }
     }
     $sheet = manual_brs_get_or_create_sheet($academicYear, $period, $groupId, $itemId);
+} elseif ($isAjaxPost) {
+    $manualBrsJsonExit([
+        'success' => false,
+        'error' => 'Не выбраны группа и предмет для сохранения.',
+    ]);
 }
+
+$isAttestationOnly = $assignment !== null
+    && (($assignment['journal_mode'] ?? '') === 'attestation_only');
+$isJournalPart = $assignment !== null
+    && (int) ($assignment['parent_item_id'] ?? 0) > 0;
 
 if ($assignment !== null && $sheet !== null) {
     $students = get_students_by_group($groupId);
@@ -301,13 +383,44 @@ require __DIR__ . '/../../../includes/header.php';
                     <p class="text-muted">
                         Группа <?= e($selectedGroup['group_number']) ?>
                         · <?= e($periodMeta['label']) ?>
+                        <?php if ($isAttestationOnly): ?>
+                            · только ПА
+                        <?php elseif ($isJournalPart): ?>
+                            · раздел
+                        <?php endif; ?>
                     </p>
                 </div>
                 <div class="panel__header-actions">
-                    <a href="<?= e($url(['group_id' => $groupId, 'period' => $period])) ?>" class="btn btn--ghost btn--sm">← К предметам</a>
+                    <?php
+                    $backParentId = (int) ($assignment['parent_item_id'] ?? 0);
+                    if ($backParentId <= 0 && $isAttestationOnly) {
+                        $backParentId = $itemId;
+                    }
+                    $backSubjectsHref = $backParentId > 0
+                        ? $url(['group_id' => $groupId, 'parent_id' => $backParentId, 'period' => $period])
+                        : $url(['group_id' => $groupId, 'period' => $period]);
+                    ?>
+                    <a href="<?= e($backSubjectsHref) ?>" class="btn btn--ghost btn--sm">
+                        ← <?= $backParentId > 0 && !$isAttestationOnly ? 'К разделам' : 'К предметам' ?>
+                    </a>
                 </div>
             </div>
 
+            <?php if ($isAttestationOnly): ?>
+                <p class="text-muted">
+                    Составная дисциплина: баллы БРС — в разделах; здесь выставляется только ПА.
+                    Итог = агрегация разделов (любая 2 → 2, иначе среднее) и ПА.
+                </p>
+            <?php elseif ($isJournalPart): ?>
+                <p class="text-muted">
+                    Раздел составной дисциплины. ПА выставляется по родителю
+                    <?php if (!empty($assignment['parent_subject_name'])): ?>
+                        «<?= e((string) $assignment['parent_subject_name']) ?>»
+                    <?php endif; ?>.
+                </p>
+            <?php endif; ?>
+
+            <?php if (!$isAttestationOnly): ?>
             <form method="post" class="form form--inline manual-brs-lessons-form" data-manual-brs-lessons-form>
                 <?= csrf_field() ?>
                 <input type="hidden" name="action" value="save_lessons_total">
@@ -327,6 +440,7 @@ require __DIR__ . '/../../../includes/header.php';
                     <p class="form__hint" data-manual-brs-lessons-status></p>
                 </div>
             </form>
+            <?php endif; ?>
 
             <?php if ($students === []): ?>
                 <p class="text-muted">В группе нет студентов.</p>
@@ -337,8 +451,10 @@ require __DIR__ . '/../../../includes/header.php';
                             <tr>
                                 <th>№</th>
                                 <th>Студент</th>
-                                <th>Баллы (<?= e($periodMeta['label']) ?>)</th>
+                                <th><?= $isAttestationOnly ? 'Разделы' : ('Баллы (' . e($periodMeta['label']) . ')') ?></th>
+                                <?php if (!$isJournalPart): ?>
                                 <th>ПА</th>
+                                <?php endif; ?>
                                 <th>Итог семестра</th>
                             </tr>
                         </thead>
@@ -350,8 +466,8 @@ require __DIR__ . '/../../../includes/header.php';
                                 $s2 = $row['stages'][2];
                                 ?>
                                 <tr
-                                    class="manual-brs-row"
-                                    data-manual-brs-open
+                                    class="manual-brs-row<?= $isAttestationOnly ? ' manual-brs-row--pa-only' : '' ?>"
+                                    <?= $isAttestationOnly ? '' : 'data-manual-brs-open' ?>
                                     data-student-id="<?= (int) $st['id'] ?>"
                                     data-student-name="<?= e($st['full_name']) ?>"
                                     data-s1-current="<?= e($s1['current_input']) ?>"
@@ -372,6 +488,7 @@ require __DIR__ . '/../../../includes/header.php';
                                     <td><?= $index + 1 ?></td>
                                     <td><strong><?= e($st['full_name']) ?></strong></td>
                                     <td data-manual-brs-period-cell><?= $row['display'] !== '' ? e($row['display']) : '—' ?></td>
+                                    <?php if (!$isJournalPart): ?>
                                     <td class="manual-brs-pa-cell" onclick="event.stopPropagation();">
                                         <select
                                             class="manual-brs-pa-select"
@@ -385,6 +502,7 @@ require __DIR__ . '/../../../includes/header.php';
                                             <?php endforeach; ?>
                                         </select>
                                     </td>
+                                    <?php endif; ?>
                                     <td class="manual-brs-semester-cell" data-manual-brs-semester-cell><?= $row['semester_html'] ?></td>
                                 </tr>
                             <?php endforeach; ?>
@@ -480,6 +598,7 @@ require __DIR__ . '/../../../includes/header.php';
                                            value="0" data-manual-brs-stage="2" data-manual-brs-field="activity">
                                 </div>
                             </div>
+                            <?php if (!$isJournalPart): ?>
                             <div class="form__group">
                                 <label for="mbrs_pa">Промежуточная аттестация (ПА)</label>
                                 <select id="mbrs_pa" name="pa_grade" data-manual-brs-pa-modal>
@@ -490,6 +609,7 @@ require __DIR__ . '/../../../includes/header.php';
                                     <option value="5">5</option>
                                 </select>
                             </div>
+                            <?php endif; ?>
                         </section>
                     </div>
 
@@ -526,8 +646,54 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261014a"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020a"></script>
 
+    <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
+        <section class="panel">
+            <div class="panel__header panel__header--compact">
+                <div>
+                    <h2><?= e($selectedParent['subject_name']) ?></h2>
+                    <p class="text-muted">
+                        Группа <?= e($selectedGroup['group_number']) ?>
+                        · выберите раздел или ПА · <?= e($periodMeta['label']) ?>
+                    </p>
+                </div>
+                <a href="<?= e($url(['group_id' => $groupId, 'period' => $period])) ?>" class="btn btn--ghost btn--sm">← К предметам</a>
+            </div>
+            <div class="journal-choice-grid">
+                <?php if (empty($selectedParent['virtual_parent'])): ?>
+                <a
+                    class="journal-choice"
+                    href="<?= e($url([
+                        'group_id' => $groupId,
+                        'item_id' => (int) $selectedParent['curriculum_item_id'],
+                        'period' => $period,
+                    ])) ?>"
+                >
+                    <strong>ПА / итог</strong>
+                    <span class="badge badge--role badge--semester-2">только ПА</span>
+                    <span class="text-muted"><?= e(semester_label((string) ($selectedParent['semester'] ?? $semester))) ?></span>
+                </a>
+                <?php endif; ?>
+                <?php foreach ($selectedParent['children'] as $part): ?>
+                <a
+                    class="journal-choice"
+                    href="<?= e($url([
+                        'group_id' => $groupId,
+                        'item_id' => (int) $part['curriculum_item_id'],
+                        'period' => $period,
+                    ])) ?>"
+                >
+                    <strong><?= e($part['subject_name']) ?></strong>
+                    <span class="badge badge--role">раздел</span>
+                    <span class="text-muted"><?= e(semester_label((string) ($part['semester'] ?? $semester))) ?></span>
+                    <?php if (!empty($part['teacher_name'])): ?>
+                    <span class="journal-choice__meta">Преп.: <?= e($part['teacher_name']) ?></span>
+                    <?php endif; ?>
+                </a>
+                <?php endforeach; ?>
+            </div>
+        </section>
     <?php elseif ($selectedGroup !== null): ?>
         <section class="panel">
             <div class="panel__header panel__header--compact">
@@ -537,23 +703,36 @@ require __DIR__ . '/../../../includes/header.php';
                 </div>
                 <a href="<?= e($url(['period' => $period])) ?>" class="btn btn--ghost btn--sm">← К группам</a>
             </div>
-            <?php if (empty($selectedGroup['subjects'])): ?>
+            <?php if ($subjectTree === []): ?>
                 <p class="text-muted">Нет предметов учебного плана на <?= e($periodMeta['semester_label']) ?>.</p>
             <?php else: ?>
                 <div class="journal-choice-grid">
-                    <?php foreach ($selectedGroup['subjects'] as $subject): ?>
-                        <a
-                            class="journal-choice"
-                            href="<?= e($url([
+                    <?php foreach ($subjectTree as $subject): ?>
+                        <?php
+                        $children = $subject['children'] ?? [];
+                        $hasParts = $children !== [];
+                        $cardUrl = $hasParts
+                            ? $url([
+                                'group_id' => $groupId,
+                                'parent_id' => (int) $subject['curriculum_item_id'],
+                                'period' => $period,
+                            ])
+                            : $url([
                                 'group_id' => $groupId,
                                 'item_id' => (int) $subject['curriculum_item_id'],
                                 'period' => $period,
-                            ])) ?>"
-                        >
+                            ]);
+                        ?>
+                        <a class="journal-choice" href="<?= e($cardUrl) ?>">
                             <strong><?= e($subject['subject_name']) ?></strong>
+                            <?php if ($hasParts): ?>
+                                <span class="badge badge--role">разделы: <?= count($children) ?></span>
+                            <?php endif; ?>
                             <span class="text-muted"><?= e(semester_label((string) ($subject['semester'] ?? $semester))) ?></span>
-                            <?php if (!empty($subject['teacher_name'])): ?>
-                            <span class="journal-choice__meta">Преп.: <?= e($subject['teacher_name']) ?></span>
+                            <?php if ($hasParts): ?>
+                                <span class="journal-choice__meta">Открыть список разделов</span>
+                            <?php elseif (!empty($subject['teacher_name'])): ?>
+                                <span class="journal-choice__meta">Преп.: <?= e($subject['teacher_name']) ?></span>
                             <?php endif; ?>
                         </a>
                     <?php endforeach; ?>

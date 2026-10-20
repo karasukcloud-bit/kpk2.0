@@ -326,8 +326,8 @@ function build_group_report_academic(array $students, ?int $groupId): array
         $grades = $subjects !== []
             ? get_gradebook_grades_from_journal($groupId, $year, $semester)
             : [];
-        $summary = build_gradebook_summary($students, $subjects, $grades);
         $lists = build_gradebook_student_lists($students, $subjects, $grades);
+        $summary = build_gradebook_summary($students, $subjects, $grades);
 
         $result['absolute_percent'] = (int) ($summary['assessed_students'] ?? 0) > 0
             ? (float) $summary['absolute_percent']

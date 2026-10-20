@@ -267,6 +267,16 @@ function manual_brs_save_entry(
         return ['success' => false, 'error' => 'Студент не из этой группы.'];
     }
 
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    require_once __DIR__ . '/periods.php';
+    $sheetSemester = manual_brs_semester_from_period((int) ($sheet['period'] ?? 1));
+    if (curriculum_item_has_children((int) $sheet['curriculum_item_id'], $sheetSemester)) {
+        return [
+            'success' => false,
+            'error' => 'У составной дисциплины баллы БРС вносятся в разделы; здесь только ПА.',
+        ];
+    }
+
     $merged = manual_brs_merge_stages_input($input);
     $stages = $merged['stages'];
 
@@ -456,7 +466,15 @@ function manual_brs_save_attestation(
         return ['success' => false, 'error' => 'Студент не найден.'];
     }
 
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    $item = get_curriculum_item_by_id($curriculumItemId);
+    $isChildPart = $item !== null && (int) ($item['parent_item_id'] ?? 0) > 0;
+
     if ($grade === null || $grade === '') {
+        // Для раздела ПА не хранится — очищение не ошибка.
+        if ($isChildPart) {
+            return ['success' => true, 'grade' => null];
+        }
         $stmt = db()->prepare(
             'DELETE FROM manual_brs_attestations
              WHERE academic_year = ? AND semester = ?
@@ -465,6 +483,13 @@ function manual_brs_save_attestation(
         $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId]);
 
         return ['success' => true, 'grade' => null];
+    }
+
+    if ($isChildPart) {
+        return [
+            'success' => false,
+            'error' => 'ПА выставляется по родительской дисциплине (МДК / БВС), а не по разделу.',
+        ];
     }
 
     $grade = (int) $grade;
@@ -483,6 +508,49 @@ function manual_brs_save_attestation(
     return ['success' => true, 'grade' => $grade];
 }
 
+/**
+ * Итог семестра: для родителя с разделами — агрегация разделов + ПА родителя.
+ */
+function manual_brs_resolve_semester_grade(
+    string $academicYear,
+    string $semester,
+    int $curriculumItemId,
+    int $studentId
+): array {
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    $periods = [manual_brs_period_for_semester($semester)];
+    $periodId = $periods[0];
+    $paMap = manual_brs_get_attestations_map($academicYear, $semester, $curriculumItemId);
+    $pa = $paMap[$studentId] ?? null;
+
+    if (curriculum_item_has_children($curriculumItemId, $semester)) {
+        $partGrades = [];
+        foreach (get_curriculum_item_children($curriculumItemId, $semester) as $child) {
+            $childId = (int) $child['id'];
+            $periodData = manual_brs_points_for_periods($academicYear, $childId, $studentId, $periods);
+            $childSem = manual_brs_semester_total($periodData[$periodId]['points'] ?? null, null, null);
+            if ($childSem['grade'] !== null) {
+                $partGrades[] = (int) $childSem['grade'];
+            }
+        }
+        $base = aggregate_composite_part_grades($partGrades);
+        $grade = resolve_composite_final_grade($base, $pa);
+
+        return [
+            'points' => null,
+            'grade' => $grade,
+            'brs_grade' => $base,
+            'pa_grade' => $pa,
+            'display' => $grade !== null ? (string) $grade : '',
+            'html' => manual_brs_render_semester_html($grade, null),
+        ];
+    }
+
+    $periodData = manual_brs_points_for_periods($academicYear, $curriculumItemId, $studentId, $periods);
+
+    return manual_brs_semester_total($periodData[$periodId]['points'] ?? null, null, $pa);
+}
+
 function manual_brs_build_student_rows(
     array $students,
     array $entries,
@@ -493,6 +561,13 @@ function manual_brs_build_student_rows(
     $period = manual_brs_normalize_period($period);
     $semester = manual_brs_semester_from_period($period);
     $paMap = manual_brs_get_attestations_map($academicYear, $semester, $curriculumItemId);
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    $isCompositeParent = curriculum_item_has_children($curriculumItemId, $semester);
+    $isPart = false;
+    $itemMeta = get_curriculum_item_by_id($curriculumItemId);
+    if ($itemMeta !== null) {
+        $isPart = (int) ($itemMeta['parent_item_id'] ?? 0) > 0;
+    }
     $rows = [];
 
     foreach ($students as $student) {
@@ -503,7 +578,34 @@ function manual_brs_build_student_rows(
         if ($entry && $entry['points'] !== null) {
             $periodPoints = (float) $entry['points'];
         }
-        $paGrade = $paMap[$studentId] ?? null;
+        $paGrade = $isPart ? null : ($paMap[$studentId] ?? null);
+
+        if ($isCompositeParent) {
+            $sem = manual_brs_resolve_semester_grade($academicYear, $semester, $curriculumItemId, $studentId);
+            $display = $sem['brs_grade'] !== null ? ('разделы → ' . (int) $sem['brs_grade']) : '—';
+            $rows[] = [
+                'student' => $student,
+                'entry' => $entry,
+                'points' => null,
+                'grade' => $sem['brs_grade'],
+                'display' => $display,
+                'pa_grade' => $paGrade,
+                'semester_display' => $sem['display'],
+                'semester_grade' => $sem['grade'],
+                'semester_points' => null,
+                'semester_html' => $sem['html'],
+                'current_marks_input' => '',
+                'control_marks_input' => '',
+                'absent_count' => 0,
+                'late_count' => 0,
+                'activity_count' => 0,
+                'stages' => manual_brs_entry_stages(null),
+                'attestation_only' => true,
+                'hide_pa' => false,
+            ];
+            continue;
+        }
+
         $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
 
         $rows[] = [
@@ -532,6 +634,8 @@ function manual_brs_build_student_rows(
             'late_count' => $entry ? (int) $entry['late_count'] : 0,
             'activity_count' => $entry ? (int) $entry['activity_count'] : 0,
             'stages' => manual_brs_entry_stages($entry),
+            'attestation_only' => false,
+            'hide_pa' => $isPart,
         ];
     }
 

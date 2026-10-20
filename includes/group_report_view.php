@@ -342,6 +342,11 @@ $groupCourse = function_exists('get_group_course') ? get_group_course($group) : 
                     <h3 class="subsection-title">Неуспевающие</h3>
                     <?php if (($report['with_twos'] ?? []) === []): ?>
                         <p class="text-muted">Нет</p>
+                    <?php elseif (
+                        !empty($report['with_twos'][0]['failing'])
+                        && function_exists('manual_brs_render_failing_students_html')
+                    ): ?>
+                        <?= manual_brs_render_failing_students_html($report['with_twos']) ?>
                     <?php else: ?>
                         <ul class="group-report__list">
                             <?php foreach ($report['with_twos'] as $item): ?>

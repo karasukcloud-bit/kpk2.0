@@ -246,9 +246,13 @@ function get_curriculum_items(int $planId, $itemType = 'subject'): array
     $sql = 'SELECT ci.id, ci.curriculum_plan_id, ci.subject_id, ci.teacher_id, ci.semester, ci.sort_order,
                    sub.name AS subject_name,
                    u.full_name AS teacher_name';
+    $parentCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'parent_item_id'")->fetch();
     if ($typeCol) {
         $sql .= ', ci.item_type, ci.module_id, ci.practice_kind, ci.component_index,
                   ci.start_abs_semester, ci.end_abs_semester';
+    }
+    if ($parentCol) {
+        $sql .= ', ci.parent_item_id';
     }
     $sql .= ' FROM curriculum_items ci
          INNER JOIN subjects sub ON sub.id = ci.subject_id
@@ -274,8 +278,15 @@ function get_curriculum_items(int $planId, $itemType = 'subject'): array
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    if ($parentCol) {
+        foreach ($rows as &$row) {
+            $row['parent_item_id'] = isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0;
+        }
+        unset($row);
+    }
 
-    return $stmt->fetchAll();
+    return $rows;
 }
 
 /**
@@ -283,7 +294,8 @@ function get_curriculum_items(int $planId, $itemType = 'subject'): array
  */
 function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course): array
 {
-    $items = get_curriculum_items($planId, ['subject', 'mdk']);
+    require_once __DIR__ . '/curriculum_composites.php';
+    $items = get_curriculum_items($planId, ['subject', 'mdk', 'composite']);
     $seen = [];
     foreach ($items as $item) {
         $seen[(int) $item['id']] = true;
@@ -307,6 +319,7 @@ function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course
             'teacher_name' => $mdk['teacher_name'] ?? null,
             'item_type' => 'mdk',
             'module_id' => $mdk['module_id'] ?? null,
+            'parent_item_id' => (int) ($mdk['parent_item_id'] ?? 0),
             'practice_kind' => null,
             'component_index' => $mdk['component_index'] ?? null,
             'start_abs_semester' => $mdk['start_abs_semester'] ?? null,
@@ -314,7 +327,13 @@ function get_curriculum_subjects_with_mdk(int $planId, int $groupId, int $course
         ];
     }
 
-    return sort_curriculum_items_by_order($items);
+    // В списке УП сверху — только родители; дети подгружаются отдельно
+    $top = array_values(array_filter(
+        $items,
+        static fn (array $item): bool => (int) ($item['parent_item_id'] ?? 0) === 0
+    ));
+
+    return sort_curriculum_items_by_order($top);
 }
 
 function curriculum_list_item_in_semester(array $item, string $semester, int $course): bool
@@ -354,6 +373,10 @@ function get_curriculum_item_by_id(int $itemId): ?array
     );
     $stmt->execute([$itemId]);
     $row = $stmt->fetch();
+    if ($row) {
+        $row['parent_item_id'] = isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0;
+        $row['curriculum_item_id'] = (int) $row['id'];
+    }
 
     return $row ?: null;
 }
@@ -372,7 +395,8 @@ function get_group_curriculum_subjects(int $groupId, string $academicYear, ?stri
     require_once __DIR__ . '/curriculum_modules.php';
 
     $course = get_group_course($groupId);
-    $items = get_curriculum_items((int) $plan['id'], 'subject');
+    require_once __DIR__ . '/curriculum_composites.php';
+    $items = get_curriculum_items((int) $plan['id'], ['subject', 'composite']);
 
     if ($semester !== null) {
         if (!validate_semester($semester)) {
@@ -402,7 +426,9 @@ function get_group_curriculum_subjects(int $groupId, string $academicYear, ?stri
         }
     }
 
-    return enrich_curriculum_items(sort_curriculum_items_by_order($items), $plan);
+    $items = enrich_curriculum_items(sort_curriculum_items_by_order($items), $plan);
+
+    return filter_curriculum_items_for_gradebook($items);
 }
 
 function sort_curriculum_items_by_order(array $items): array
@@ -678,36 +704,58 @@ function render_curriculum_semester_table(
     array $items,
     int $groupId,
     string $academicYear,
-    string $listSemester = '1'
+    string $listSemester = '1',
+    int $managePartsItemId = 0
 ): string {
     if ($items === []) {
         return '<p class="text-muted">Нет предметов.</p>';
     }
 
-    $html = '<div class="table-wrap"><table class="table"><thead><tr>'
-        . '<th>№</th><th>Предмет</th><th>Преподаватель</th><th class="table__actions-col">Действия</th>'
-        . '</tr></thead><tbody>';
+    require_once __DIR__ . '/curriculum_composites.php';
+    $teachers = function_exists('get_all_teachers') ? get_all_teachers() : [];
+    $teacherOptions = '<option value="">— Не назначен —</option>';
+    foreach ($teachers as $teacher) {
+        if (!(int) ($teacher['is_active'] ?? 1)) {
+            continue;
+        }
+        $teacherOptions .= '<option value="' . (int) $teacher['id'] . '">'
+            . e((string) $teacher['full_name']) . '</option>';
+    }
+
+    $html = '<div class="curriculum-list">';
 
     $total = count($items);
     foreach ($items as $index => $item) {
         $id = (int) $item['id'];
         $year = e(urlencode($academicYear));
-        $isMdk = (($item['item_type'] ?? 'subject') === 'mdk');
-        $html .= '<tr>'
-            . '<td>' . ($index + 1) . '</td>'
-            . '<td>' . e($item['subject_name']);
+        $itemType = (string) ($item['item_type'] ?? 'subject');
+        $isMdk = ($itemType === 'mdk');
+        $isComposite = ($itemType === 'composite');
+        $children = get_curriculum_item_children($id, $listSemester);
+        $showPartsUi = $children !== []
+            || $managePartsItemId === $id
+            || curriculum_item_has_children($id);
+        $teacherName = trim((string) ($item['teacher_name'] ?? ''));
+        if ($teacherName === '') {
+            $teacherName = '—';
+        }
 
+        $titleHtml = '<span class="curriculum-item__index">' . ($index + 1) . '.</span> '
+            . e($item['subject_name']);
         if ($isMdk) {
-            $html .= ' <span class="badge badge--role badge--semester-1">МДК</span>';
+            $titleHtml .= ' <span class="badge badge--role badge--semester-1">МДК</span>';
         }
-
+        if ($isComposite) {
+            $titleHtml .= ' <span class="badge badge--role badge--semester-2">БВС</span>';
+        }
+        if ($children !== []) {
+            $titleHtml .= ' <span class="badge badge--role">разделы: ' . count($children) . '</span>';
+        }
         if ($item['semester'] === 'both' && !$isMdk) {
-            $html .= ' ' . render_semester_badge('both');
+            $titleHtml .= ' ' . render_semester_badge('both');
         }
 
-        $html .= '</td><td>' . e($item['teacher_name'] ?? '—') . '</td><td class="table__actions">'
-            . render_curriculum_order_buttons($id, $listSemester, $index, $total);
-
+        $actions = render_curriculum_order_buttons($id, $listSemester, $index, $total);
         if ($isMdk) {
             require_once __DIR__ . '/curriculum_modules.php';
             $mdkModuleId = (int) ($item['module_id'] ?? 0);
@@ -716,7 +764,7 @@ function render_curriculum_semester_table(
             $mdkNumber = (int) ($mdkModule['number'] ?? 0);
             $mdkCode = $mdkNumber > 0 ? format_mdk_code($mdkNumber, $mdkIndex) : 'МДК';
             $mdkTitle = mdk_title_from_subject_name((string) $item['subject_name'], $mdkNumber, $mdkIndex);
-            $html .= '<button type="button" class="btn btn--ghost btn--sm"'
+            $actions .= '<button type="button" class="btn btn--ghost btn--sm"'
                 . ' data-curriculum-mdk-edit-open'
                 . ' data-item-id="' . $id . '"'
                 . ' data-module-id="' . $mdkModuleId . '"'
@@ -726,6 +774,7 @@ function render_curriculum_semester_table(
                 . ' data-start-abs="' . (int) ($item['start_abs_semester'] ?? 1) . '"'
                 . ' data-end-abs="' . (int) ($item['end_abs_semester'] ?? 1) . '"'
                 . ' data-teacher-id="' . (int) ($item['teacher_id'] ?? 0) . '"'
+                . ' data-has-parts="' . ($children !== [] ? '1' : '0') . '"'
                 . ' data-redirect-tab="subjects"'
                 . '>Редактировать</button>'
                 . '<a href="curriculum_ktp.php?item_id=' . $id . '&group_id=' . $groupId . '&year=' . $year
@@ -738,12 +787,13 @@ function render_curriculum_semester_table(
                 . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
                 . '</form>';
         } else {
-            $html .= '<button type="button" class="btn btn--ghost btn--sm"'
+            $actions .= '<button type="button" class="btn btn--ghost btn--sm"'
                 . ' data-curriculum-edit-open'
                 . ' data-item-id="' . $id . '"'
                 . ' data-subject-name="' . e($item['subject_name']) . '"'
                 . ' data-semester="' . e((string) $item['semester']) . '"'
                 . ' data-teacher-id="' . (int) ($item['teacher_id'] ?? 0) . '"'
+                . ' data-has-parts="' . ($children !== [] || $isComposite ? '1' : '0') . '"'
                 . '>Изменить</button>'
                 . '<a href="curriculum_ktp.php?item_id=' . $id . '&group_id=' . $groupId . '&year=' . $year
                 . '" class="btn btn--ghost btn--sm">КТП</a>'
@@ -755,10 +805,99 @@ function render_curriculum_semester_table(
                 . '</form>';
         }
 
-        $html .= '</td></tr>';
+        $html .= '<article class="curriculum-item">'
+            . '<div class="curriculum-item__title">' . $titleHtml . '</div>'
+            . '<div class="curriculum-item__teacher">' . e($teacherName) . '</div>'
+            . '<div class="curriculum-item__actions">' . $actions . '</div>';
+
+        foreach ($children as $part) {
+            $partId = (int) $part['id'];
+            $partSemester = (string) ($part['semester'] ?? 'both');
+            $partTeacher = trim((string) ($part['teacher_name'] ?? ''));
+            if ($partTeacher === '') {
+                $partTeacher = '—';
+            }
+            $html .= '<div class="curriculum-item curriculum-item--part">'
+                . '<div class="curriculum-item__title">'
+                . '↳ ' . e((string) $part['subject_name'])
+                . ' <span class="badge badge--role">раздел</span>'
+                . ' ' . render_semester_badge($partSemester)
+                . '</div>'
+                . '<div class="curriculum-item__teacher">' . e($partTeacher) . '</div>'
+                . '<div class="curriculum-item__actions">'
+                . '<button type="button" class="btn btn--ghost btn--sm"'
+                . ' data-curriculum-part-edit-open'
+                . ' data-item-id="' . $partId . '"'
+                . ' data-parent-item-id="' . $id . '"'
+                . ' data-subject-name="' . e((string) $part['subject_name']) . '"'
+                . ' data-teacher-id="' . (int) ($part['teacher_id'] ?? 0) . '"'
+                . ' data-semester="' . e($partSemester) . '"'
+                . '>Изменить</button>'
+                . '<a href="curriculum_ktp.php?item_id=' . $partId . '&group_id=' . $groupId . '&year=' . $year
+                . '" class="btn btn--ghost btn--sm">КТП</a>'
+                . '<form method="post" class="inline-form" onsubmit="return confirm(\'Убрать раздел из этого семестра?\');">'
+                . csrf_field()
+                . '<input type="hidden" name="action" value="delete_part">'
+                . '<input type="hidden" name="item_id" value="' . $partId . '">'
+                . '<input type="hidden" name="parent_item_id" value="' . $id . '">'
+                . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'
+                . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
+                . '</form>'
+                . '</div>'
+                . '</div>';
+        }
+
+        if ($showPartsUi) {
+            $panelOpen = $managePartsItemId === $id && $children === [];
+            $html .= '<div class="curriculum-part-add">'
+                . '<div class="curriculum-part-add__wrap" data-curriculum-part-add>'
+                . '<button type="button" class="curriculum-part-toggle"'
+                . ' data-curriculum-part-toggle'
+                . ' aria-expanded="' . ($panelOpen ? 'true' : 'false') . '"'
+                . ' title="' . ($panelOpen ? 'Скрыть форму' : 'Добавить раздел') . '">'
+                . '<span class="curriculum-part-toggle__icon" data-curriculum-part-toggle-icon>'
+                . ($panelOpen ? '−' : '+')
+                . '</span>'
+                . '<span class="curriculum-part-toggle__label">раздел</span>'
+                . '</button>'
+                . '<div class="curriculum-part-add__panel"'
+                . ($panelOpen ? '' : ' hidden')
+                . ' data-curriculum-part-panel>'
+                . '<form method="post" class="form curriculum-part-add__form">'
+                . csrf_field()
+                . '<input type="hidden" name="action" value="add_part">'
+                . '<input type="hidden" name="parent_item_id" value="' . $id . '">'
+                . '<div class="form__row form__row--4 curriculum-part-add__row">'
+                . '<div class="form__group">'
+                . '<label for="part_name_' . $id . '">Название раздела</label>'
+                . '<input type="text" id="part_name_' . $id . '" name="subject_name" required'
+                . ' placeholder="Например: Гимнастика"'
+                . ' list="subject_catalog">'
+                . '</div>'
+                . '<div class="form__group">'
+                . '<label for="part_semester_' . $id . '">Семестр</label>'
+                . '<select id="part_semester_' . $id . '" name="semester">'
+                . render_semester_options($listSemester)
+                . '</select>'
+                . '</div>'
+                . '<div class="form__group">'
+                . '<label for="part_teacher_' . $id . '">Преподаватель</label>'
+                . '<select id="part_teacher_' . $id . '" name="teacher_id">' . $teacherOptions . '</select>'
+                . '</div>'
+                . '<div class="form__group form__group--align-end">'
+                . '<button type="submit" class="btn btn--primary btn--sm">Добавить</button>'
+                . '</div>'
+                . '</div>'
+                . '</form>'
+                . '</div>'
+                . '</div>'
+                . '</div>';
+        }
+
+        $html .= '</article>';
     }
 
-    return $html . '</tbody></table></div>';
+    return $html . '</div>';
 }
 
 function render_curriculum_order_buttons(

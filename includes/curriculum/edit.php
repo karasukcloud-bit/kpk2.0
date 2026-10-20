@@ -7,6 +7,7 @@ $curriculumPanel = $curriculumPanel ?? 'admin';
 require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../curriculum.php';
 require_once __DIR__ . '/../curriculum_modules.php';
+require_once __DIR__ . '/../curriculum_composites.php';
 require_once __DIR__ . '/../teachers.php';
 require_once __DIR__ . '/../ktp.php';
 
@@ -36,11 +37,21 @@ $error = null;
 $openEditModal = false;
 $openModuleModal = false;
 $openMdkModal = false;
+$openPartEditModal = false;
+$managePartsItemId = isset($_GET['manage_parts']) ? (int) $_GET['manage_parts'] : 0;
 $editFormData = [
     'item_id' => 0,
     'subject_name' => '',
     'semester' => '1',
     'teacher_id' => 0,
+    'has_parts' => false,
+];
+$partFormData = [
+    'item_id' => 0,
+    'parent_item_id' => 0,
+    'subject_name' => '',
+    'teacher_id' => 0,
+    'semester' => '1',
 ];
 $moduleFormData = [
     'module_id' => 0,
@@ -56,6 +67,7 @@ $mdkFormData = [
     'end_abs_semester' => 1,
     'teacher_id' => 0,
     'code' => '',
+    'has_parts' => false,
 ];
 $openPracticeModal = false;
 $practiceFormData = [
@@ -78,6 +90,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     } else {
         $action = $_POST['action'] ?? '';
         $tabAfter = 'subjects';
+        $redirectManageParts = 0;
 
         if ($action === 'add_item') {
             $result = add_curriculum_item(
@@ -86,13 +99,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $_POST['semester'] ?? '',
                 (int) ($_POST['teacher_id'] ?? 0) ?: null
             );
+            if ($result['success'] && !empty($_POST['has_parts'])) {
+                $redirectManageParts = (int) ($result['id'] ?? 0);
+            }
         } elseif ($action === 'update_item') {
+            $itemId = (int) ($_POST['item_id'] ?? 0);
             $result = update_curriculum_item(
-                (int) ($_POST['item_id'] ?? 0),
+                $itemId,
                 $_POST['subject_name'] ?? '',
                 $_POST['semester'] ?? '',
                 (int) ($_POST['teacher_id'] ?? 0) ?: null
             );
+            if ($result['success'] && !empty($_POST['has_parts'])) {
+                $redirectManageParts = $itemId;
+            }
         } elseif ($action === 'delete_item') {
             $result = delete_curriculum_item((int) ($_POST['item_id'] ?? 0));
         } elseif ($action === 'move_item') {
@@ -145,17 +165,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             );
         } elseif ($action === 'update_mdk') {
             $tabAfter = (($_POST['redirect_tab'] ?? '') === 'subjects') ? 'subjects' : 'modules';
+            $mdkItemId = (int) ($_POST['item_id'] ?? 0);
             $result = update_curriculum_mdk(
-                (int) ($_POST['item_id'] ?? 0),
+                $mdkItemId,
                 (string) ($_POST['component_title'] ?? ''),
                 (int) ($_POST['start_abs_semester'] ?? 0),
                 (int) ($_POST['end_abs_semester'] ?? 0),
                 (int) ($_POST['teacher_id'] ?? 0) ?: null
             );
+            if ($result['success'] && !empty($_POST['has_parts'])) {
+                $redirectManageParts = $mdkItemId;
+                $tabAfter = 'subjects';
+            }
             if (!$result['success']) {
                 $openMdkModal = true;
                 $mdkFormData = [
-                    'item_id' => (int) ($_POST['item_id'] ?? 0),
+                    'item_id' => $mdkItemId,
                     'module_id' => (int) ($_POST['module_id'] ?? 0),
                     'component_index' => (int) ($_POST['component_index'] ?? 1),
                     'component_title' => (string) ($_POST['component_title'] ?? ''),
@@ -163,6 +188,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                     'end_abs_semester' => (int) ($_POST['end_abs_semester'] ?? 1),
                     'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
                     'code' => (string) ($_POST['mdk_code'] ?? ''),
+                    'has_parts' => !empty($_POST['has_parts']),
                 ];
             }
         } elseif ($action === 'update_practice') {
@@ -190,6 +216,46 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'delete_module_component') {
             $tabAfter = (($_POST['redirect_tab'] ?? '') === 'subjects') ? 'subjects' : 'modules';
             $result = delete_curriculum_module_component((int) ($_POST['item_id'] ?? 0));
+        } elseif ($action === 'add_part') {
+            $parentPartId = (int) ($_POST['parent_item_id'] ?? 0);
+            $result = add_curriculum_item_part(
+                $parentPartId,
+                $_POST['subject_name'] ?? '',
+                (int) ($_POST['teacher_id'] ?? 0) ?: null,
+                (string) ($_POST['semester'] ?? '1')
+            );
+            if ($result['success']) {
+                $redirectManageParts = $parentPartId;
+            }
+        } elseif ($action === 'update_part') {
+            $parentPartId = (int) ($_POST['parent_item_id'] ?? 0);
+            $result = update_curriculum_item_part(
+                (int) ($_POST['item_id'] ?? 0),
+                $_POST['subject_name'] ?? '',
+                (int) ($_POST['teacher_id'] ?? 0) ?: null,
+                (string) ($_POST['semester'] ?? '')
+            );
+            if ($result['success']) {
+                $redirectManageParts = $parentPartId;
+            } else {
+                $openPartEditModal = true;
+                $partFormData = [
+                    'item_id' => (int) ($_POST['item_id'] ?? 0),
+                    'parent_item_id' => $parentPartId,
+                    'subject_name' => (string) ($_POST['subject_name'] ?? ''),
+                    'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+                    'semester' => (string) ($_POST['semester'] ?? '1'),
+                ];
+            }
+        } elseif ($action === 'delete_part') {
+            $parentPartId = (int) ($_POST['parent_item_id'] ?? 0);
+            $result = delete_curriculum_item_part(
+                (int) ($_POST['item_id'] ?? 0),
+                (string) ($_POST['list_semester'] ?? '')
+            );
+            if ($result['success'] && $parentPartId > 0) {
+                $redirectManageParts = $parentPartId;
+            }
         } elseif ($action === 'set_program_semesters') {
             $tabAfter = 'modules';
             $result = set_group_program_semesters($groupId, (int) ($_POST['program_semesters'] ?? 0));
@@ -200,6 +266,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         if ($result['success']) {
             $messages = [
                 'add_item' => 'Предмет добавлен в учебный план.',
+                'add_part' => 'Раздел добавлен.',
+                'update_part' => 'Раздел обновлён.',
+                'delete_part' => !empty($result['kept_semester'])
+                    ? ('Раздел убран из этого семестра, остался в '
+                        . semester_label((string) $result['kept_semester']) . '.')
+                    : 'Раздел удалён.',
                 'update_item' => 'Предмет обновлён.',
                 'delete_item' => 'Предмет удалён из учебного плана.',
                 'move_item' => 'Порядок предметов обновлён.',
@@ -214,7 +286,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'set_program_semesters' => 'Срок обучения группы обновлён.',
             ];
             flash_set('success', $messages[$action] ?? 'Изменения сохранены.');
-            header('Location: ' . $redirectBase . '&tab=' . $tabAfter);
+            $location = $redirectBase . '&tab=' . $tabAfter;
+            if ($redirectManageParts > 0 && $tabAfter === 'subjects') {
+                $location .= '&manage_parts=' . $redirectManageParts;
+            }
+            header('Location: ' . $location);
             exit;
         }
 
@@ -236,6 +312,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'subject_name' => (string) ($_POST['subject_name'] ?? ''),
                 'semester' => (string) ($_POST['semester'] ?? '1'),
                 'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+                'has_parts' => !empty($_POST['has_parts']),
             ];
         }
     }
@@ -359,7 +436,9 @@ require __DIR__ . '/../header.php';
         <h2>Предметы на учебный год <?= e($academicYear) ?></h2>
         <p class="text-muted">
             Обычные дисциплины и МДК текущего курса группы.
-            Практики остаются во вкладке
+            Разделы добавляются у предмета в списке (+ раздел);
+            в ведомости остаётся одна колонка родителя.
+            Практики — во вкладке
             <a href="<?= e($redirectBase) ?>&tab=modules">Профессиональные модули</a>
             <?php if ($modulePracticeCount > 0): ?>
                 (<?= (int) $modulePracticeCount ?>)
@@ -382,11 +461,11 @@ require __DIR__ . '/../header.php';
             <div class="semester-columns">
                 <div class="semester-column">
                     <h3>1 семестр</h3>
-                    <?= render_curriculum_semester_table($semester1Items, $groupId, $academicYear, '1') ?>
+                    <?= render_curriculum_semester_table($semester1Items, $groupId, $academicYear, '1', $managePartsItemId) ?>
                 </div>
                 <div class="semester-column">
                     <h3>2 семестр</h3>
-                    <?= render_curriculum_semester_table($semester2Items, $groupId, $academicYear, '2') ?>
+                    <?= render_curriculum_semester_table($semester2Items, $groupId, $academicYear, '2', $managePartsItemId) ?>
                 </div>
             </div>
         <?php endif; ?>
@@ -440,6 +519,15 @@ require __DIR__ . '/../header.php';
                     </option>
                     <?php endforeach; ?>
                 </select>
+            </div>
+
+            <div class="form__group form__group--checkbox">
+                <label class="checkbox-label">
+                    <input type="checkbox" name="has_parts" value="1"
+                        <?= (!$openEditModal && ($_POST['action'] ?? '') === 'add_item' && !empty($_POST['has_parts'])) ? ' checked' : '' ?>>
+                    В предмет входят внутренние разделы
+                </label>
+                <p class="text-muted form-hint">После добавления откроется форма для разделов (отдельные журналы, одна колонка в ведомости).</p>
             </div>
 
             <div class="form__actions">
@@ -543,6 +631,7 @@ require __DIR__ . '/../header.php';
                                                 $moduleNumber,
                                                 (int) $child['component_index']
                                             );
+                                            $mdkHasParts = curriculum_item_has_children((int) $child['id']);
                                             ?>
                                             <li class="pm-tree__item">
                                                 <div class="pm-tree__item-main">
@@ -566,6 +655,7 @@ require __DIR__ . '/../header.php';
                                                         data-start-abs="<?= (int) $child['start_abs_semester'] ?>"
                                                         data-end-abs="<?= (int) $child['end_abs_semester'] ?>"
                                                         data-teacher-id="<?= (int) ($child['teacher_id'] ?? 0) ?>"
+                                                        data-has-parts="<?= $mdkHasParts ? '1' : '0' ?>"
                                                     >Редактировать</button>
                                                     <form method="post" class="inline-form" onsubmit="return confirm('Удалить МДК?');">
                                                         <?= csrf_field() ?>
@@ -854,6 +944,20 @@ require __DIR__ . '/../header.php';
                 </select>
             </div>
 
+            <div class="form__group form__group--checkbox" data-curriculum-mdk-parts-field>
+                <label class="checkbox-label">
+                    <input
+                        type="checkbox"
+                        name="has_parts"
+                        value="1"
+                        data-curriculum-mdk-has-parts
+                        <?= !empty($mdkFormData['has_parts']) ? ' checked' : '' ?>
+                    >
+                    В МДК входят внутренние разделы
+                </label>
+                <p class="text-muted form-hint">После сохранения на вкладке «Предметы» откроется форма разделов.</p>
+            </div>
+
             <div class="form__actions">
                 <button type="submit" class="btn btn--primary">Сохранить</button>
                 <button type="button" class="btn btn--ghost" data-curriculum-mdk-close>Отмена</button>
@@ -1068,6 +1172,20 @@ require __DIR__ . '/../header.php';
                 </select>
             </div>
 
+            <div class="form__group form__group--checkbox">
+                <label class="checkbox-label">
+                    <input
+                        type="checkbox"
+                        name="has_parts"
+                        value="1"
+                        data-curriculum-edit-has-parts
+                        <?= !empty($editFormData['has_parts']) ? ' checked' : '' ?>
+                    >
+                    В предмет входят внутренние разделы
+                </label>
+                <p class="text-muted form-hint">После сохранения откроется форма добавления разделов.</p>
+            </div>
+
             <div class="form__actions">
                 <button type="submit" class="btn btn--primary">Сохранить</button>
                 <button type="button" class="btn btn--ghost" data-curriculum-edit-close>Отмена</button>
@@ -1076,7 +1194,80 @@ require __DIR__ . '/../header.php';
     </div>
 </div>
 
-<?php if ($openEditModal || $openModuleModal || $openMdkModal || $openPracticeModal): ?>
+<div
+    class="modal"
+    data-curriculum-part-edit-modal
+    <?= $openPartEditModal ? '' : 'hidden' ?>
+>
+    <div class="modal__backdrop" data-curriculum-part-edit-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="curriculum-part-edit-title">
+        <div class="modal__header">
+            <h2 id="curriculum-part-edit-title">Редактировать раздел</h2>
+            <button type="button" class="modal__close" data-curriculum-part-edit-close aria-label="Закрыть">&times;</button>
+        </div>
+        <form method="post" class="form" data-curriculum-part-edit-form>
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="update_part">
+            <input type="hidden" name="item_id" value="<?= (int) $partFormData['item_id'] ?>" data-curriculum-part-edit-id>
+            <input type="hidden" name="parent_item_id" value="<?= (int) $partFormData['parent_item_id'] ?>" data-curriculum-part-edit-parent>
+
+            <div class="form__group">
+                <label for="edit_part_subject_name">Название раздела</label>
+                <input
+                    type="text"
+                    id="edit_part_subject_name"
+                    name="subject_name"
+                    required
+                    list="subject_catalog_part_edit"
+                    value="<?= e($partFormData['subject_name']) ?>"
+                    data-curriculum-part-edit-subject
+                >
+                <datalist id="subject_catalog_part_edit">
+                    <?php foreach ($subjectNames as $name): ?>
+                    <option value="<?= e($name) ?>">
+                    <?php endforeach; ?>
+                </datalist>
+            </div>
+
+            <div class="form__group">
+                <label for="edit_part_semester">Семестр раздела</label>
+                <select id="edit_part_semester" name="semester" data-curriculum-part-edit-semester>
+                    <?= render_semester_options((string) ($partFormData['semester'] ?? '1')) ?>
+                </select>
+                <p class="form__hint">Раздел учитывается только в выбранном семестре (или в обоих).</p>
+            </div>
+
+            <div class="form__group">
+                <label for="edit_part_teacher_id">Преподаватель</label>
+                <select id="edit_part_teacher_id" name="teacher_id" data-curriculum-part-edit-teacher>
+                    <option value="">— Не назначен —</option>
+                    <?php foreach ($teachers as $teacher): ?>
+                        <?php
+                        if (!(int) $teacher['is_active']
+                            && (int) $teacher['id'] !== (int) $partFormData['teacher_id']
+                        ) {
+                            continue;
+                        }
+                        ?>
+                    <option
+                        value="<?= (int) $teacher['id'] ?>"
+                        <?= (int) $teacher['id'] === (int) $partFormData['teacher_id'] ? ' selected' : '' ?>
+                    >
+                        <?= e($teacher['full_name']) ?>
+                    </option>
+                    <?php endforeach; ?>
+                </select>
+            </div>
+
+            <div class="form__actions">
+                <button type="submit" class="btn btn--primary">Сохранить</button>
+                <button type="button" class="btn btn--ghost" data-curriculum-part-edit-close>Отмена</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<?php if ($openEditModal || $openModuleModal || $openMdkModal || $openPracticeModal || $openPartEditModal): ?>
 <script>document.body.classList.add('modal-open');</script>
 <?php endif; ?>
 

@@ -2695,6 +2695,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const subjectInput = curriculumEditModal.querySelector('[data-curriculum-edit-subject]');
         const semesterSelect = curriculumEditModal.querySelector('[data-curriculum-edit-semester]');
         const teacherSelect = curriculumEditModal.querySelector('[data-curriculum-edit-teacher]');
+        const hasPartsInput = curriculumEditModal.querySelector('[data-curriculum-edit-has-parts]');
 
         const openCurriculumEdit = (button) => {
             if (idInput) {
@@ -2709,6 +2710,9 @@ document.addEventListener('DOMContentLoaded', () => {
             if (teacherSelect) {
                 const teacherId = button.dataset.teacherId || '';
                 teacherSelect.value = teacherId === '0' ? '' : teacherId;
+            }
+            if (hasPartsInput) {
+                hasPartsInput.checked = button.dataset.hasParts === '1';
             }
             curriculumEditModal.hidden = false;
             document.body.classList.add('modal-open');
@@ -2733,6 +2737,84 @@ document.addEventListener('DOMContentLoaded', () => {
         document.addEventListener('keydown', (event) => {
             if (event.key === 'Escape' && !curriculumEditModal.hidden) {
                 closeCurriculumEdit();
+            }
+        });
+    }
+
+    document.querySelectorAll('[data-curriculum-part-add]').forEach((wrap) => {
+        const toggle = wrap.querySelector('[data-curriculum-part-toggle]');
+        const panel = wrap.querySelector('[data-curriculum-part-panel]');
+        const icon = wrap.querySelector('[data-curriculum-part-toggle-icon]');
+        if (!toggle || !panel) {
+            return;
+        }
+
+        toggle.addEventListener('click', () => {
+            const open = toggle.getAttribute('aria-expanded') === 'true';
+            const nextOpen = !open;
+            toggle.setAttribute('aria-expanded', nextOpen ? 'true' : 'false');
+            toggle.title = nextOpen ? 'Скрыть форму' : 'Добавить раздел';
+            panel.hidden = !nextOpen;
+            if (icon) {
+                icon.textContent = nextOpen ? '−' : '+';
+            }
+            if (nextOpen) {
+                const input = panel.querySelector('input[name="subject_name"]');
+                if (input) {
+                    input.focus();
+                }
+            }
+        });
+    });
+
+    const curriculumPartEditModal = document.querySelector('[data-curriculum-part-edit-modal]');
+    if (curriculumPartEditModal) {
+        const partIdInput = curriculumPartEditModal.querySelector('[data-curriculum-part-edit-id]');
+        const partParentInput = curriculumPartEditModal.querySelector('[data-curriculum-part-edit-parent]');
+        const partSubjectInput = curriculumPartEditModal.querySelector('[data-curriculum-part-edit-subject]');
+        const partTeacherSelect = curriculumPartEditModal.querySelector('[data-curriculum-part-edit-teacher]');
+        const partSemesterSelect = curriculumPartEditModal.querySelector('[data-curriculum-part-edit-semester]');
+
+        const openCurriculumPartEdit = (button) => {
+            if (partIdInput) {
+                partIdInput.value = button.dataset.itemId || '';
+            }
+            if (partParentInput) {
+                partParentInput.value = button.dataset.parentItemId || '';
+            }
+            if (partSubjectInput) {
+                partSubjectInput.value = button.dataset.subjectName || '';
+            }
+            if (partTeacherSelect) {
+                const teacherId = button.dataset.teacherId || '';
+                partTeacherSelect.value = teacherId === '0' ? '' : teacherId;
+            }
+            if (partSemesterSelect) {
+                partSemesterSelect.value = button.dataset.semester || '1';
+            }
+            curriculumPartEditModal.hidden = false;
+            document.body.classList.add('modal-open');
+            if (partSubjectInput) {
+                partSubjectInput.focus();
+            }
+        };
+
+        const closeCurriculumPartEdit = () => {
+            curriculumPartEditModal.hidden = true;
+            document.body.classList.remove('modal-open');
+        };
+
+        document.querySelectorAll('[data-curriculum-part-edit-open]').forEach((button) => {
+            button.addEventListener('click', () => openCurriculumPartEdit(button));
+        });
+
+        curriculumPartEditModal.querySelectorAll('[data-curriculum-part-edit-close]').forEach((node) => {
+            node.addEventListener('click', closeCurriculumPartEdit);
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !curriculumPartEditModal.hidden) {
+                closeCurriculumPartEdit();
             }
         });
     }
@@ -2829,6 +2911,8 @@ document.addEventListener('DOMContentLoaded', () => {
         const mdkEndSelect = curriculumMdkModal.querySelector('[data-curriculum-mdk-end]');
         const mdkTeacherSelect = curriculumMdkModal.querySelector('[data-curriculum-mdk-teacher]');
         const mdkRedirectInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-redirect]');
+        const mdkHasPartsInput = curriculumMdkModal.querySelector('[data-curriculum-mdk-has-parts]');
+        const mdkPartsField = curriculumMdkModal.querySelector('[data-curriculum-mdk-parts-field]');
 
         const openCurriculumMdk = (button) => {
             if (mdkIdInput) {
@@ -2862,6 +2946,12 @@ document.addEventListener('DOMContentLoaded', () => {
             }
             if (mdkRedirectInput) {
                 mdkRedirectInput.value = button.getAttribute('data-redirect-tab') || 'modules';
+            }
+            if (mdkHasPartsInput) {
+                mdkHasPartsInput.checked = button.getAttribute('data-has-parts') === '1';
+            }
+            if (mdkPartsField) {
+                mdkPartsField.hidden = false;
             }
             curriculumMdkModal.removeAttribute('hidden');
             document.body.classList.add('modal-open');

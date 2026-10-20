@@ -226,24 +226,30 @@ function get_teacher_assigned_subjects(int $teacherId, ?string $academicYear = n
     $academicYear = normalize_academic_year($academicYear ?? get_default_academic_year())
         ?? get_default_academic_year();
 
-    $stmt = db()->prepare(
-        'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id,
+    $parentCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'parent_item_id'")->fetch();
+    $sql = 'SELECT ci.id AS curriculum_item_id, ci.semester, ci.teacher_id, ci.item_type,
                 sub.name AS subject_name,
                 g.id AS group_id, g.number AS group_number,
                 sp.name AS specialty_name,
                 cp.academic_year,
-                (SELECT COUNT(*) FROM ktp_topics kt WHERE kt.curriculum_item_id = ci.id) AS ktp_count
-         FROM curriculum_items ci
+                (SELECT COUNT(*) FROM ktp_topics kt WHERE kt.curriculum_item_id = ci.id) AS ktp_count';
+    if ($parentCol) {
+        $sql .= ', ci.parent_item_id,
+            (SELECT COUNT(*) FROM curriculum_items ch WHERE ch.parent_item_id = ci.id) AS children_count';
+    }
+    $sql .= ' FROM curriculum_items ci
          INNER JOIN subjects sub ON sub.id = ci.subject_id
          INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
          INNER JOIN study_groups g ON g.id = cp.group_id
          INNER JOIN specialties sp ON sp.id = g.specialty_id
          WHERE ci.teacher_id = ? AND cp.academic_year = ?
-         ORDER BY g.number ASC, sub.name ASC, ci.semester ASC'
-    );
+         ORDER BY g.number ASC, sub.name ASC, ci.semester ASC';
+    $stmt = db()->prepare($sql);
     $stmt->execute([$teacherId, $academicYear]);
+    $rows = $stmt->fetchAll();
+    require_once __DIR__ . '/curriculum_composites.php';
 
-    return $stmt->fetchAll();
+    return annotate_curriculum_items_for_teacher($rows);
 }
 
 function can_manage_item_ktp(int $curriculumItemId): bool

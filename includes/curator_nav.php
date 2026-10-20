@@ -45,7 +45,7 @@ $curatorTabIcon = static function (string $name): string {
     <a href="manual_brs_gradebook.php<?= $groupQuery ?>"
        class="admin-tabs__item<?= $currentCuratorTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
         <?= $curatorTabIcon('grades') ?>
-        Ведомость (ручное БРС)
+        Ведомость Ручное БРС
     </a>
     <?php endif; ?>
     <a href="report.php<?= $groupQuery ?>"

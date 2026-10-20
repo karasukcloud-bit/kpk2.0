@@ -53,7 +53,14 @@ require __DIR__ . '/../includes/header.php';
                         <?php foreach ($assignedSubjects as $subject): ?>
                         <tr>
                             <td><?= e($subject['group_number']) ?></td>
-                            <td><?= e($subject['subject_name']) ?></td>
+                            <td>
+                                <?= e($subject['subject_name']) ?>
+                                <?php if (($subject['journal_mode'] ?? '') === 'attestation_only'): ?>
+                                    <span class="badge badge--role badge--semester-2">только ПА</span>
+                                <?php elseif ((int) ($subject['parent_item_id'] ?? 0) > 0): ?>
+                                    <span class="badge badge--role">раздел</span>
+                                <?php endif; ?>
+                            </td>
                             <td><?= e(semester_label($subject['semester'])) ?></td>
                             <td><?= (int) $subject['ktp_count'] ?></td>
                             <td class="table__actions">

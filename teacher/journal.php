@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/journal.php';
+require_once __DIR__ . '/../includes/curriculum_composites.php';
 
 require_teacher_panel();
 
@@ -17,6 +18,7 @@ $groups = get_journal_groups($year, $semester);
 
 $groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
 $itemId = isset($_GET['item_id']) ? (int) $_GET['item_id'] : 0;
+$parentId = isset($_GET['parent_id']) ? (int) $_GET['parent_id'] : 0;
 $tabParam = (string) ($_GET['tab'] ?? 'journal');
 if ($tabParam === 'material') {
     $activeTab = 'material';
@@ -39,6 +41,26 @@ if ($groupId > 0 && $selectedGroup === null) {
     $error = 'Группа не найдена или недоступна.';
     $groupId = 0;
     $itemId = 0;
+    $parentId = 0;
+}
+
+$subjectTree = $selectedGroup !== null
+    ? group_journal_subjects_tree($selectedGroup['subjects'])
+    : [];
+$selectedParent = null;
+if ($selectedGroup !== null && $parentId > 0 && $itemId === 0) {
+    foreach ($subjectTree as $node) {
+        if ((int) ($node['curriculum_item_id'] ?? 0) === $parentId
+            && ($node['children'] ?? []) !== []
+        ) {
+            $selectedParent = $node;
+            break;
+        }
+    }
+    if ($selectedParent === null) {
+        $error = 'Дисциплина с разделами не найдена.';
+        $parentId = 0;
+    }
 }
 
 $assignment = null;
@@ -85,8 +107,16 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
     } else {
         $action = $_POST['action'] ?? '';
+        $postJournalMode = (string) ($assignment['journal_mode'] ?? 'full');
 
-        if ($action === 'add_lesson') {
+        if ($postJournalMode === 'attestation_only'
+            && in_array($action, ['add_lesson', 'update_lesson', 'delete_lesson'], true)
+        ) {
+            $result = [
+                'success' => false,
+                'error' => 'У дисциплины с разделами даты занятий не добавляются. Выставляется только ПА.',
+            ];
+        } elseif ($action === 'add_lesson') {
             $result = add_journal_lesson(
                 $itemId,
                 (string) ($_POST['lesson_date'] ?? ''),
@@ -146,6 +176,23 @@ $defaultTopicId = $assignment ? get_next_ktp_topic_id($itemId, $lessons) : null;
 $coveredSummary = $assignment ? build_covered_material_summary($lessons) : null;
 $gradingConfig = get_grading_config();
 $isBrs = $gradingConfig['system'] === 'brs';
+$journalMode = (string) ($assignment['journal_mode'] ?? 'full');
+$isAttestationOnly = $journalMode === 'attestation_only';
+$isJournalPart = (int) ($assignment['parent_item_id'] ?? 0) > 0;
+$compositeJournal = null;
+$paLesson = null;
+if ($isAttestationOnly && $assignment !== null) {
+    $activeTab = 'journal';
+    $paLesson = ensure_composite_parent_pa_lesson($itemId);
+    $lessons = $paLesson !== null ? [$paLesson] : [];
+    $grades = get_journal_grades($itemId);
+    $compositeJournal = build_composite_parent_journal_rows(
+        $itemId,
+        $students,
+        $paLesson,
+        $semester
+    );
+}
 $success = flash_get('success');
 $focusLessonId = isset($_GET['focus_lesson']) ? (int) $_GET['focus_lesson'] : 0;
 
@@ -190,10 +237,19 @@ require __DIR__ . '/../includes/header.php';
                 <div class="panel__header panel__header--compact">
                     <h2><?= e($assignment['subject_name']) ?></h2>
                     <div class="journal-back-actions">
+                        <?php
+                        $backParentId = (int) ($assignment['parent_item_id'] ?? 0);
+                        if ($backParentId <= 0 && $isAttestationOnly) {
+                            $backParentId = $itemId;
+                        }
+                        $backSubjectsUrl = $backParentId > 0
+                            ? $journalUrl(['group_id' => $groupId, 'parent_id' => $backParentId])
+                            : $journalUrl(['group_id' => $groupId]);
+                        ?>
                         <a
-                            href="<?= e($journalUrl(['group_id' => $groupId])) ?>"
+                            href="<?= e($backSubjectsUrl) ?>"
                             class="btn btn--ghost btn--sm"
-                        >← К предметам</a>
+                        >← <?= $backParentId > 0 && !$isAttestationOnly ? 'К разделам' : 'К предметам' ?></a>
                         <a href="<?= e($journalUrl()) ?>" class="btn btn--ghost btn--sm">← К группам</a>
                     </div>
                 </div>
@@ -202,14 +258,38 @@ require __DIR__ . '/../includes/header.php';
                     <div class="journal-meta__main">
                         <span class="journal-meta__group"><?= e($assignment['group_number']) ?></span>
                         <span class="journal-meta__subject"><?= e($assignment['subject_name']) ?></span>
+                        <?php if ($isAttestationOnly): ?>
+                            <span class="badge badge--role badge--semester-2">только ПА</span>
+                        <?php elseif ($isJournalPart && !empty($assignment['parent_subject_name'])): ?>
+                            <span class="badge badge--role">раздел: <?= e((string) $assignment['parent_subject_name']) ?></span>
+                        <?php endif; ?>
                     </div>
                     <div class="journal-meta__side">
                         <span><?= e(semester_label($assignment['semester'])) ?></span>
                         <span><?= count($students) ?> студ.</span>
-                        <span><?= count($lessons) ?> зан.</span>
+                        <?php if ($isAttestationOnly): ?>
+                            <span><?= count($compositeJournal['children'] ?? []) ?> разд.</span>
+                        <?php else: ?>
+                            <span><?= count($lessons) ?> зан.</span>
+                        <?php endif; ?>
                     </div>
                 </div>
+                <?php if ($isAttestationOnly): ?>
+                    <p class="text-muted">
+                        Итог = оценки внутренних разделов
+                        (любая 2 → 2, иначе среднее) и ПА по этой дисциплине.
+                        Текущие занятия ведутся только в журналах разделов.
+                    </p>
+                <?php elseif ($isJournalPart): ?>
+                    <p class="text-muted">
+                        Раздел составной дисциплины. ПА выставляется в журнале родителя
+                        <?php if (!empty($assignment['parent_subject_name'])): ?>
+                            «<?= e((string) $assignment['parent_subject_name']) ?>»
+                        <?php endif; ?>.
+                    </p>
+                <?php endif; ?>
 
+                <?php if (!$isAttestationOnly): ?>
                 <nav class="journal-subtabs">
                     <a
                         href="<?= e($journalUrl(['group_id' => $groupId, 'item_id' => $itemId, 'tab' => 'journal'])) ?>"
@@ -224,8 +304,111 @@ require __DIR__ . '/../includes/header.php';
                         class="journal-subtabs__item<?= $activeTab === 'ktp' ? ' journal-subtabs__item--active' : '' ?>"
                     >КТП</a>
                 </nav>
+                <?php endif; ?>
 
-                <?php if ($activeTab === 'ktp'): ?>
+                <?php if ($isAttestationOnly && $compositeJournal !== null): ?>
+                    <?php if ($students === []): ?>
+                        <p class="text-muted">В группе пока нет студентов.</p>
+                    <?php elseif ($paLesson === null): ?>
+                        <p class="alert alert--error">Не удалось подготовить столбец ПА. Обновите страницу.</p>
+                    <?php else: ?>
+                        <div
+                            class="journal-form"
+                            data-journal
+                            data-grading-system="composite"
+                            data-save-url="grade_save.php"
+                            data-csrf="<?= e(csrf_token()) ?>"
+                        >
+                            <div class="table-wrap journal-table-wrap">
+                                <table class="table journal-table journal-table--composite">
+                                    <thead>
+                                        <tr>
+                                            <th class="journal-table__student-col">Студенты</th>
+                                            <?php foreach ($compositeJournal['children'] as $child): ?>
+                                            <th class="journal-table__lesson-col">
+                                                <span class="journal-lesson-topic" title="<?= e((string) $child['subject_name']) ?>">
+                                                    <?= e((string) $child['subject_name']) ?>
+                                                </span>
+                                                <?php if (!empty($child['teacher_name'])): ?>
+                                                <span class="text-muted" style="display:block;font-size:0.75rem">
+                                                    <?= e((string) $child['teacher_name']) ?>
+                                                </span>
+                                                <?php endif; ?>
+                                            </th>
+                                            <?php endforeach; ?>
+                                            <th class="journal-table__total-col">Разделы</th>
+                                            <th class="journal-table__lesson-col journal-table__lesson-col--attestation">ПА</th>
+                                            <th class="journal-table__total-col">Итог</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <?php foreach ($compositeJournal['rows'] as $rowIndex => $row): ?>
+                                        <?php $studentId = (int) $row['student_id']; ?>
+                                        <tr class="<?= $rowIndex % 2 === 1 ? 'journal-row--alt' : '' ?>">
+                                            <td class="journal-table__student-col">
+                                                <span class="journal-student-name"><?= e(person_last_first_name((string) $row['student']['full_name'])) ?></span>
+                                            </td>
+                                            <?php foreach ($row['parts'] as $part): ?>
+                                            <td class="journal-table__cell journal-table__cell--readonly">
+                                                <?= $part['grade'] !== null ? e((string) (int) $part['grade']) : '—' ?>
+                                            </td>
+                                            <?php endforeach; ?>
+                                            <td class="journal-table__total-col">
+                                                <?= $row['base_grade'] !== null ? e((string) (int) $row['base_grade']) : '—' ?>
+                                            </td>
+                                            <?php
+                                            $paLessonId = (int) $row['pa_lesson_id'];
+                                            $paMark = (string) $row['pa_mark'];
+                                            ?>
+                                            <td
+                                                class="journal-table__cell journal-table__cell--attestation"
+                                                data-journal-cell
+                                                data-student-id="<?= $studentId ?>"
+                                                data-lesson-id="<?= $paLessonId ?>"
+                                                data-mark="<?= e($paMark) ?>"
+                                                data-activity="0"
+                                                data-late="0"
+                                            >
+                                                <div class="journal-mark">
+                                                    <button
+                                                        type="button"
+                                                        class="journal-mark__trigger<?= $paMark !== '' ? ' journal-mark__trigger--set' : '' ?>"
+                                                        data-mark-trigger
+                                                        aria-haspopup="listbox"
+                                                        aria-expanded="false"
+                                                    ><?= e(render_journal_mark_label($paMark)) ?></button>
+                                                    <div class="journal-mark__menu" data-mark-menu hidden>
+                                                        <?php foreach (['', '5', '4', '3', '2'] as $option): ?>
+                                                        <button
+                                                            type="button"
+                                                            class="journal-mark__option<?= $option === $paMark ? ' journal-mark__option--active' : '' ?>"
+                                                            data-mark-option="<?= e($option) ?>"
+                                                        ><?= e(render_journal_mark_label($option)) ?></button>
+                                                        <?php endforeach; ?>
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td
+                                                class="journal-table__total-col"
+                                                data-journal-total="<?= $studentId ?>"
+                                            ><?php
+                                                $final = $row['final_grade'];
+                                                echo $final !== null
+                                                    ? '<span class="journal-total journal-total--grade-' . (int) $final . '">' . (int) $final . '</span>'
+                                                    : '<span class="text-muted">—</span>';
+                                            ?></td>
+                                        </tr>
+                                        <?php endforeach; ?>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <p class="journal-status text-muted" data-journal-status>
+                                ПА: 2 → итог 2; 3–5 → среднее с оценкой по разделам.
+                                Если ПА нет — в ведомость идёт оценка по разделам.
+                            </p>
+                        </div>
+                    <?php endif; ?>
+                <?php elseif ($activeTab === 'ktp'): ?>
                     <?php if ($ktpProgress === []): ?>
                         <p class="text-muted">
                             КТП по этому предмету пока не заполнен.
@@ -537,36 +720,97 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                 <?php endif; ?>
             </div>
+        <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
+            <div class="journal-step">
+                <div class="panel__header panel__header--compact">
+                    <h2><?= e($selectedParent['subject_name']) ?></h2>
+                    <a
+                        href="<?= e($journalUrl(['group_id' => $groupId])) ?>"
+                        class="btn btn--ghost btn--sm"
+                    >← К предметам</a>
+                </div>
+                <p class="text-muted">
+                    Группа <?= e($selectedGroup['group_number']) ?> · выберите раздел или ПА
+                </p>
+                <div class="journal-choice-grid">
+                    <?php if (empty($selectedParent['virtual_parent'])): ?>
+                    <a
+                        href="<?= e($journalUrl([
+                            'group_id' => $groupId,
+                            'item_id' => (int) $selectedParent['curriculum_item_id'],
+                        ])) ?>"
+                        class="journal-choice"
+                    >
+                        <?= render_journal_choice_icon('journal') ?>
+                        <strong>ПА / итог</strong>
+                        <span class="badge badge--role badge--semester-2">только ПА</span>
+                        <span class="text-muted"><?= e(semester_label((string) ($selectedParent['semester'] ?? 'both'))) ?></span>
+                        <span class="journal-choice__meta">Итог по разделам и промежуточная аттестация</span>
+                    </a>
+                    <?php endif; ?>
+                    <?php foreach ($selectedParent['children'] as $part): ?>
+                    <a
+                        href="<?= e($journalUrl([
+                            'group_id' => $groupId,
+                            'item_id' => (int) $part['curriculum_item_id'],
+                        ])) ?>"
+                        class="journal-choice"
+                    >
+                        <?= render_journal_choice_icon('journal') ?>
+                        <strong><?= e($part['subject_name']) ?></strong>
+                        <span class="badge badge--role">раздел</span>
+                        <span class="text-muted"><?= e(semester_label((string) ($part['semester'] ?? 'both'))) ?></span>
+                        <?php if (!empty($part['teacher_name'])): ?>
+                        <span class="journal-choice__meta">Преп.: <?= e($part['teacher_name']) ?></span>
+                        <?php else: ?>
+                        <span class="journal-choice__meta">Преподаватель не назначен</span>
+                        <?php endif; ?>
+                    </a>
+                    <?php endforeach; ?>
+                </div>
+            </div>
         <?php elseif ($selectedGroup !== null): ?>
             <div class="journal-step">
                 <div class="panel__header panel__header--compact">
                     <h2>Предметы группы <?= e($selectedGroup['group_number']) ?></h2>
                     <a href="<?= e($journalUrl()) ?>" class="btn btn--ghost btn--sm">← К группам</a>
                 </div>
-                <?php if ($selectedGroup['subjects'] === []): ?>
+                <?php if ($subjectTree === []): ?>
                     <p class="text-muted">
                         В текущем семестре для этой группы нет предметов.
                         Администратор или завуч должен заполнить учебный план.
                     </p>
                 <?php else: ?>
                     <div class="journal-choice-grid">
-                        <?php foreach ($selectedGroup['subjects'] as $subject): ?>
-                        <a
-                            href="<?= e($journalUrl([
-                                'group_id' => $groupId,
-                                'item_id' => (int) $subject['curriculum_item_id'],
-                            ])) ?>"
-                            class="journal-choice"
-                        >
-                            <?= render_journal_choice_icon('journal') ?>
-                            <strong><?= e($subject['subject_name']) ?></strong>
-                            <span class="text-muted"><?= e(semester_label($subject['semester'])) ?></span>
-                            <?php if (!empty($subject['teacher_name'])): ?>
-                            <span class="journal-choice__meta">Преп.: <?= e($subject['teacher_name']) ?></span>
-                            <?php else: ?>
-                            <span class="journal-choice__meta">Преподаватель не назначен</span>
-                            <?php endif; ?>
-                        </a>
+                        <?php foreach ($subjectTree as $subject): ?>
+                            <?php
+                            $children = $subject['children'] ?? [];
+                            $hasParts = $children !== [];
+                            $cardUrl = $hasParts
+                                ? $journalUrl([
+                                    'group_id' => $groupId,
+                                    'parent_id' => (int) $subject['curriculum_item_id'],
+                                ])
+                                : $journalUrl([
+                                    'group_id' => $groupId,
+                                    'item_id' => (int) $subject['curriculum_item_id'],
+                                ]);
+                            ?>
+                            <a href="<?= e($cardUrl) ?>" class="journal-choice">
+                                <?= render_journal_choice_icon('journal') ?>
+                                <strong><?= e($subject['subject_name']) ?></strong>
+                                <?php if ($hasParts): ?>
+                                    <span class="badge badge--role">разделы: <?= count($children) ?></span>
+                                <?php endif; ?>
+                                <span class="text-muted"><?= e(semester_label((string) ($subject['semester'] ?? 'both'))) ?></span>
+                                <?php if ($hasParts): ?>
+                                    <span class="journal-choice__meta">Открыть список разделов</span>
+                                <?php elseif (!empty($subject['teacher_name'])): ?>
+                                    <span class="journal-choice__meta">Преп.: <?= e($subject['teacher_name']) ?></span>
+                                <?php else: ?>
+                                    <span class="journal-choice__meta">Преподаватель не назначен</span>
+                                <?php endif; ?>
+                            </a>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>
@@ -583,7 +827,7 @@ require __DIR__ . '/../includes/header.php';
                         <?= render_journal_choice_icon('group') ?>
                         <strong><?= e($group['group_number']) ?></strong>
                         <span class="text-muted"><?= e($group['specialty_name']) ?></span>
-                        <span class="journal-choice__meta"><?= count($group['subjects']) ?> предм.</span>
+                        <span class="journal-choice__meta"><?= count(group_journal_subjects_tree($group['subjects'] ?? [])) ?> предм.</span>
                     </a>
                     <?php endforeach; ?>
                 </div>
@@ -592,7 +836,7 @@ require __DIR__ . '/../includes/header.php';
     </section>
 </div>
 
-<?php if ($assignment !== null && !empty($students)): ?>
+<?php if ($assignment !== null && !empty($students) && !$isAttestationOnly): ?>
 <div class="modal" data-lesson-modal hidden>
     <div class="modal__backdrop" data-lesson-modal-close></div>
     <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="lesson-modal-title">
@@ -658,9 +902,15 @@ require __DIR__ . '/../includes/header.php';
             <div class="form__group">
                 <label for="modal_grade_type">Тип оценки</label>
                 <select id="modal_grade_type" name="grade_type" data-lesson-grade-type>
-                    <option value="current">Текущая</option>
-                    <option value="control">Контрольная</option>
-                    <option value="attestation">Промежуточная аттестация</option>
+                    <?php if ($isAttestationOnly): ?>
+                        <option value="attestation" selected>Промежуточная аттестация</option>
+                    <?php else: ?>
+                        <option value="current">Текущая</option>
+                        <option value="control">Контрольная</option>
+                        <?php if (!$isJournalPart): ?>
+                            <option value="attestation">Промежуточная аттестация</option>
+                        <?php endif; ?>
+                    <?php endif; ?>
                 </select>
             </div>
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/journal.php';
+require_once __DIR__ . '/../includes/gradebook.php';
 
 require_teacher_panel();
 
@@ -39,9 +40,29 @@ if (!$result['success']) {
 $lesson = get_journal_lesson_by_id($lessonId);
 $itemId = (int) $lesson['curriculum_item_id'];
 $students = get_students_by_group((int) $lesson['group_id']);
-$lessons = get_journal_lessons($itemId);
-$grades = get_journal_grades($itemId);
-$totals = build_journal_totals($students, $lessons, $grades);
+require_once __DIR__ . '/../includes/curriculum_composites.php';
+
+$activeSemester = (string) (get_active_gradebook_period()['semester'] ?? '');
+$compositeSemester = in_array($activeSemester, ['1', '2'], true) ? $activeSemester : null;
+if (curriculum_item_has_children($itemId, $compositeSemester)) {
+    $totals = [];
+    foreach ($students as $student) {
+        $sid = (int) $student['id'];
+        $grade = resolve_composite_parent_grade_from_journal($itemId, $sid, $compositeSemester);
+        $html = $grade !== null
+            ? '<span class="journal-total journal-total--grade-' . $grade . '">' . $grade . '</span>'
+            : '<span class="text-muted">—</span>';
+        $totals[$sid] = [
+            'grade' => $grade,
+            'html' => $html,
+            'system' => 'composite',
+        ];
+    }
+} else {
+    $lessons = get_journal_lessons($itemId);
+    $grades = get_journal_grades($itemId);
+    $totals = build_journal_totals($students, $lessons, $grades);
+}
 
 echo json_encode([
     'success' => true,

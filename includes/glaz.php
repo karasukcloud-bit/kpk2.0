@@ -84,9 +84,47 @@ function get_all_academic_debts(): array
             (string) $row['academic_year'],
             (string) $row['semester']
         );
+        $itemId = (int) $row['curriculum_item_id'];
+        $causeDetail = '';
+        $suggestedCommissionIds = [];
+        require_once __DIR__ . '/curriculum_composites.php';
+        $debtSemester = (string) ($row['semester'] ?? '');
+        if (curriculum_item_has_children($itemId, $debtSemester !== '' ? $debtSemester : null)) {
+            $breakdown = get_composite_grade_breakdown(
+                $itemId,
+                $studentId,
+                $debtSemester !== '' ? $debtSemester : null
+            );
+            $causeLines = [];
+            foreach ($breakdown['cause_parts'] as $part) {
+                $line = (string) ($part['subject_name'] ?? 'Раздел');
+                $line .= ' (2)';
+                $teacherName = trim((string) ($part['teacher_name'] ?? ''));
+                if ($teacherName !== '') {
+                    $line .= ' — ' . $teacherName;
+                }
+                $causeLines[] = $line;
+                if (!empty($part['teacher_id'])) {
+                    $suggestedCommissionIds[] = (int) $part['teacher_id'];
+                }
+            }
+            if ($causeLines === []) {
+                foreach ($breakdown['parts'] as $part) {
+                    if (($part['grade'] ?? null) === null) {
+                        continue;
+                    }
+                    $causeLines[] = (string) ($part['subject_name'] ?? 'Раздел')
+                        . ' (' . (int) $part['grade'] . ')'
+                        . (!empty($part['teacher_name']) ? ' — ' . $part['teacher_name'] : '');
+                }
+            }
+            $causeDetail = implode('; ', $causeLines);
+            $suggestedCommissionIds = array_values(array_unique($suggestedCommissionIds));
+        }
+
         $debts[] = [
             'student_id' => $studentId,
-            'curriculum_item_id' => (int) $row['curriculum_item_id'],
+            'curriculum_item_id' => $itemId,
             'group_id' => (int) $row['group_id'],
             'group_number' => (string) $row['group_number'],
             'student_name' => (string) $row['student_name'],
@@ -96,6 +134,8 @@ function get_all_academic_debts(): array
             'period_label' => glaz_period_label((string) $row['academic_year'], (string) $row['semester']),
             'debt_key' => $key,
             'archived_at' => $row['archived_at'] !== null ? (string) $row['archived_at'] : null,
+            'cause_detail' => $causeDetail,
+            'suggested_commission_ids' => $suggestedCommissionIds,
         ];
     }
 
@@ -126,13 +166,24 @@ function get_all_academic_debts(): array
     return $debts;
 }
 
-function get_glaz_schedules_index(): array
+function normalize_glaz_source(string $source): string
 {
-    $stmt = db()->query(
+    return $source === 'manual_brs' ? 'manual_brs' : 'journal';
+}
+
+function get_glaz_schedules_index(string $source = 'journal'): array
+{
+    require_once __DIR__ . '/migrations.php';
+    ensure_glaz_schema(db());
+
+    $source = normalize_glaz_source($source);
+    $stmt = db()->prepare(
         'SELECT id, student_id, curriculum_item_id, academic_year, semester,
                 liquidation_date, liquidation_time
-         FROM glaz_schedules'
+         FROM glaz_schedules
+         WHERE source = ?'
     );
+    $stmt->execute([$source]);
     $rows = $stmt->fetchAll();
     if ($rows === []) {
         return ['schedules' => [], 'commission' => []];
@@ -249,11 +300,25 @@ function build_glaz_table_groups(array $debts, array $schedules): array
     return $result;
 }
 
-function glaz_commission_teacher_ids(array $schedule): array
+function glaz_commission_teacher_ids(array $schedule, array $suggestedIds = []): array
 {
-    $ids = array_slice($schedule['commission_ids'] ?? [], 0, 3);
+    $ids = array_values(array_filter(
+        array_map('intval', array_slice($schedule['commission_ids'] ?? [], 0, 3)),
+        static fn (int $id): bool => $id > 0
+    ));
+    if ($ids !== []) {
+        return $ids;
+    }
 
-    return $ids !== [] ? $ids : [0];
+    $suggested = array_values(array_unique(array_filter(
+        array_map('intval', $suggestedIds),
+        static fn (int $id): bool => $id > 0
+    )));
+    if ($suggested !== []) {
+        return array_slice($suggested, 0, 3);
+    }
+
+    return [0];
 }
 
 function glaz_academic_year_bounds(string $academicYear): ?array
@@ -446,7 +511,7 @@ function format_glaz_schedule_display_html(array $schedule, ?int $highlightTeach
     return $html;
 }
 
-function send_glaz_to_teachers(): array
+function send_glaz_to_teachers(string $source = 'journal'): array
 {
     if (!can_use_deputy_panel()) {
         return ['success' => false, 'error' => 'Недостаточно прав.'];
@@ -465,7 +530,10 @@ function send_glaz_to_teachers(): array
         return ['success' => false, 'error' => 'Нет активных преподавателей для рассылки.'];
     }
 
-    $body = 'Завуч направил график ликвидации академической задолженности для ознакомления.';
+    $source = normalize_glaz_source($source);
+    $body = $source === 'manual_brs'
+        ? 'Завуч направил график ГЛАЗ (Ручное БРС) для ознакомления.'
+        : 'Завуч направил график ликвидации академической задолженности для ознакомления.';
     $sent = 0;
 
     foreach ($recipients as $teacher) {
@@ -493,12 +561,17 @@ function save_glaz_schedule(
     string $semester,
     string $liquidationDate,
     string $liquidationTime,
-    array $teacherIds
+    array $teacherIds,
+    string $source = 'journal'
 ): array {
     if (!can_use_deputy_panel()) {
         return ['success' => false, 'error' => 'Недостаточно прав.'];
     }
 
+    require_once __DIR__ . '/migrations.php';
+    ensure_glaz_schema(db());
+
+    $source = normalize_glaz_source($source);
     $academicYear = normalize_academic_year($academicYear) ?? '';
     $semester = normalize_gradebook_semester($semester);
     if ($academicYear === '') {
@@ -538,9 +611,10 @@ function save_glaz_schedule(
         $stmt = $pdo->prepare(
             'SELECT id FROM glaz_schedules
              WHERE student_id = ? AND curriculum_item_id = ? AND academic_year = ? AND semester = ?
+               AND source = ?
              LIMIT 1'
         );
-        $stmt->execute([$studentId, $curriculumItemId, $academicYear, $semester]);
+        $stmt->execute([$studentId, $curriculumItemId, $academicYear, $semester, $source]);
         $existing = $stmt->fetch();
 
         $dateValue = $liquidationDate !== '' ? $liquidationDate : null;
@@ -577,14 +651,16 @@ function save_glaz_schedule(
         } else {
             $ins = $pdo->prepare(
                 'INSERT INTO glaz_schedules
-                 (student_id, curriculum_item_id, academic_year, semester, liquidation_date, liquidation_time, updated_by)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)'
+                 (student_id, curriculum_item_id, academic_year, semester, source,
+                  liquidation_date, liquidation_time, updated_by)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
             );
             $ins->execute([
                 $studentId,
                 $curriculumItemId,
                 $academicYear,
                 $semester,
+                $source,
                 $dateValue,
                 $timeValue,
                 $updatedBy,

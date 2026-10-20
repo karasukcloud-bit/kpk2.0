@@ -148,6 +148,44 @@ function get_grade_entries_for_group_period(int $groupId, string $academicYear, 
     return $result;
 }
 
+/** Включён ли временный модуль «Ручное БРС» (отдельный контур ведомостей). */
+function is_manual_brs_gradebook_active(): bool
+{
+    return is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php');
+}
+
+/**
+ * Оценки по источнику: journal (электронный журнал) или manual_brs (отдельный контур).
+ *
+ * @return array<int, array<int, int>> student_id => curriculum_item_id => grade 2–5
+ */
+function get_gradebook_grades_by_source(
+    int $groupId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): array {
+    if ($source === 'manual_brs' && is_manual_brs_gradebook_active()) {
+        require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
+        require_once __DIR__ . '/../modules/manual_brs/includes/gradebook.php';
+        manual_brs_ensure_schema();
+
+        return manual_brs_get_gradebook_grades($groupId, $academicYear, $semester);
+    }
+
+    return get_gradebook_grades_from_journal($groupId, $academicYear, $semester);
+}
+
+/**
+ * Оценки стандартного контура (электронный журнал).
+ *
+ * @return array<int, array<int, int>> student_id => curriculum_item_id => grade 2–5
+ */
+function get_gradebook_grades_for_period(int $groupId, string $academicYear, string $semester): array
+{
+    return get_gradebook_grades_from_journal($groupId, $academicYear, $semester);
+}
+
 /**
  * Итоговые оценки ведомости из электронного журнала (только чтение).
  * @return array<int, array<int, int>> student_id => curriculum_item_id => grade 2–5
@@ -170,8 +208,23 @@ function get_gradebook_grades_from_journal(int $groupId, string $academicYear, s
     $config = get_grading_config();
     $result = [];
 
+    require_once __DIR__ . '/curriculum_composites.php';
+
     foreach ($subjects as $subject) {
         $itemId = (int) $subject['curriculum_item_id'];
+        $hasChildren = curriculum_item_has_children($itemId, $semester);
+
+        if ($hasChildren) {
+            foreach ($students as $student) {
+                $studentId = (int) $student['id'];
+                $grade = resolve_composite_parent_grade_from_journal($itemId, $studentId, $semester);
+                if ($grade !== null) {
+                    $result[$studentId][$itemId] = $grade;
+                }
+            }
+            continue;
+        }
+
         $lessons = get_journal_lessons($itemId);
         $journalGrades = get_journal_grades($itemId);
         $totals = build_journal_totals($students, $lessons, $journalGrades, $config);
@@ -210,15 +263,20 @@ function resolve_journal_final_grade_for_gradebook(array $total): ?int
 
 /**
  * Статус заполнения ведомости группы за период.
- * @return array{complete: bool, empty: bool, filled: int, expected: int, students: int, subjects: int}
+ * @return array{complete: bool, empty: bool, filled: int, expected: int, students: int, subjects: int, source?: string}
  */
-function get_gradebook_completion_status(int $groupId, string $academicYear, string $semester): array
-{
+function get_gradebook_completion_status(
+    int $groupId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): array {
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     $studentCount = count($students);
     $subjectCount = count($subjects);
     $expected = $studentCount * $subjectCount;
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
 
     if ($expected === 0) {
         return [
@@ -228,10 +286,11 @@ function get_gradebook_completion_status(int $groupId, string $academicYear, str
             'expected' => 0,
             'students' => $studentCount,
             'subjects' => $subjectCount,
+            'source' => $source,
         ];
     }
 
-    $grades = get_gradebook_grades_from_journal($groupId, $academicYear, $semester);
+    $grades = get_gradebook_grades_by_source($groupId, $academicYear, $semester, $source);
     $filled = 0;
 
     foreach ($students as $student) {
@@ -251,20 +310,29 @@ function get_gradebook_completion_status(int $groupId, string $academicYear, str
         'expected' => $expected,
         'students' => $studentCount,
         'subjects' => $subjectCount,
+        'source' => $source,
     ];
 }
 
 /**
  * Сводка ведомости группы: заполненность, успеваемость, списки.
+ * $source: journal | manual_brs
  */
-function get_group_gradebook_overview(int $groupId, string $academicYear, string $semester): array
-{
+function get_group_gradebook_overview(
+    int $groupId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): array {
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     $studentCount = count($students);
     $subjectCount = count($subjects);
     $expected = $studentCount * $subjectCount;
-    $grades = ($expected > 0) ? get_gradebook_grades_from_journal($groupId, $academicYear, $semester) : [];
+    $grades = ($expected > 0)
+        ? get_gradebook_grades_by_source($groupId, $academicYear, $semester, $source)
+        : [];
     $filled = 0;
 
     if ($expected > 0) {
@@ -280,7 +348,19 @@ function get_group_gradebook_overview(int $groupId, string $academicYear, string
     }
 
     $summary = build_gradebook_summary($students, $subjects, $grades);
-    $lists = build_gradebook_student_lists($students, $subjects, $grades);
+    if ($source === 'manual_brs' && is_manual_brs_gradebook_active()) {
+        require_once __DIR__ . '/../modules/manual_brs/includes/gradebook.php';
+        $lists = manual_brs_build_gradebook_student_lists(
+            $groupId,
+            $academicYear,
+            $semester,
+            $students,
+            $subjects,
+            $grades
+        );
+    } else {
+        $lists = build_gradebook_student_lists($students, $subjects, $grades);
+    }
 
     return [
         'students' => $studentCount,
@@ -293,6 +373,8 @@ function get_group_gradebook_overview(int $groupId, string $academicYear, string
         'with_twos' => count($lists['with_twos']),
         'only_good' => count($lists['only_good']),
         'excellent' => count($lists['excellent']),
+        'lists' => $lists,
+        'source' => $source,
     ];
 }
 
@@ -603,7 +685,7 @@ function finalize_gradebook_aggregates(array $college, array $specialties): arra
     ];
 }
 
-function resolve_gradebook_year_period(string $academicYear): ?array
+function resolve_gradebook_year_period(string $academicYear, string $source = 'journal'): ?array
 {
     require_once __DIR__ . '/archive.php';
 
@@ -612,14 +694,19 @@ function resolve_gradebook_year_period(string $academicYear): ?array
         return null;
     }
 
-    foreach (['2', '1'] as $semester) {
-        $archive = get_archive_period('gradebook', $academicYear, $semester);
-        if ($archive) {
-            return [
-                'academic_year' => $academicYear,
-                'semester' => $semester,
-                'archive_id' => (int) $archive['id'],
-            ];
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+
+    // Архив — только стандартный контур; ручное БРС всегда из живых данных.
+    if ($source === 'journal') {
+        foreach (['2', '1'] as $semester) {
+            $archive = get_archive_period('gradebook', $academicYear, $semester);
+            if ($archive) {
+                return [
+                    'academic_year' => $academicYear,
+                    'semester' => $semester,
+                    'archive_id' => (int) $archive['id'],
+                ];
+            }
         }
     }
 
@@ -644,12 +731,22 @@ function resolve_gradebook_year_period(string $academicYear): ?array
     return null;
 }
 
-function aggregate_gradebook_college_and_specialties(string $academicYear, string $semester, ?int $archiveId = null): array
-{
+function aggregate_gradebook_college_and_specialties(
+    string $academicYear,
+    string $semester,
+    ?int $archiveId = null,
+    string $source = 'journal'
+): array {
     $college = ['assessed' => 0, 'absolute' => 0, 'quality' => 0];
     $specialties = [];
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
 
     if ($archiveId) {
+        // Архив только у стандартного контура; для ручного БРС прошлые годы без снапшота.
+        if ($source === 'manual_brs') {
+            return finalize_gradebook_aggregates($college, $specialties);
+        }
+
         require_once __DIR__ . '/archive.php';
 
         foreach (get_archive_gradebook_groups($archiveId) as $archiveGroup) {
@@ -689,7 +786,12 @@ function aggregate_gradebook_college_and_specialties(string $academicYear, strin
         }
     } else {
         foreach (get_all_groups() as $group) {
-            $overview = get_group_gradebook_overview((int) $group['id'], $academicYear, $semester);
+            $overview = get_group_gradebook_overview(
+                (int) $group['id'],
+                $academicYear,
+                $semester,
+                $source
+            );
             merge_gradebook_summary_into_aggregates(
                 $college,
                 $specialties,
@@ -703,16 +805,17 @@ function aggregate_gradebook_college_and_specialties(string $academicYear, strin
     return finalize_gradebook_aggregates($college, $specialties);
 }
 
-function build_gradebook_three_years_comparison(string $baseYear): array
+function build_gradebook_three_years_comparison(string $baseYear, string $source = 'journal'): array
 {
     require_once __DIR__ . '/attendance.php';
 
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     $years = get_last_academic_years($baseYear, 3);
     $yearLabels = [];
     $yearAggregates = [];
 
     foreach ($years as $year) {
-        $period = resolve_gradebook_year_period($year);
+        $period = resolve_gradebook_year_period($year, $source);
         if ($period === null) {
             $yearLabels[] = $year;
             $yearAggregates[] = null;
@@ -723,7 +826,8 @@ function build_gradebook_three_years_comparison(string $baseYear): array
         $yearAggregates[] = aggregate_gradebook_college_and_specialties(
             $period['academic_year'],
             $period['semester'],
-            $period['archive_id']
+            $period['archive_id'],
+            $source
         );
     }
 

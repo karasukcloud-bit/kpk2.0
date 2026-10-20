@@ -16,7 +16,7 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
     <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
     <a href="manual_brs_gradebook.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
-        Ведомости (ручное БРС)
+        Ведомости Ручное БРС
     </a>
     <?php endif; ?>
     <a href="record_books.php"
@@ -27,6 +27,12 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'summary' ? ' admin-tabs__item--active' : '' ?>">
         Сводная ведомость
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="manual_brs_summary.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_summary' ? ' admin-tabs__item--active' : '' ?>">
+        Сводные ведомости Ручное БРС
+    </a>
+    <?php endif; ?>
     <a href="rating.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'rating' ? ' admin-tabs__item--active' : '' ?>">
         Рейтинг студентов
@@ -35,6 +41,12 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'glaz' ? ' admin-tabs__item--active' : '' ?>">
         ГЛАЗ
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="manual_brs_glaz.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_glaz' ? ' admin-tabs__item--active' : '' ?>">
+        ГЛАЗ Ручное БРС
+    </a>
+    <?php endif; ?>
     <a href="expelled.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'expelled' ? ' admin-tabs__item--active' : '' ?>">
         Отчисленные
