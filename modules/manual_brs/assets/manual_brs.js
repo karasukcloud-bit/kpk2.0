@@ -2,6 +2,15 @@
     const config = window.MANUAL_BRS_CONFIG || { lessonsTotal: 0, brs: {} };
     const brs = config.brs || {};
 
+    function brsNum(key, fallback) {
+        const value = brs[key];
+        if (value === undefined || value === null || value === '') {
+            return fallback;
+        }
+        const num = Number(value);
+        return Number.isNaN(num) ? fallback : num;
+    }
+
     function formatNum(value, decimals) {
         if (value === null || value === undefined || Number.isNaN(value)) {
             return '—';
@@ -218,13 +227,13 @@
     }
 
     function pointsToGrade(points) {
-        if (points >= Number(brs.scale_5 || 75)) {
+        if (points >= brsNum('scale_5', 75)) {
             return 5;
         }
-        if (points >= Number(brs.scale_4 || 65)) {
+        if (points >= brsNum('scale_4', 65)) {
             return 4;
         }
-        if (points >= Number(brs.scale_3 || 50)) {
+        if (points >= brsNum('scale_3', 50)) {
             return 3;
         }
         return 2;
@@ -295,18 +304,18 @@
 
         let points = 0;
         if (currentAvg !== null) {
-            points += (currentAvg / 5) * Number(brs.weight_current || 30);
+            points += (currentAvg / 5) * brsNum('weight_current', 30);
         }
         if (controlAvg !== null) {
-            points += (controlAvg / 5) * Number(brs.weight_control || 45);
+            points += (controlAvg / 5) * brsNum('weight_control', 45);
         } else if (currentAvg !== null) {
-            points += (currentAvg / 5) * Number(brs.weight_control || 45);
+            points += (currentAvg / 5) * brsNum('weight_control', 45);
         }
         if (lessonsTotal > 0) {
-            points += (Number(brs.weight_attendance || 10) / lessonsTotal) * attended;
+            points += (brsNum('weight_attendance', 10) / lessonsTotal) * attended;
             if (attended > 0) {
-                points += (Number(brs.weight_punctuality || 5) / attended) * notLate;
-                points += (Number(brs.weight_activity || 5) / attended) * activity;
+                points += (brsNum('weight_punctuality', 5) / attended) * notLate;
+                points += (brsNum('weight_activity', 5) / attended) * activity;
             }
         }
 

@@ -9,14 +9,7 @@ declare(strict_types=1);
 
 function manual_brs_weights(): array
 {
-    if (function_exists('get_grading_config')) {
-        $config = get_grading_config();
-        if (isset($config['brs']) && is_array($config['brs'])) {
-            return $config['brs'];
-        }
-    }
-
-    return [
+    $defaults = [
         'weight_current' => 30.0,
         'weight_control' => 45.0,
         'weight_attendance' => 10.0,
@@ -25,6 +18,24 @@ function manual_brs_weights(): array
         'scale_3' => 50.0,
         'scale_4' => 65.0,
         'scale_5' => 75.0,
+    ];
+
+    if (!function_exists('get_grading_config')) {
+        return $defaults;
+    }
+
+    $config = get_grading_config();
+    $brs = (isset($config['brs']) && is_array($config['brs'])) ? $config['brs'] : [];
+
+    return [
+        'weight_current' => (float) ($brs['weight_current'] ?? $defaults['weight_current']),
+        'weight_control' => (float) ($brs['weight_control'] ?? $defaults['weight_control']),
+        'weight_attendance' => (float) ($brs['weight_attendance'] ?? $defaults['weight_attendance']),
+        'weight_punctuality' => (float) ($brs['weight_punctuality'] ?? $defaults['weight_punctuality']),
+        'weight_activity' => (float) ($brs['weight_activity'] ?? $defaults['weight_activity']),
+        'scale_3' => (float) ($brs['scale_3'] ?? $defaults['scale_3']),
+        'scale_4' => (float) ($brs['scale_4'] ?? $defaults['scale_4']),
+        'scale_5' => (float) ($brs['scale_5'] ?? $defaults['scale_5']),
     ];
 }
 

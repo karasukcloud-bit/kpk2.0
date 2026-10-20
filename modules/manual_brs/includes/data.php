@@ -376,17 +376,45 @@ function manual_brs_save_entry(
     ];
 }
 
+/** Пересчёт баллов записи по актуальной формуле БРС из настроек. */
+function manual_brs_calc_from_entry(array $entry, int $lessonsTotal, ?array $brs = null): array
+{
+    $stages = manual_brs_entry_stages($entry);
+    $merged = manual_brs_merge_stages_input([
+        'stage1_current_marks' => $stages[1]['current_input'],
+        'stage1_control_marks' => $stages[1]['control_input'],
+        'stage1_absent_count' => $stages[1]['absent_count'],
+        'stage1_late_count' => $stages[1]['late_count'],
+        'stage1_activity_count' => $stages[1]['activity_count'],
+        'stage2_current_marks' => $stages[2]['current_input'],
+        'stage2_control_marks' => $stages[2]['control_input'],
+        'stage2_absent_count' => $stages[2]['absent_count'],
+        'stage2_late_count' => $stages[2]['late_count'],
+        'stage2_activity_count' => $stages[2]['activity_count'],
+    ]);
+
+    return manual_brs_calculate([
+        'current_marks' => $merged['current_marks'],
+        'control_marks' => $merged['control_marks'],
+        'absent_count' => $merged['absent_count'],
+        'late_count' => $merged['late_count'],
+        'activity_count' => $merged['activity_count'],
+        'lessons_total' => max(0, $lessonsTotal),
+    ], $brs);
+}
+
 function manual_brs_points_for_periods(
     string $academicYear,
     int $curriculumItemId,
     int $studentId,
     array $periods
 ): array {
+    $brs = manual_brs_weights();
     $result = [];
     foreach ($periods as $period) {
         $period = (int) $period;
         $stmt = db()->prepare(
-            'SELECT e.points, e.grade
+            'SELECT e.*, s.lessons_total
              FROM manual_brs_sheets s
              INNER JOIN manual_brs_entries e ON e.sheet_id = s.id
              WHERE s.academic_year = ? AND s.period = ?
@@ -395,13 +423,22 @@ function manual_brs_points_for_periods(
         );
         $stmt->execute([$academicYear, $period, $curriculumItemId, $studentId]);
         $row = $stmt->fetch();
+        if (!$row) {
+            $result[$period] = [
+                'points' => null,
+                'grade' => null,
+                'display' => '',
+            ];
+            continue;
+        }
+
+        $calc = manual_brs_calc_from_entry($row, (int) ($row['lessons_total'] ?? 0), $brs);
+        $points = $calc['points'] !== null ? (float) $calc['points'] : null;
+        $grade = $calc['grade'] !== null ? (int) $calc['grade'] : null;
         $result[$period] = [
-            'points' => $row && $row['points'] !== null ? (float) $row['points'] : null,
-            'grade' => $row && $row['grade'] !== null ? (int) $row['grade'] : null,
-            'display' => manual_brs_period_display(
-                $row && $row['points'] !== null ? (float) $row['points'] : null,
-                $row && $row['grade'] !== null ? (int) $row['grade'] : null
-            ),
+            'points' => $points,
+            'grade' => $grade,
+            'display' => manual_brs_period_display($points, $grade),
         ];
     }
 
@@ -556,11 +593,13 @@ function manual_brs_build_student_rows(
     array $entries,
     string $academicYear,
     int $curriculumItemId,
-    int $period
+    int $period,
+    int $lessonsTotal = 0
 ): array {
     $period = manual_brs_normalize_period($period);
     $semester = manual_brs_semester_from_period($period);
     $paMap = manual_brs_get_attestations_map($academicYear, $semester, $curriculumItemId);
+    $brs = manual_brs_weights();
     require_once __DIR__ . '/../../../includes/curriculum_composites.php';
     $isCompositeParent = curriculum_item_has_children($curriculumItemId, $semester);
     $isPart = false;
@@ -573,11 +612,6 @@ function manual_brs_build_student_rows(
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
         $entry = $entries[$studentId] ?? null;
-
-        $periodPoints = null;
-        if ($entry && $entry['points'] !== null) {
-            $periodPoints = (float) $entry['points'];
-        }
         $paGrade = $isPart ? null : ($paMap[$studentId] ?? null);
 
         if ($isCompositeParent) {
@@ -606,19 +640,45 @@ function manual_brs_build_student_rows(
             continue;
         }
 
-        $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+        $calc = null;
+        if ($entry !== null) {
+            $calc = manual_brs_calc_from_entry($entry, $lessonsTotal, $brs);
+            // Синхронизируем кэш в БД, если формула в админке изменилась.
+            $newPoints = $calc['points'] !== null ? round((float) $calc['points'], 1) : null;
+            $newGrade = $calc['grade'] !== null ? (int) $calc['grade'] : null;
+            $oldPoints = $entry['points'] !== null ? round((float) $entry['points'], 1) : null;
+            $oldGrade = $entry['grade'] !== null ? (int) $entry['grade'] : null;
+            if ($newPoints !== $oldPoints || $newGrade !== $oldGrade) {
+                $upd = db()->prepare(
+                    'UPDATE manual_brs_entries
+                     SET current_avg = ?, control_avg = ?, points = ?, grade = ?
+                     WHERE id = ?'
+                );
+                $upd->execute([
+                    $calc['current_avg'],
+                    $calc['control_avg'],
+                    $newPoints,
+                    $newGrade,
+                    (int) $entry['id'],
+                ]);
+            }
+        }
+
+        $periodPoints = $calc['points'] ?? null;
+        $periodGrade = $calc['grade'] ?? null;
+        $sem = manual_brs_semester_total(
+            $periodPoints !== null ? (float) $periodPoints : null,
+            null,
+            $paGrade,
+            $brs
+        );
 
         $rows[] = [
             'student' => $student,
             'entry' => $entry,
-            'points' => $entry && $entry['points'] !== null ? (float) $entry['points'] : null,
-            'grade' => $entry && $entry['grade'] !== null ? (int) $entry['grade'] : null,
-            'display' => $entry
-                ? manual_brs_period_display(
-                    $entry['points'] !== null ? (float) $entry['points'] : null,
-                    $entry['grade'] !== null ? (int) $entry['grade'] : null
-                )
-                : '',
+            'points' => $periodPoints !== null ? (float) $periodPoints : null,
+            'grade' => $periodGrade !== null ? (int) $periodGrade : null,
+            'display' => $calc['display'] ?? '',
             'pa_grade' => $paGrade,
             'semester_display' => $sem['display'],
             'semester_grade' => $sem['grade'],

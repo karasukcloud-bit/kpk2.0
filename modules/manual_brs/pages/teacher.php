@@ -147,7 +147,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                             $entries,
                             $academicYear,
                             $itemId,
-                            $period
+                            $period,
+                            (int) ($result['lessons_total'] ?? $sheet['lessons_total'] ?? 0)
                         );
                         $rowsPayload = [];
                         foreach ($builtRows as $row) {
@@ -318,7 +319,14 @@ $isJournalPart = $assignment !== null
 if ($assignment !== null && $sheet !== null) {
     $students = get_students_by_group($groupId);
     $entries = manual_brs_get_entries_map((int) $sheet['id']);
-    $rows = manual_brs_build_student_rows($students, $entries, $academicYear, $itemId, $period);
+    $rows = manual_brs_build_student_rows(
+        $students,
+        $entries,
+        $academicYear,
+        $itemId,
+        $period,
+        (int) ($sheet['lessons_total'] ?? 0)
+    );
 }
 
 $flashSuccess = flash_get('success');
@@ -646,7 +654,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020a"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020b"></script>
 
     <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
         <section class="panel">
