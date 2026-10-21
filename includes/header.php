@@ -12,7 +12,7 @@
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
-    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261020b">
+    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261021a">
 </head>
 <body>
     <div class="page">

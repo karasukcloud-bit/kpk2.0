@@ -21,6 +21,11 @@ $result = search_activity_logs($filters);
 $logs = $result['items'];
 $users = list_activity_log_users();
 $actionOptions = activity_log_action_options();
+$userActivity = list_users_site_activity(3);
+$onlineCount = count(array_filter(
+    $userActivity,
+    static fn (array $row): bool => !empty($row['is_online'])
+));
 
 $queryBase = static function (array $override = []) use ($filters): string {
     $params = array_merge($filters, $override);
@@ -49,6 +54,68 @@ require __DIR__ . '/../includes/header.php';
             </div>
         </div>
         <?php require __DIR__ . '/../includes/admin_nav.php'; ?>
+    </section>
+
+    <section class="panel">
+        <div class="panel__header panel__header--compact">
+            <h2>Активность на сайте</h2>
+            <p class="text-muted">
+                Сейчас онлайн: <?= (int) $onlineCount ?>
+                · всего в списке: <?= count($userActivity) ?>
+            </p>
+        </div>
+        <?php if ($userActivity === []): ?>
+            <p class="text-muted">Пока нет данных об активности пользователей.</p>
+        <?php else: ?>
+            <div class="table-wrap">
+                <table class="table user-activity-table">
+                    <thead>
+                        <tr>
+                            <th>Пользователь</th>
+                            <th>Роль</th>
+                            <th>Статус</th>
+                            <th>Последняя активность</th>
+                            <th>Действий</th>
+                            <th>IP</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <?php foreach ($userActivity as $row): ?>
+                        <?php
+                        $shownAt = $row['last_activity_at'] ?? $row['last_action_at'] ?? null;
+                        ?>
+                        <tr class="<?= !empty($row['is_online']) ? 'user-activity-table__row--online' : '' ?>">
+                            <td>
+                                <?= e($row['full_name']) ?>
+                                <?php if (!(int) $row['is_active']): ?>
+                                <span class="user-activity-table__badge user-activity-table__badge--off">блок</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= e(format_user_activity_role($row)) ?></td>
+                            <td>
+                                <?php if (!empty($row['is_online'])): ?>
+                                <span class="user-activity-table__status user-activity-table__status--online">онлайн</span>
+                                <?php else: ?>
+                                <span class="user-activity-table__status">офлайн</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= $shownAt ? e(format_date($shownAt)) : '—' ?></td>
+                            <td>
+                                <?php if ((int) $row['actions_count'] > 0): ?>
+                                <a href="<?= e($queryBase(['user_id' => (int) $row['id'], 'page' => 1])) ?>">
+                                    <?= (int) $row['actions_count'] ?>
+                                </a>
+                                <?php else: ?>
+                                0
+                                <?php endif; ?>
+                            </td>
+                            <td class="user-activity-table__ip"><?= e($row['last_ip'] !== '' ? $row['last_ip'] : '—') ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                    </tbody>
+                </table>
+            </div>
+        <?php endif; ?>
     </section>
 
     <section class="panel">

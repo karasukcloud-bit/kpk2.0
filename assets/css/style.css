@@ -4763,6 +4763,40 @@ body.is-col-resizing * {
     line-height: 1.5;
 }
 
+.user-activity-table__status {
+    color: var(--color-muted, #666);
+    font-size: 0.9rem;
+}
+
+.user-activity-table__status--online {
+    color: #2e7d32;
+    font-weight: 600;
+}
+
+.user-activity-table__badge {
+    display: inline-block;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 0.25rem;
+    font-size: 0.75rem;
+    vertical-align: middle;
+}
+
+.user-activity-table__badge--off {
+    background: #ffebee;
+    color: #c62828;
+}
+
+.user-activity-table__ip {
+    white-space: nowrap;
+    color: var(--color-muted, #666);
+    font-size: 0.85rem;
+}
+
+.user-activity-table__row--online td:first-child {
+    border-left: 3px solid #2e7d32;
+}
+
 .activity-log-filter {
     align-items: flex-end;
 }

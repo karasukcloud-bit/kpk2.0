@@ -45,6 +45,7 @@ function activity_log_action_options(): array
 {
     return [
         '' => 'Все действия',
+        'auth.login' => 'Вход в систему',
         'student.create' => 'Добавление студента',
         'student.delete' => 'Удаление студента',
         'journal.lesson_add' => 'Добавление даты в журнал',
@@ -52,6 +53,131 @@ function activity_log_action_options(): array
         'journal.lesson_delete' => 'Удаление даты из журнала',
         'journal.grade_save' => 'Изменение оценки в журнале',
     ];
+}
+
+/** Обновление времени последней активности на сайте (не чаще раза в минуту). */
+function touch_user_activity(?int $userId = null, bool $force = false): void
+{
+    $userId = $userId ?? (int) ($_SESSION['user_id'] ?? 0);
+    if ($userId <= 0) {
+        return;
+    }
+
+    $now = time();
+    $lastTouch = (int) ($_SESSION['_last_activity_touch'] ?? 0);
+    if (!$force && ($now - $lastTouch) < 60) {
+        return;
+    }
+
+    $_SESSION['_last_activity_touch'] = $now;
+
+    $stmt = db()->prepare('UPDATE users SET last_activity_at = NOW() WHERE id = ?');
+    $stmt->execute([$userId]);
+}
+
+/**
+ * Сводка активности пользователей на сайте.
+ *
+ * @return list<array{
+ *   id: int,
+ *   full_name: string,
+ *   role: string,
+ *   is_active: int,
+ *   last_activity_at: ?string,
+ *   actions_count: int,
+ *   last_action_at: ?string,
+ *   last_ip: string,
+ *   is_online: bool
+ * }>
+ */
+function list_users_site_activity(int $onlineMinutes = 3): array
+{
+    $onlineSeconds = max(1, $onlineMinutes) * 60;
+    $stmt = db()->query(
+        "SELECT u.id, u.full_name, u.role, u.is_active, u.last_activity_at,
+                COALESCE(s.actions_count, 0) AS actions_count,
+                s.last_action_at,
+                COALESCE(s.last_ip, '') AS last_ip
+         FROM users u
+         LEFT JOIN (
+             SELECT user_id,
+                    COUNT(*) AS actions_count,
+                    MAX(created_at) AS last_action_at,
+                    SUBSTRING_INDEX(GROUP_CONCAT(ip_address ORDER BY created_at DESC SEPARATOR ','), ',', 1) AS last_ip
+             FROM activity_logs
+             GROUP BY user_id
+         ) s ON s.user_id = u.id
+         WHERE u.role <> 'student'
+            OR u.last_activity_at IS NOT NULL
+            OR s.actions_count > 0
+         ORDER BY COALESCE(u.last_activity_at, s.last_action_at) DESC,
+                  u.full_name ASC"
+    );
+
+    $rows = $stmt->fetchAll();
+    $staffRolesMap = [];
+    $staffIds = [];
+    foreach ($rows as $row) {
+        if ((string) ($row['role'] ?? '') === 'teacher') {
+            $staffIds[] = (int) $row['id'];
+        }
+    }
+    if ($staffIds !== []) {
+        $placeholders = implode(',', array_fill(0, count($staffIds), '?'));
+        $rolesStmt = db()->prepare(
+            "SELECT user_id, role FROM user_roles WHERE user_id IN ($placeholders) ORDER BY role ASC"
+        );
+        $rolesStmt->execute($staffIds);
+        foreach ($rolesStmt->fetchAll() as $roleRow) {
+            $uid = (int) $roleRow['user_id'];
+            $staffRolesMap[$uid][] = (string) $roleRow['role'];
+        }
+    }
+
+    $now = time();
+    $result = [];
+
+    foreach ($rows as $row) {
+        $userId = (int) $row['id'];
+        $lastAt = (string) ($row['last_activity_at'] ?? '');
+        if ($lastAt === '') {
+            $lastAt = (string) ($row['last_action_at'] ?? '');
+        }
+        $lastTs = $lastAt !== '' ? strtotime($lastAt) : false;
+        $isOnline = $lastTs !== false && ($now - $lastTs) <= $onlineSeconds;
+
+        $result[] = [
+            'id' => $userId,
+            'full_name' => (string) $row['full_name'],
+            'role' => (string) $row['role'],
+            'is_active' => (int) $row['is_active'],
+            'last_activity_at' => $row['last_activity_at'] !== null ? (string) $row['last_activity_at'] : null,
+            'actions_count' => (int) $row['actions_count'],
+            'last_action_at' => $row['last_action_at'] !== null ? (string) $row['last_action_at'] : null,
+            'last_ip' => (string) ($row['last_ip'] ?? ''),
+            'is_online' => $isOnline,
+            'staff_roles' => $staffRolesMap[$userId] ?? [],
+        ];
+    }
+
+    return $result;
+}
+
+function format_user_activity_role(array $row): string
+{
+    $role = (string) ($row['role'] ?? '');
+    if ($role === 'admin') {
+        return role_label('admin');
+    }
+    if ($role === 'student') {
+        return 'Студент';
+    }
+    $staffRoles = $row['staff_roles'] ?? [];
+    if (is_array($staffRoles) && $staffRoles !== []) {
+        return format_staff_roles_list($staffRoles);
+    }
+
+    return role_label($role);
 }
 
 function activity_log_action_label(string $action): string

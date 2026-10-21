@@ -293,30 +293,36 @@ function ensure_activity_logs_schema(PDO $pdo): void
     }
     $done = true;
 
-    if ($pdo->query("SHOW TABLES LIKE 'activity_logs'")->fetch()) {
-        return;
+    if (!$pdo->query("SHOW TABLES LIKE 'activity_logs'")->fetch()) {
+        $pdo->exec("
+            CREATE TABLE activity_logs (
+                id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+                user_id      INT UNSIGNED NULL,
+                action       VARCHAR(64) NOT NULL,
+                entity_type  VARCHAR(32) NOT NULL DEFAULT '',
+                entity_id    INT UNSIGNED NULL,
+                group_id     INT UNSIGNED NULL,
+                details_json TEXT NULL,
+                ip_address   VARCHAR(45) NOT NULL DEFAULT '',
+                created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                KEY idx_activity_logs_created (created_at),
+                KEY idx_activity_logs_user (user_id, created_at),
+                KEY idx_activity_logs_action (action, created_at),
+                KEY idx_activity_logs_entity (entity_type, entity_id),
+                CONSTRAINT fk_activity_logs_user
+                    FOREIGN KEY (user_id) REFERENCES users(id)
+                    ON DELETE SET NULL
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+        ");
     }
 
-    $pdo->exec("
-        CREATE TABLE activity_logs (
-            id           INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-            user_id      INT UNSIGNED NULL,
-            action       VARCHAR(64) NOT NULL,
-            entity_type  VARCHAR(32) NOT NULL DEFAULT '',
-            entity_id    INT UNSIGNED NULL,
-            group_id     INT UNSIGNED NULL,
-            details_json TEXT NULL,
-            ip_address   VARCHAR(45) NOT NULL DEFAULT '',
-            created_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            KEY idx_activity_logs_created (created_at),
-            KEY idx_activity_logs_user (user_id, created_at),
-            KEY idx_activity_logs_action (action, created_at),
-            KEY idx_activity_logs_entity (entity_type, entity_id),
-            CONSTRAINT fk_activity_logs_user
-                FOREIGN KEY (user_id) REFERENCES users(id)
-                ON DELETE SET NULL
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
-    ");
+    if (!$pdo->query("SHOW COLUMNS FROM users LIKE 'last_activity_at'")->fetch()) {
+        $pdo->exec(
+            'ALTER TABLE users
+             ADD last_activity_at DATETIME NULL DEFAULT NULL AFTER is_active,
+             ADD KEY idx_users_last_activity (last_activity_at)'
+        );
+    }
 }
 
 function ensure_student_transfers_schema(PDO $pdo): void

@@ -221,6 +221,8 @@ function current_user(): ?array
         }
 
         $GLOBALS['_current_user_cache'] = $user;
+        require_once __DIR__ . '/activity_log.php';
+        touch_user_activity((int) $user['id']);
     }
 
     return $GLOBALS['_current_user_cache'];
@@ -432,6 +434,11 @@ function login_user(array $user): void
     session_regenerate_id(true);
     $_SESSION['user_id'] = (int) $user['id'];
     $_SESSION['user_role'] = $user['role'];
+    clear_current_user_cache();
+
+    require_once __DIR__ . '/activity_log.php';
+    touch_user_activity((int) $user['id'], true);
+    log_activity('auth.login', 'user', (int) $user['id']);
 }
 
 function logout_user(): void
