@@ -1498,6 +1498,15 @@ function ensure_archive_schema(PDO $pdo): void
                 );
             }
         }
+        $agsGroups = $pdo->query("SHOW TABLES LIKE 'archive_gradebook_groups'")->fetch();
+        if ($agsGroups
+            && !$pdo->query("SHOW COLUMNS FROM archive_gradebook_groups LIKE 'is_general_education'")->fetch()
+        ) {
+            $pdo->exec(
+                "ALTER TABLE archive_gradebook_groups
+                 ADD is_general_education TINYINT(1) NOT NULL DEFAULT 0 AFTER specialty_code"
+            );
+        }
         return;
     }
 
@@ -1521,6 +1530,7 @@ function ensure_archive_schema(PDO $pdo): void
             group_number    VARCHAR(50) NOT NULL,
             specialty_name  VARCHAR(255) NOT NULL DEFAULT '',
             specialty_code  VARCHAR(50) NOT NULL DEFAULT '',
+            is_general_education TINYINT(1) NOT NULL DEFAULT 0,
             curator_name    VARCHAR(255) NOT NULL DEFAULT '',
             KEY idx_archive_gb_groups (archive_id, group_id),
             CONSTRAINT fk_archive_gb_groups_archive

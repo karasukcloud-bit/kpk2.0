@@ -76,33 +76,39 @@ foreach ($rows as $row) {
 
 $specialtyStats = [];
 foreach ($rows as $row) {
-    $specialtyId = (int) $row['group']['specialty_id'];
+    $group = $row['group'];
+    $key = gradebook_specialty_key_from_group($group);
     $summary = $row['overview']['summary'];
-    if (!isset($specialtyStats[$specialtyId])) {
-        $specialtyStats[$specialtyId] = [
-            'name' => (string) ($row['group']['specialty_name'] ?? ''),
-            'code' => (string) ($row['group']['specialty_code'] ?? ''),
+    if (!isset($specialtyStats[$key])) {
+        $specialtyStats[$key] = [
+            'label' => gradebook_specialty_label_from_group($group),
             'assessed' => 0,
             'absolute' => 0,
             'quality' => 0,
         ];
     }
-    $specialtyStats[$specialtyId]['assessed'] += (int) ($summary['assessed_students'] ?? 0);
-    $specialtyStats[$specialtyId]['absolute'] += (int) ($summary['absolute_count'] ?? 0);
-    $specialtyStats[$specialtyId]['quality'] += (int) ($summary['quality_count'] ?? 0);
+    $specialtyStats[$key]['assessed'] += (int) ($summary['assessed_students'] ?? 0);
+    $specialtyStats[$key]['absolute'] += (int) ($summary['absolute_count'] ?? 0);
+    $specialtyStats[$key]['quality'] += (int) ($summary['quality_count'] ?? 0);
 }
 
-uasort($specialtyStats, static fn(array $a, array $b): int => strcmp($a['name'], $b['name']));
+uasort($specialtyStats, static function (array $a, array $b): int {
+    $gen = gradebook_general_education_label();
+    if ($a['label'] === $gen && $b['label'] !== $gen) {
+        return 1;
+    }
+    if ($b['label'] === $gen && $a['label'] !== $gen) {
+        return -1;
+    }
+
+    return strcmp($a['label'], $b['label']);
+});
 
 $specialtyChartLabels = [];
 $specialtyAbsoluteValues = [];
 $specialtyQualityValues = [];
 foreach ($specialtyStats as $stat) {
-    $label = $stat['name'];
-    if ($stat['code'] !== '') {
-        $label .= ' (' . $stat['code'] . ')';
-    }
-    $specialtyChartLabels[] = $label;
+    $specialtyChartLabels[] = (string) $stat['label'];
     $assessed = (int) $stat['assessed'];
     $specialtyAbsoluteValues[] = $assessed > 0
         ? round($stat['absolute'] / $assessed * 100, 1)

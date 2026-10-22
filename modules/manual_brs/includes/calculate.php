@@ -217,14 +217,17 @@ function manual_brs_calculate(array $input, ?array $brs = null): array
     $points = 0.0;
     $hasData = $currentMarks !== [] || $controlMarks !== [] || $lessonsTotal > 0;
 
+    // Нет контрольных = не писал работу → считаем как «2».
+    if ($controlAvg === null && $hasData) {
+        $controlAvg = 2.0;
+    }
+
     if ($currentAvg !== null) {
         $points += ($currentAvg / 5.0) * (float) $brs['weight_current'];
     }
 
     if ($controlAvg !== null) {
         $points += ($controlAvg / 5.0) * (float) $brs['weight_control'];
-    } elseif ($currentAvg !== null) {
-        $points += ($currentAvg / 5.0) * (float) $brs['weight_control'];
     }
 
     if ($lessonsTotal > 0) {

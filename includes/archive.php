@@ -199,8 +199,9 @@ function archive_gradebooks_for_period(string $academicYear, string $semester, b
 
         $groupStmt = $pdo->prepare(
             'INSERT INTO archive_gradebook_groups
-                (archive_id, group_id, group_number, specialty_name, specialty_code, curator_name)
-             VALUES (?, ?, ?, ?, ?, ?)'
+                (archive_id, group_id, group_number, specialty_name, specialty_code,
+                 is_general_education, curator_name)
+             VALUES (?, ?, ?, ?, ?, ?, ?)'
         );
         $studentStmt = $pdo->prepare(
             'INSERT INTO archive_gradebook_students (archive_id, group_id, student_id, full_name, sort_order)
@@ -225,6 +226,7 @@ function archive_gradebooks_for_period(string $academicYear, string $semester, b
                 (string) $group['number'],
                 (string) ($group['specialty_name'] ?? ''),
                 (string) ($group['specialty_code'] ?? ''),
+                !empty($group['is_general_education']) ? 1 : 0,
                 (string) ($group['curator_name'] ?? ''),
             ]);
 

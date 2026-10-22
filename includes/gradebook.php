@@ -592,13 +592,53 @@ function gradebook_percent_from_counts(int $numerator, int $denominator): float
     return $denominator > 0 ? round($numerator / $denominator * 100, 1) : 0.0;
 }
 
+function gradebook_general_education_key(): string
+{
+    return 'general_education';
+}
+
+function gradebook_general_education_label(): string
+{
+    return 'Общеобразовательный цикл';
+}
+
+function gradebook_group_is_general_education(array $group): bool
+{
+    return !empty($group['is_general_education']);
+}
+
+function gradebook_archive_group_is_general_education(array $group): bool
+{
+    if (array_key_exists('is_general_education', $group)) {
+        return !empty($group['is_general_education']);
+    }
+
+    $groupId = (int) ($group['group_id'] ?? 0);
+    if ($groupId <= 0) {
+        return false;
+    }
+
+    require_once __DIR__ . '/organization.php';
+    $live = get_group_by_id($groupId);
+
+    return $live !== null && !empty($live['is_general_education']);
+}
+
 function gradebook_specialty_key_from_group(array $group): string
 {
+    if (gradebook_group_is_general_education($group)) {
+        return gradebook_general_education_key();
+    }
+
     return 'id:' . (int) ($group['specialty_id'] ?? 0);
 }
 
 function gradebook_specialty_label_from_group(array $group): string
 {
+    if (gradebook_group_is_general_education($group)) {
+        return gradebook_general_education_label();
+    }
+
     $name = trim((string) ($group['specialty_name'] ?? ''));
     $code = trim((string) ($group['specialty_code'] ?? ''));
     if ($name === '') {
@@ -610,6 +650,10 @@ function gradebook_specialty_label_from_group(array $group): string
 
 function gradebook_specialty_key_from_archive_group(array $group): string
 {
+    if (gradebook_archive_group_is_general_education($group)) {
+        return gradebook_general_education_key();
+    }
+
     $code = trim((string) ($group['specialty_code'] ?? ''));
     if ($code !== '') {
         return 'code:' . $code;
@@ -622,6 +666,10 @@ function gradebook_specialty_key_from_archive_group(array $group): string
 
 function gradebook_specialty_label_from_archive_group(array $group): string
 {
+    if (gradebook_archive_group_is_general_education($group)) {
+        return gradebook_general_education_label();
+    }
+
     $name = trim((string) ($group['specialty_name'] ?? ''));
     $code = trim((string) ($group['specialty_code'] ?? ''));
     if ($name === '') {
@@ -842,7 +890,17 @@ function build_gradebook_three_years_comparison(string $baseYear, string $source
             }
         }
     }
-    asort($specialtyLabels, SORT_STRING | SORT_FLAG_CASE);
+    $genLabel = gradebook_general_education_label();
+    uasort($specialtyLabels, static function (string $a, string $b) use ($genLabel): int {
+        if ($a === $genLabel && $b !== $genLabel) {
+            return 1;
+        }
+        if ($b === $genLabel && $a !== $genLabel) {
+            return -1;
+        }
+
+        return strcasecmp($a, $b);
+    });
 
     $specialtyKeys = array_keys($specialtyLabels);
     $specialtyAbsolute = [];

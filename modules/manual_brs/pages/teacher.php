@@ -660,7 +660,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261020c"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261022a"></script>
 
     <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
         <section class="panel">

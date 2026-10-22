@@ -352,14 +352,17 @@
                 node.textContent = value === null ? '—' : formatNum(value, 2);
             }
         };
+        const hasData = currentMarks.length || controlMarks.length || lessonsTotal > 0;
+        // Нет контрольных = не писал работу → считаем как «2».
+        const controlAvgForPoints = controlAvg === null && hasData ? 2 : controlAvg;
+
         setAvg(stageAvgNode(1, 'current'), s1CurrentAvg);
         setAvg(stageAvgNode(1, 'control'), s1ControlAvg);
         setAvg(stageAvgNode(2, 'current'), s2CurrentAvg);
         setAvg(stageAvgNode(2, 'control'), s2ControlAvg);
         setAvg(currentAvgNode, currentAvg);
-        setAvg(controlAvgNode, controlAvg);
+        setAvg(controlAvgNode, controlAvgForPoints);
 
-        const hasData = currentMarks.length || controlMarks.length || lessonsTotal > 0;
         if (!hasData) {
             totalNode.textContent = '—';
             return null;
@@ -369,10 +372,8 @@
         if (currentAvg !== null) {
             points += (currentAvg / 5) * brsNum('weight_current', 30);
         }
-        if (controlAvg !== null) {
-            points += (controlAvg / 5) * brsNum('weight_control', 45);
-        } else if (currentAvg !== null) {
-            points += (currentAvg / 5) * brsNum('weight_control', 45);
+        if (controlAvgForPoints !== null) {
+            points += (controlAvgForPoints / 5) * brsNum('weight_control', 45);
         }
         if (lessonsTotal > 0) {
             points += (brsNum('weight_attendance', 10) / lessonsTotal) * attended;
