@@ -27,8 +27,11 @@ function manual_brs_periods_for_semester(string $semester): array
 function manual_brs_get_gradebook_grades(
     int $groupId,
     string $academicYear,
-    string $semester
+    string $semester,
+    ?array $batchContext = null
 ): array {
+    require_once __DIR__ . '/data.php';
+
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     if ($subjects === []) {
         return [];
@@ -39,13 +42,14 @@ function manual_brs_get_gradebook_grades(
         return [];
     }
 
+    $ctx = $batchContext ?? manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
     $result = [];
 
     foreach ($subjects as $subject) {
         $itemId = (int) $subject['curriculum_item_id'];
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
-            $sem = manual_brs_resolve_semester_grade($academicYear, $semester, $itemId, $studentId);
+            $sem = manual_brs_resolve_from_batch($itemId, $studentId, $ctx);
             if ($sem['grade'] !== null) {
                 $result[$studentId][$itemId] = (int) $sem['grade'];
             }
@@ -64,22 +68,24 @@ function manual_brs_failing_entries_for_student(
     string $academicYear,
     string $semester,
     array $subjects,
-    int $studentId
+    int $studentId,
+    ?array $batchContext = null
 ): array {
+    require_once __DIR__ . '/data.php';
     require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+
+    $ctx = $batchContext ?? manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
     $entries = [];
 
     foreach ($subjects as $subject) {
         $itemId = (int) $subject['curriculum_item_id'];
-        $sem = manual_brs_resolve_semester_grade($academicYear, $semester, $itemId, $studentId);
+        $sem = manual_brs_resolve_from_batch($itemId, $studentId, $ctx);
         if (($sem['grade'] ?? null) !== 2) {
             continue;
         }
 
         $discipline = (string) ($subject['subject_name'] ?? 'Дисциплина');
-        $children = curriculum_item_has_children($itemId, $semester)
-            ? get_curriculum_item_children($itemId, $semester)
-            : [];
+        $children = $ctx['children'][$itemId] ?? [];
 
         if ($children === []) {
             $entries[] = [
@@ -90,13 +96,15 @@ function manual_brs_failing_entries_for_student(
             continue;
         }
 
-        $periods = [manual_brs_period_for_semester($semester)];
-        $periodId = $periods[0];
         $partTwos = [];
         foreach ($children as $child) {
             $childId = (int) $child['id'];
-            $periodData = manual_brs_points_for_periods($academicYear, $childId, $studentId, $periods);
-            $childSem = manual_brs_semester_total($periodData[$periodId]['points'] ?? null, null, null);
+            $points = $ctx['calc'][$childId][$studentId]['points'] ?? null;
+            $childSem = manual_brs_semester_total(
+                $points !== null ? (float) $points : null,
+                null,
+                null
+            );
             if (($childSem['grade'] ?? null) === 2) {
                 $section = (string) ($child['subject_name'] ?? 'Раздел');
                 $partTwos[] = [
@@ -214,18 +222,35 @@ function manual_brs_build_gradebook_student_lists(
     string $semester,
     array $students,
     array $subjects,
-    array $grades
+    array $grades,
+    ?array $batchContext = null
 ): array {
+    require_once __DIR__ . '/data.php';
+
     $lists = build_gradebook_student_lists($students, $subjects, $grades);
     $withTwos = [];
+    $ctx = $batchContext ?? manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
 
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
+        $studentGrades = $grades[$studentId] ?? [];
+        $hasTwo = false;
+        foreach ($studentGrades as $grade) {
+            if ((int) $grade === 2) {
+                $hasTwo = true;
+                break;
+            }
+        }
+        if (!$hasTwo) {
+            continue;
+        }
+
         $failing = manual_brs_failing_entries_for_student(
             $academicYear,
             $semester,
             $subjects,
-            $studentId
+            $studentId,
+            $ctx
         );
         if ($failing === []) {
             continue;

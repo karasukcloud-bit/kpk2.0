@@ -16,6 +16,7 @@ function get_all_manual_brs_academic_debts(): array
     require_once __DIR__ . '/../../../includes/curriculum_composites.php';
     require_once __DIR__ . '/../bootstrap.php';
     require_once __DIR__ . '/gradebook.php';
+    require_once __DIR__ . '/data.php';
 
     manual_brs_ensure_schema();
 
@@ -59,7 +60,9 @@ function get_all_manual_brs_academic_debts(): array
                 continue;
             }
 
-            $grades = manual_brs_get_gradebook_grades($groupId, $year, $semester);
+            $batchCtx = manual_brs_build_grade_batch_context($year, $semester, $subjects);
+            $grades = manual_brs_get_gradebook_grades($groupId, $year, $semester, $batchCtx);
+            $failingByStudent = [];
             foreach ($students as $student) {
                 $studentId = (int) $student['id'];
                 if (isset($excluded[$studentId])) {
@@ -79,15 +82,19 @@ function get_all_manual_brs_academic_debts(): array
                         $suggestedCommissionIds[] = $itemTeacherId;
                     }
 
-                    if (curriculum_item_has_children($itemId, $semester)) {
-                        $failing = manual_brs_failing_entries_for_student(
-                            $year,
-                            $semester,
-                            $subjects,
-                            $studentId
-                        );
+                    $children = $batchCtx['children'][$itemId] ?? [];
+                    if ($children !== []) {
+                        if (!isset($failingByStudent[$studentId])) {
+                            $failingByStudent[$studentId] = manual_brs_failing_entries_for_student(
+                                $year,
+                                $semester,
+                                $subjects,
+                                $studentId,
+                                $batchCtx
+                            );
+                        }
                         $lines = [];
-                        foreach ($failing as $entry) {
+                        foreach ($failingByStudent[$studentId] as $entry) {
                             if ((string) ($entry['discipline'] ?? '') !== (string) ($subject['subject_name'] ?? '')) {
                                 continue;
                             }
@@ -99,7 +106,7 @@ function get_all_manual_brs_academic_debts(): array
                         if ($lines !== []) {
                             $causeDetail = implode('; ', $lines);
                         }
-                        foreach (get_curriculum_item_children($itemId, $semester) as $child) {
+                        foreach ($children as $child) {
                             $childTeacher = (int) ($child['teacher_id'] ?? 0);
                             if ($childTeacher > 0) {
                                 $suggestedCommissionIds[] = $childTeacher;

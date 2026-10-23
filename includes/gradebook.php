@@ -330,11 +330,28 @@ function get_group_gradebook_overview(
     $studentCount = count($students);
     $subjectCount = count($subjects);
     $expected = $studentCount * $subjectCount;
-    $grades = ($expected > 0)
-        ? get_gradebook_grades_by_source($groupId, $academicYear, $semester, $source)
-        : [];
-    $filled = 0;
+    $manualBrsBatch = null;
+    $grades = [];
 
+    if ($expected > 0) {
+        if ($source === 'manual_brs' && is_manual_brs_gradebook_active()) {
+            require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
+            require_once __DIR__ . '/../modules/manual_brs/includes/data.php';
+            require_once __DIR__ . '/../modules/manual_brs/includes/gradebook.php';
+            manual_brs_ensure_schema();
+            $manualBrsBatch = manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
+            $grades = manual_brs_get_gradebook_grades(
+                $groupId,
+                $academicYear,
+                $semester,
+                $manualBrsBatch
+            );
+        } else {
+            $grades = get_gradebook_grades_by_source($groupId, $academicYear, $semester, $source);
+        }
+    }
+
+    $filled = 0;
     if ($expected > 0) {
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
@@ -356,7 +373,8 @@ function get_group_gradebook_overview(
             $semester,
             $students,
             $subjects,
-            $grades
+            $grades,
+            $manualBrsBatch
         );
     } else {
         $lists = build_gradebook_student_lists($students, $subjects, $grades);

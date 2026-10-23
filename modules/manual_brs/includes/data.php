@@ -414,42 +414,194 @@ function manual_brs_calc_from_entry(array $entry, int $lessonsTotal, ?array $brs
     ], $brs);
 }
 
+/**
+ * Пакетный пересчёт баллов периода: item_id => student_id => {points, grade, display}.
+ *
+ * @param list<int> $itemIds
+ * @return array<int, array<int, array{points: ?float, grade: ?int, display: string}>>
+ */
+function manual_brs_load_period_grades_map(string $academicYear, int $period, array $itemIds): array
+{
+    $period = manual_brs_normalize_period($period);
+    $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+    if ($itemIds === []) {
+        return [];
+    }
+
+    $brs = manual_brs_weights();
+    $placeholders = implode(',', array_fill(0, count($itemIds), '?'));
+    $params = array_merge([$academicYear, $period], $itemIds);
+    $stmt = db()->prepare(
+        "SELECT e.*, s.lessons_total, s.curriculum_item_id
+         FROM manual_brs_sheets s
+         INNER JOIN manual_brs_entries e ON e.sheet_id = s.id
+         WHERE s.academic_year = ? AND s.period = ?
+           AND s.curriculum_item_id IN ($placeholders)"
+    );
+    $stmt->execute($params);
+
+    $map = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $itemId = (int) $row['curriculum_item_id'];
+        $studentId = (int) $row['student_id'];
+        $calc = manual_brs_calc_from_entry($row, (int) ($row['lessons_total'] ?? 0), $brs);
+        $points = $calc['points'] !== null ? (float) $calc['points'] : null;
+        $grade = $calc['grade'] !== null ? (int) $calc['grade'] : null;
+        $map[$itemId][$studentId] = [
+            'points' => $points,
+            'grade' => $grade,
+            'display' => manual_brs_period_display($points, $grade),
+        ];
+    }
+
+    return $map;
+}
+
+/**
+ * Пакет ПА: item_id => student_id => grade.
+ *
+ * @param list<int> $itemIds
+ * @return array<int, array<int, int>>
+ */
+function manual_brs_get_attestations_map_multi(
+    string $academicYear,
+    string $semester,
+    array $itemIds
+): array {
+    $semester = $semester === '2' ? '2' : '1';
+    $itemIds = array_values(array_unique(array_filter(array_map('intval', $itemIds))));
+    if ($itemIds === []) {
+        return [];
+    }
+
+    $placeholders = implode(',', array_fill(0, count($itemIds), '?'));
+    $params = array_merge([$academicYear, $semester], $itemIds);
+    $stmt = db()->prepare(
+        "SELECT curriculum_item_id, student_id, grade
+         FROM manual_brs_attestations
+         WHERE academic_year = ? AND semester = ?
+           AND curriculum_item_id IN ($placeholders)"
+    );
+    $stmt->execute($params);
+
+    $map = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $grade = $row['grade'] !== null ? (int) $row['grade'] : null;
+        if ($grade === null || $grade < 2 || $grade > 5) {
+            continue;
+        }
+        $map[(int) $row['curriculum_item_id']][(int) $row['student_id']] = $grade;
+    }
+
+    return $map;
+}
+
+/**
+ * Контекст пакетного расчёта итогов группы за семестр.
+ *
+ * @param list<array{curriculum_item_id?: int}> $subjects
+ * @return array{
+ *   academic_year: string,
+ *   semester: string,
+ *   period_id: int,
+ *   calc: array<int, array<int, array{points: ?float, grade: ?int, display: string}>>,
+ *   pa: array<int, array<int, int>>,
+ *   children: array<int, list<array>>
+ * }
+ */
+function manual_brs_build_grade_batch_context(
+    string $academicYear,
+    string $semester,
+    array $subjects
+): array {
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    $semester = $semester === '2' ? '2' : '1';
+    $periodId = manual_brs_period_for_semester($semester);
+    $itemIds = [];
+    $childrenByParent = [];
+
+    foreach ($subjects as $subject) {
+        $itemId = (int) ($subject['curriculum_item_id'] ?? $subject['id'] ?? 0);
+        if ($itemId <= 0) {
+            continue;
+        }
+        $itemIds[] = $itemId;
+        $children = get_curriculum_item_children($itemId, $semester);
+        $childrenByParent[$itemId] = $children;
+        foreach ($children as $child) {
+            $itemIds[] = (int) $child['id'];
+        }
+    }
+
+    $itemIds = array_values(array_unique($itemIds));
+
+    return [
+        'academic_year' => $academicYear,
+        'semester' => $semester,
+        'period_id' => $periodId,
+        'calc' => manual_brs_load_period_grades_map($academicYear, $periodId, $itemIds),
+        'pa' => manual_brs_get_attestations_map_multi($academicYear, $semester, $itemIds),
+        'children' => $childrenByParent,
+    ];
+}
+
+/** Итог семестра из пакетного контекста (без SQL). */
+function manual_brs_resolve_from_batch(int $curriculumItemId, int $studentId, array $ctx): array
+{
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    $pa = $ctx['pa'][$curriculumItemId][$studentId] ?? null;
+    $children = $ctx['children'][$curriculumItemId] ?? [];
+
+    if ($children !== []) {
+        $partGrades = [];
+        foreach ($children as $child) {
+            $childId = (int) $child['id'];
+            $points = $ctx['calc'][$childId][$studentId]['points'] ?? null;
+            $childSem = manual_brs_semester_total(
+                $points !== null ? (float) $points : null,
+                null,
+                null
+            );
+            if ($childSem['grade'] !== null) {
+                $partGrades[] = (int) $childSem['grade'];
+            }
+        }
+        $base = aggregate_composite_part_grades($partGrades);
+        $grade = resolve_composite_final_grade($base, $pa);
+
+        return [
+            'points' => null,
+            'grade' => $grade,
+            'brs_grade' => $base,
+            'pa_grade' => $pa,
+            'display' => $grade !== null ? (string) $grade : '',
+            'html' => manual_brs_render_semester_html($grade, null),
+        ];
+    }
+
+    $points = $ctx['calc'][$curriculumItemId][$studentId]['points'] ?? null;
+
+    return manual_brs_semester_total(
+        $points !== null ? (float) $points : null,
+        null,
+        $pa
+    );
+}
+
 function manual_brs_points_for_periods(
     string $academicYear,
     int $curriculumItemId,
     int $studentId,
     array $periods
 ): array {
-    $brs = manual_brs_weights();
     $result = [];
     foreach ($periods as $period) {
         $period = (int) $period;
-        $stmt = db()->prepare(
-            'SELECT e.*, s.lessons_total
-             FROM manual_brs_sheets s
-             INNER JOIN manual_brs_entries e ON e.sheet_id = s.id
-             WHERE s.academic_year = ? AND s.period = ?
-               AND s.curriculum_item_id = ? AND e.student_id = ?
-             LIMIT 1'
-        );
-        $stmt->execute([$academicYear, $period, $curriculumItemId, $studentId]);
-        $row = $stmt->fetch();
-        if (!$row) {
-            $result[$period] = [
-                'points' => null,
-                'grade' => null,
-                'display' => '',
-            ];
-            continue;
-        }
-
-        $calc = manual_brs_calc_from_entry($row, (int) ($row['lessons_total'] ?? 0), $brs);
-        $points = $calc['points'] !== null ? (float) $calc['points'] : null;
-        $grade = $calc['grade'] !== null ? (int) $calc['grade'] : null;
-        $result[$period] = [
-            'points' => $points,
-            'grade' => $grade,
-            'display' => manual_brs_period_display($points, $grade),
+        $map = manual_brs_load_period_grades_map($academicYear, $period, [$curriculumItemId]);
+        $result[$period] = $map[$curriculumItemId][$studentId] ?? [
+            'points' => null,
+            'grade' => null,
+            'display' => '',
         ];
     }
 
