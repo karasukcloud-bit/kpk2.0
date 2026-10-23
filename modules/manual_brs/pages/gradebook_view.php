@@ -106,7 +106,7 @@ $basePath = '../';
 require __DIR__ . '/../../../includes/header.php';
 ?>
 
-<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261020b">
+<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261023c">
 
 <div class="dashboard dashboard--wide">
     <section class="panel manual-brs-no-print">
@@ -133,13 +133,6 @@ require __DIR__ . '/../../../includes/header.php';
     <?php endif; ?>
 
     <section class="panel">
-        <?php if ($group !== null): ?>
-        <p class="text-muted manual-brs-no-print">
-            Оценки — текущие итоги из модуля «Ручное БРС» (баллы периода + ПА;
-            для составных дисциплин — разделы + ПА). Только просмотр.
-        </p>
-        <?php endif; ?>
-
         <?php if ($manualBrsPanel === 'curator' && empty($groups)): ?>
             <p class="text-muted">Вам ещё не назначена группа.</p>
         <?php elseif ($group === null): ?>
@@ -231,9 +224,16 @@ require __DIR__ . '/../../../includes/header.php';
                 </p>
             </div>
         <?php else: ?>
-            <div class="panel__header panel__header--compact manual-brs-no-print">
-                <div></div>
+            <div class="manual-brs-gradebook-toolbar manual-brs-no-print">
+                <p class="text-muted manual-brs-gradebook-toolbar-hint">
+                    Оценки — текущие итоги из модуля «Ручное БРС» (баллы периода + ПА;
+                    для составных дисциплин — разделы + ПА). Только просмотр.
+                </p>
                 <div class="panel__header-actions">
+                    <label class="manual-brs-highlight-toggle">
+                        <input type="checkbox" data-manual-brs-highlight-twos>
+                        <span>Подсветить оценки 2</span>
+                    </label>
                     <a
                         href="<?= e(manual_brs_gradebook_pdf_url($manualBrsPanel, $groupId)) ?>"
                         class="btn btn--primary btn--sm"
@@ -242,7 +242,7 @@ require __DIR__ . '/../../../includes/header.php';
                 </div>
             </div>
 
-            <div class="manual-brs-gradebook-print-area">
+            <div class="manual-brs-gradebook-print-area" data-manual-brs-highlight-root>
                 <header class="manual-brs-gradebook-header">
                     <?php if ($orgName !== ''): ?>
                         <p class="manual-brs-gradebook-header__meta"><?= e($orgName) ?></p>
@@ -300,17 +300,28 @@ require __DIR__ . '/../../../includes/header.php';
                         </thead>
                         <tbody>
                             <?php foreach ($students as $student): ?>
-                            <tr>
+                            <?php
+                            $studentId = (int) $student['id'];
+                            $studentGrades = $grades[$studentId] ?? [];
+                            $hasTwo = false;
+                            foreach ($studentGrades as $g) {
+                                if ((int) $g === 2) {
+                                    $hasTwo = true;
+                                    break;
+                                }
+                            }
+                            ?>
+                            <tr<?= $hasTwo ? ' class="gradebook-row--has-two"' : '' ?>>
                                 <td class="gradebook-table__student-col">
                                     <?= e(person_last_first_name((string) $student['full_name'])) ?>
                                 </td>
                                 <?php foreach ($subjects as $subject): ?>
                                 <?php
-                                $studentId = (int) $student['id'];
                                 $itemId = (int) $subject['curriculum_item_id'];
-                                $value = $grades[$studentId][$itemId] ?? null;
+                                $value = $studentGrades[$itemId] ?? null;
+                                $isTwo = $value !== null && (int) $value === 2;
                                 ?>
-                                <td class="gradebook-table__cell gradebook-table__grade-cell">
+                                <td class="gradebook-table__cell gradebook-table__grade-cell<?= $isTwo ? ' gradebook-grade--two' : '' ?>">
                                     <?= $value !== null ? e((string) $value) : '—' ?>
                                 </td>
                                 <?php endforeach; ?>
@@ -395,6 +406,33 @@ require __DIR__ . '/../../../includes/header.php';
 document.querySelectorAll('[data-manual-brs-print]').forEach((button) => {
     button.addEventListener('click', () => window.print());
 });
+
+(() => {
+    const toggle = document.querySelector('[data-manual-brs-highlight-twos]');
+    const root = document.querySelector('[data-manual-brs-highlight-root]');
+    if (!toggle || !root) {
+        return;
+    }
+    const storageKey = 'manual_brs_highlight_twos';
+    const apply = (on) => {
+        toggle.checked = !!on;
+        root.classList.toggle('manual-brs-highlight-twos', !!on);
+    };
+    let enabled = false;
+    try {
+        enabled = window.localStorage.getItem(storageKey) === '1';
+    } catch (e) {
+        enabled = false;
+    }
+    apply(enabled);
+    toggle.addEventListener('change', () => {
+        enabled = !!toggle.checked;
+        try {
+            window.localStorage.setItem(storageKey, enabled ? '1' : '0');
+        } catch (e) {}
+        apply(enabled);
+    });
+})();
 </script>
 <?php endif; ?>
 

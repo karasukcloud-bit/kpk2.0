@@ -147,6 +147,58 @@
     font-weight: 700;
 }
 
+.manual-brs-gradebook-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin-bottom: 1rem;
+}
+
+.manual-brs-gradebook-toolbar-hint {
+    margin: 0;
+    max-width: 36rem;
+    font-size: 0.9rem;
+    line-height: 1.35;
+}
+
+.manual-brs-highlight-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin: 0;
+    padding: 0.35rem 0.7rem;
+    border: 1px solid #ef9a9a;
+    border-radius: 0.4rem;
+    background: #ffebee;
+    color: #b71c1c;
+    font-size: 0.875rem;
+    font-weight: 600;
+    cursor: pointer;
+    user-select: none;
+}
+
+.manual-brs-highlight-toggle input {
+    width: 1rem;
+    height: 1rem;
+    margin: 0;
+    accent-color: #c62828;
+    cursor: pointer;
+}
+
+.manual-brs-highlight-twos .gradebook-grade--two {
+    background: #ffcdd2;
+    color: #b71c1c;
+    font-weight: 700;
+}
+
+.manual-brs-highlight-twos .gradebook-row--has-two .gradebook-table__student-col {
+    background: #ffebee;
+    color: #b71c1c;
+    font-weight: 600;
+}
+
 @media print {
     .header,
     .footer,
@@ -201,5 +253,15 @@
         background: #fff !important;
         -webkit-print-color-adjust: exact;
         print-color-adjust: exact;
+    }
+
+    .manual-brs-highlight-twos .gradebook-grade--two {
+        background: #ffcdd2 !important;
+        color: #b71c1c !important;
+    }
+
+    .manual-brs-highlight-twos .gradebook-row--has-two .gradebook-table__student-col {
+        background: #ffebee !important;
+        color: #b71c1c !important;
     }
 }
