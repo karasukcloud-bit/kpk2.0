@@ -7,6 +7,7 @@ $selectedRoles = $selectedRoles ?? [];
 $forCuratorUserId = $forCuratorUserId ?? null;
 $selectedCuratorGroupId = $selectedCuratorGroupId ?? null;
 $selectedCuratorGroupId2 = $selectedCuratorGroupId2 ?? null;
+$selectedCuratorGroupId3 = $selectedCuratorGroupId3 ?? null;
 $selectedSpecialtyHeadId = $selectedSpecialtyHeadId ?? null;
 $showCuratorGroup = in_array('curator', $selectedRoles, true);
 $showSpecialtyHead = in_array('specialty_head', $selectedRoles, true);
@@ -31,19 +32,25 @@ $showSpecialtyHead = in_array('specialty_head', $selectedRoles, true);
 </div>
 
 <div class="form__group curator-group-field<?= $showCuratorGroup ? '' : ' curator-group-field--hidden' ?>" id="curator_group_field">
-    <label for="curator_group_id">Курируемая группа</label>
-    <p class="form__hint">Можно назначить до 2 групп. Группа, уже назначенная другому куратору, будет недоступна.</p>
+    <label for="curator_group_id">Курируемые группы</label>
+    <p class="form__hint">Можно назначить до 3 групп. Группа, уже назначенная другому куратору, будет недоступна.</p>
     <div class="form__row">
         <div class="form__group">
             <label for="curator_group_id" class="text-muted">Группа 1</label>
-            <select id="curator_group_id" name="curator_group_id" data-curator-group-primary>
+            <select id="curator_group_id" name="curator_group_id" data-curator-group-select>
                 <?= render_curator_group_options($selectedCuratorGroupId, $forCuratorUserId) ?>
             </select>
         </div>
         <div class="form__group">
             <label for="curator_group_id_2" class="text-muted">Группа 2</label>
-            <select id="curator_group_id_2" name="curator_group_id_2" data-curator-group-secondary>
-                <?= render_curator_group_options($selectedCuratorGroupId2, $forCuratorUserId, (int) $selectedCuratorGroupId) ?>
+            <select id="curator_group_id_2" name="curator_group_id_2" data-curator-group-select>
+                <?= render_curator_group_options($selectedCuratorGroupId2, $forCuratorUserId) ?>
+            </select>
+        </div>
+        <div class="form__group">
+            <label for="curator_group_id_3" class="text-muted">Группа 3</label>
+            <select id="curator_group_id_3" name="curator_group_id_3" data-curator-group-select>
+                <?= render_curator_group_options($selectedCuratorGroupId3, $forCuratorUserId) ?>
             </select>
         </div>
     </div>
@@ -74,35 +81,46 @@ $showSpecialtyHead = in_array('specialty_head', $selectedRoles, true);
         updateVisibility();
     }
 
-    function initCuratorGroupPair() {
-        var primary = document.querySelector('[data-curator-group-primary]');
-        var secondary = document.querySelector('[data-curator-group-secondary]');
-        if (!primary || !secondary) {
+    function initCuratorGroupSelects() {
+        var selects = Array.prototype.slice.call(
+            document.querySelectorAll('[data-curator-group-select]')
+        );
+        if (selects.length < 2) {
             return;
         }
 
-        function syncSecondary() {
-            var primaryValue = primary.value;
-            Array.prototype.forEach.call(secondary.options, function (option) {
-                if (option.value === '') {
-                    return;
+        function syncSelects() {
+            var taken = {};
+            selects.forEach(function (select) {
+                if (select.value !== '') {
+                    taken[select.value] = true;
                 }
-                var hide = option.value === primaryValue && primaryValue !== '';
-                option.hidden = hide;
-                option.disabled = hide;
-                if (hide && secondary.value === option.value) {
-                    secondary.value = '';
-                }
+            });
+
+            selects.forEach(function (select) {
+                Array.prototype.forEach.call(select.options, function (option) {
+                    if (option.value === '') {
+                        return;
+                    }
+                    var hide = taken[option.value] === true && select.value !== option.value;
+                    option.hidden = hide;
+                    option.disabled = hide;
+                    if (hide && select.value === option.value) {
+                        select.value = '';
+                    }
+                });
             });
         }
 
-        primary.addEventListener('change', syncSecondary);
-        syncSecondary();
+        selects.forEach(function (select) {
+            select.addEventListener('change', syncSelects);
+        });
+        syncSelects();
     }
 
     function initCuratorRoleFields() {
         initCuratorGroupToggle();
-        initCuratorGroupPair();
+        initCuratorGroupSelects();
     }
 
     function initSpecialtyHeadToggle() {

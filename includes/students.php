@@ -62,8 +62,8 @@ function assign_curator_groups(int $userId, array $groupIds): array
         static fn (int $id): bool => $id > 0
     )));
 
-    if (count($groupIds) > 2) {
-        return ['success' => false, 'error' => 'Куратору можно назначить не более 2 групп.'];
+    if (count($groupIds) > 3) {
+        return ['success' => false, 'error' => 'Куратору можно назначить не более 3 групп.'];
     }
 
     foreach ($groupIds as $groupId) {

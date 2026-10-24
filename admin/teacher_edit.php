@@ -78,7 +78,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 posted_curator_group_id(),
                 $_POST['phone'] ?? '',
                 posted_curator_group_id_2(),
-                posted_specialty_head_id()
+                posted_specialty_head_id(),
+                posted_curator_group_id_3()
             );
 
             if ($result['success']) {
@@ -211,6 +212,9 @@ $emailDisplay = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '
             $selectedCuratorGroupId2 = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save')
                 ? posted_curator_group_id_2()
                 : ($teacher['curator_group_id_2'] ?? null);
+            $selectedCuratorGroupId3 = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save')
+                ? posted_curator_group_id_3()
+                : ($teacher['curator_group_id_3'] ?? null);
             $selectedSpecialtyHeadId = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'save')
                 ? posted_specialty_head_id()
                 : ($teacher['specialty_head_id'] ?? null);

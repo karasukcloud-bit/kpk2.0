@@ -7,16 +7,32 @@ require_once __DIR__ . '/organization.php';
 require_once __DIR__ . '/students.php';
 
 /**
- * Рейтинг студентов по успеваемости за период (итоговые оценки из журнала).
+ * Рейтинг студентов по успеваемости за период.
+ * $source: journal | manual_brs
  *
  * @return array{
  *   items: list<array>,
  *   specialties: list<array>,
- *   groups: list<array>
+ *   groups: list<array>,
+ *   source: string
  * }
  */
-function build_student_performance_rating(string $academicYear, string $semester): array
-{
+function build_student_performance_rating(
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): array {
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    $useManualBrs = $source === 'manual_brs' && is_manual_brs_gradebook_active();
+    if ($useManualBrs) {
+        require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
+        require_once __DIR__ . '/../modules/manual_brs/includes/data.php';
+        require_once __DIR__ . '/../modules/manual_brs/includes/gradebook.php';
+        manual_brs_ensure_schema();
+    } else {
+        $source = 'journal';
+    }
+
     $groups = get_all_groups();
     $items = [];
     $specialtyMap = [];
@@ -50,7 +66,12 @@ function build_student_performance_rating(string $academicYear, string $semester
             continue;
         }
 
-        $grades = get_gradebook_grades_from_journal($groupId, $academicYear, $semester);
+        if ($useManualBrs) {
+            $batch = manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
+            $grades = manual_brs_get_gradebook_grades($groupId, $academicYear, $semester, $batch);
+        } else {
+            $grades = get_gradebook_grades_from_journal($groupId, $academicYear, $semester);
+        }
         $subjectCount = count($subjects);
 
         foreach ($students as $student) {
@@ -94,6 +115,11 @@ function build_student_performance_rating(string $academicYear, string $semester
     }
 
     usort($items, static function (array $a, array $b): int {
+        $aFail = (int) $a['min_grade'] <= 2 ? 1 : 0;
+        $bFail = (int) $b['min_grade'] <= 2 ? 1 : 0;
+        if ($aFail !== $bFail) {
+            return $aFail <=> $bFail;
+        }
         if ($a['average'] !== $b['average']) {
             return $b['average'] <=> $a['average'];
         }
@@ -114,6 +140,7 @@ function build_student_performance_rating(string $academicYear, string $semester
         'items' => $items,
         'specialties' => $specialties,
         'groups' => $groupList,
+        'source' => $source,
     ];
 }
 
@@ -150,14 +177,13 @@ function student_rating_category_label(string $category): string
 function assign_student_rating_places(array $items): array
 {
     $place = 0;
-    $index = 0;
     $prevKey = null;
 
     foreach ($items as &$item) {
-        $index++;
-        $key = $item['average'] . '|' . $item['grades_count'];
+        $hasTwo = (int) $item['min_grade'] <= 2 ? 1 : 0;
+        $key = $hasTwo . '|' . (float) $item['average'];
         if ($key !== $prevKey) {
-            $place = $index;
+            $place++;
             $prevKey = $key;
         }
         $item['place'] = $place;

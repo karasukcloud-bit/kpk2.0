@@ -37,6 +37,12 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'rating' ? ' admin-tabs__item--active' : '' ?>">
         Рейтинг студентов
     </a>
+    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
+    <a href="manual_brs_rating.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_rating' ? ' admin-tabs__item--active' : '' ?>">
+        Рейтинг Ручное БРС
+    </a>
+    <?php endif; ?>
     <a href="glaz.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'glaz' ? ' admin-tabs__item--active' : '' ?>">
         ГЛАЗ

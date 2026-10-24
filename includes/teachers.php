@@ -27,6 +27,7 @@ function get_all_teachers(): array
             : [];
         $teacher['curator_group_id'] = isset($curatorGroups[0]) ? (int) $curatorGroups[0]['id'] : null;
         $teacher['curator_group_id_2'] = isset($curatorGroups[1]) ? (int) $curatorGroups[1]['id'] : null;
+        $teacher['curator_group_id_3'] = isset($curatorGroups[2]) ? (int) $curatorGroups[2]['id'] : null;
         $teacher['curator_group_number'] = implode(', ', array_map(
             static fn (array $group): string => (string) $group['number'],
             $curatorGroups
@@ -103,6 +104,7 @@ function get_teacher_by_id(int $id): ?array
         : [];
     $teacher['curator_group_id'] = isset($curatorGroups[0]) ? (int) $curatorGroups[0]['id'] : null;
     $teacher['curator_group_id_2'] = isset($curatorGroups[1]) ? (int) $curatorGroups[1]['id'] : null;
+    $teacher['curator_group_id_3'] = isset($curatorGroups[2]) ? (int) $curatorGroups[2]['id'] : null;
     $teacher['curator_group_number'] = implode(', ', array_map(
         static fn (array $group): string => (string) $group['number'],
         $curatorGroups
@@ -126,7 +128,8 @@ function create_teacher(
     ?int $curatorGroupId = null,
     string $phone = '',
     ?int $curatorGroupId2 = null,
-    ?int $specialtyHeadId = null
+    ?int $specialtyHeadId = null,
+    ?int $curatorGroupId3 = null
 ): array {
     $rolesCheck = validate_staff_roles($staffRoles);
     if (!$rolesCheck['success']) {
@@ -146,7 +149,11 @@ function create_teacher(
 
     $userId = (int) $result['user_id'];
 
-    $groupResult = sync_curator_groups($userId, $staffRoles, curator_group_ids_from_values($curatorGroupId, $curatorGroupId2));
+    $groupResult = sync_curator_groups(
+        $userId,
+        $staffRoles,
+        curator_group_ids_from_values($curatorGroupId, $curatorGroupId2, $curatorGroupId3)
+    );
     if (!$groupResult['success']) {
         $stmt = db()->prepare("DELETE FROM users WHERE id = ? AND role = 'teacher'");
         $stmt->execute([$userId]);
@@ -174,7 +181,8 @@ function update_teacher(
     ?int $curatorGroupId = null,
     string $phone = '',
     ?int $curatorGroupId2 = null,
-    ?int $specialtyHeadId = null
+    ?int $specialtyHeadId = null,
+    ?int $curatorGroupId3 = null
 ): array {
     $teacher = get_teacher_by_id($id);
 
@@ -245,7 +253,11 @@ function update_teacher(
 
     set_user_staff_roles($id, $staffRoles);
 
-    $groupResult = sync_curator_groups($id, $staffRoles, curator_group_ids_from_values($curatorGroupId, $curatorGroupId2));
+    $groupResult = sync_curator_groups(
+        $id,
+        $staffRoles,
+        curator_group_ids_from_values($curatorGroupId, $curatorGroupId2, $curatorGroupId3)
+    );
     if (!$groupResult['success']) {
         return $groupResult;
     }
@@ -372,9 +384,20 @@ function posted_curator_group_id_2(): ?int
     return $value > 0 ? $value : null;
 }
 
+function posted_curator_group_id_3(): ?int
+{
+    $value = (int) ($_POST['curator_group_id_3'] ?? 0);
+
+    return $value > 0 ? $value : null;
+}
+
 function posted_curator_group_ids(): array
 {
-    return curator_group_ids_from_values(posted_curator_group_id(), posted_curator_group_id_2());
+    return curator_group_ids_from_values(
+        posted_curator_group_id(),
+        posted_curator_group_id_2(),
+        posted_curator_group_id_3()
+    );
 }
 
 function posted_specialty_head_id(): ?int
@@ -384,14 +407,13 @@ function posted_specialty_head_id(): ?int
     return $value > 0 ? $value : null;
 }
 
-function curator_group_ids_from_values(?int $groupId, ?int $groupId2 = null): array
+function curator_group_ids_from_values(?int ...$groupIds): array
 {
     $ids = [];
-    if ($groupId !== null && $groupId > 0) {
-        $ids[] = $groupId;
-    }
-    if ($groupId2 !== null && $groupId2 > 0 && $groupId2 !== ($ids[0] ?? null)) {
-        $ids[] = $groupId2;
+    foreach ($groupIds as $groupId) {
+        if ($groupId !== null && $groupId > 0 && !in_array($groupId, $ids, true)) {
+            $ids[] = $groupId;
+        }
     }
 
     return $ids;
