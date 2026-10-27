@@ -546,6 +546,7 @@ function ensure_notifications_schema(PDO $pdo): void
                 title             VARCHAR(255) NOT NULL,
                 body              TEXT NOT NULL,
                 recipient_id      INT UNSIGNED NULL,
+                audience          VARCHAR(64) NULL DEFAULT NULL,
                 created_at        DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 KEY idx_notifications_recipient (recipient_id, created_at),
                 KEY idx_notifications_type (notification_type, created_at),
@@ -577,6 +578,14 @@ function ensure_notifications_schema(PDO $pdo): void
                     ON DELETE CASCADE
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
         ");
+    }
+
+    $audienceCol = $pdo->query("SHOW COLUMNS FROM notifications LIKE 'audience'")->fetch();
+    if (!$audienceCol) {
+        $pdo->exec(
+            "ALTER TABLE notifications
+             ADD audience VARCHAR(64) NULL DEFAULT NULL AFTER recipient_id"
+        );
     }
 }
 

@@ -118,6 +118,9 @@ require __DIR__ . '/includes/header.php';
                                 <?php if (!empty($selected['sender_name'])): ?>
                                     · <?= e($selected['sender_name']) ?>
                                 <?php endif; ?>
+                                <?php if ($selected['notification_type'] === 'announcement'): ?>
+                                    · <?= e(notification_audience_label($selected['audience'] ?? null)) ?>
+                                <?php endif; ?>
                             </p>
                         </div>
                         <div class="notifications-detail__body"><?= nl2br(e($selected['body'])) ?></div>

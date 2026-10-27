@@ -52,6 +52,8 @@ function activity_log_action_options(): array
         'journal.lesson_update' => 'Изменение даты в журнале',
         'journal.lesson_delete' => 'Удаление даты из журнала',
         'journal.grade_save' => 'Изменение оценки в журнале',
+        'manual_brs.entry_save' => 'Изменение оценки в ручном БРС',
+        'manual_brs.pa_save' => 'Изменение ПА в ручном БРС',
     ];
 }
 
@@ -196,11 +198,20 @@ function activity_log_format_details(array $log): string
     }
 
     $parts = [];
+    if (!empty($details['module'])) {
+        $parts[] = (string) $details['module'];
+    }
     if (!empty($details['group_number'])) {
         $parts[] = 'группа ' . $details['group_number'];
     }
     if (!empty($details['subject_name'])) {
         $parts[] = 'предмет «' . $details['subject_name'] . '»';
+    }
+    if (!empty($details['academic_year'])) {
+        $parts[] = 'год ' . $details['academic_year'];
+    }
+    if (!empty($details['period_label'])) {
+        $parts[] = (string) $details['period_label'];
     }
     if (!empty($details['student_name'])) {
         $parts[] = 'студент ' . $details['student_name'];
@@ -220,6 +231,38 @@ function activity_log_format_details(array $log): string
             $parts[] = 'оценка ' . $new;
         }
     }
+    if (array_key_exists('points', $details) || array_key_exists('old_points', $details)) {
+        $oldPoints = activity_log_format_optional_number($details['old_points'] ?? null);
+        $newPoints = activity_log_format_optional_number($details['points'] ?? null);
+        if ($oldPoints !== $newPoints) {
+            $parts[] = 'баллы ' . $oldPoints . ' → ' . $newPoints;
+        } elseif ($newPoints !== '—') {
+            $parts[] = 'баллы ' . $newPoints;
+        }
+    }
+    if (array_key_exists('pa_grade', $details) || array_key_exists('old_pa_grade', $details)) {
+        $oldPa = activity_log_format_optional_scalar($details['old_pa_grade'] ?? null);
+        $newPa = activity_log_format_optional_scalar($details['pa_grade'] ?? null);
+        if ($oldPa !== $newPa) {
+            $parts[] = 'ПА ' . $oldPa . ' → ' . $newPa;
+        } else {
+            $parts[] = 'ПА ' . $newPa;
+        }
+    }
+    if (array_key_exists('current_marks', $details) || array_key_exists('old_current_marks', $details)) {
+        $oldMarks = activity_log_format_optional_scalar($details['old_current_marks'] ?? null);
+        $newMarks = activity_log_format_optional_scalar($details['current_marks'] ?? null);
+        if ($oldMarks !== $newMarks) {
+            $parts[] = 'текущие ' . $oldMarks . ' → ' . $newMarks;
+        }
+    }
+    if (array_key_exists('control_marks', $details) || array_key_exists('old_control_marks', $details)) {
+        $oldMarks = activity_log_format_optional_scalar($details['old_control_marks'] ?? null);
+        $newMarks = activity_log_format_optional_scalar($details['control_marks'] ?? null);
+        if ($oldMarks !== $newMarks) {
+            $parts[] = 'контрольные ' . $oldMarks . ' → ' . $newMarks;
+        }
+    }
     if (!empty($details['topic_title'])) {
         $parts[] = 'тема «' . $details['topic_title'] . '»';
     }
@@ -228,6 +271,30 @@ function activity_log_format_details(array $log): string
     }
 
     return $parts !== [] ? implode(', ', $parts) : '—';
+}
+
+function activity_log_format_optional_scalar(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return '—';
+    }
+
+    return (string) $value;
+}
+
+function activity_log_format_optional_number(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return '—';
+    }
+    if (is_numeric($value)) {
+        $number = (float) $value;
+        $formatted = rtrim(rtrim(number_format($number, 1, '.', ''), '0'), '.');
+
+        return $formatted === '' ? '0' : $formatted;
+    }
+
+    return (string) $value;
 }
 
 function search_activity_logs(array $filters): array
@@ -380,6 +447,145 @@ function activity_log_journal_grade(
         'journal_grade',
         (int) $lesson['id'],
         (int) $lesson['group_id'],
+        $details
+    );
+}
+
+/**
+ * Лог сохранения строки ручного БРС.
+ *
+ * @param array<string, mixed> $sheet
+ * @param array<string, mixed> $student
+ * @param array<string, mixed>|null $oldEntry
+ * @param array<string, mixed> $calc
+ */
+function activity_log_manual_brs_entry(
+    array $sheet,
+    array $student,
+    ?array $oldEntry,
+    array $calc,
+    ?int $entryId = null
+): void {
+    require_once __DIR__ . '/../modules/manual_brs/includes/periods.php';
+    require_once __DIR__ . '/../modules/manual_brs/includes/calculate.php';
+
+    $itemId = (int) ($sheet['curriculum_item_id'] ?? 0);
+    $ctx = activity_log_journal_context($itemId);
+    $periodMeta = manual_brs_period_meta((int) ($sheet['period'] ?? 1));
+
+    $oldPoints = $oldEntry !== null && $oldEntry['points'] !== null
+        ? round((float) $oldEntry['points'], 1)
+        : null;
+    $newPoints = isset($calc['points']) && $calc['points'] !== null
+        ? round((float) $calc['points'], 1)
+        : null;
+    $oldGrade = $oldEntry !== null && $oldEntry['grade'] !== null
+        ? (string) (int) $oldEntry['grade']
+        : '—';
+    $newGrade = isset($calc['grade']) && $calc['grade'] !== null
+        ? (string) (int) $calc['grade']
+        : '—';
+
+    $oldCurrent = $oldEntry
+        ? manual_brs_marks_to_input(manual_brs_parse_marks((string) ($oldEntry['current_marks'] ?? '')))
+        : '';
+    $newCurrent = manual_brs_marks_to_input($calc['current_marks'] ?? []);
+    $oldControl = $oldEntry
+        ? manual_brs_marks_to_input(manual_brs_parse_marks((string) ($oldEntry['control_marks'] ?? '')))
+        : '';
+    $newControl = manual_brs_marks_to_input($calc['control_marks'] ?? []);
+
+    $oldAbsent = $oldEntry ? (int) ($oldEntry['absent_count'] ?? 0) : 0;
+    $newAbsent = (int) ($calc['absent_count'] ?? 0);
+    $oldLate = $oldEntry ? (int) ($oldEntry['late_count'] ?? 0) : 0;
+    $newLate = (int) ($calc['late_count'] ?? 0);
+    $oldActivity = $oldEntry ? (int) ($oldEntry['activity_count'] ?? 0) : 0;
+    $newActivity = (int) ($calc['activity_count'] ?? 0);
+
+    $changed = $oldPoints !== $newPoints
+        || $oldGrade !== $newGrade
+        || $oldCurrent !== $newCurrent
+        || $oldControl !== $newControl
+        || $oldAbsent !== $newAbsent
+        || $oldLate !== $newLate
+        || $oldActivity !== $newActivity;
+
+    if (!$changed) {
+        return;
+    }
+
+    $extraParts = [];
+    if ($oldAbsent !== $newAbsent) {
+        $extraParts[] = 'Н ' . $oldAbsent . '→' . $newAbsent;
+    }
+    if ($oldLate !== $newLate) {
+        $extraParts[] = 'опоз. ' . $oldLate . '→' . $newLate;
+    }
+    if ($oldActivity !== $newActivity) {
+        $extraParts[] = 'актив. ' . $oldActivity . '→' . $newActivity;
+    }
+
+    $details = array_merge($ctx, [
+        'module' => 'Ручное БРС',
+        'period_label' => (string) ($periodMeta['label'] ?? ''),
+        'academic_year' => (string) ($sheet['academic_year'] ?? ($ctx['academic_year'] ?? '')),
+        'student_name' => person_last_first_name((string) ($student['full_name'] ?? '')),
+        'old_mark' => $oldGrade,
+        'mark' => $newGrade,
+        'old_points' => $oldPoints,
+        'points' => $newPoints,
+        'old_current_marks' => $oldCurrent !== '' ? $oldCurrent : null,
+        'current_marks' => $newCurrent !== '' ? $newCurrent : null,
+        'old_control_marks' => $oldControl !== '' ? $oldControl : null,
+        'control_marks' => $newControl !== '' ? $newControl : null,
+    ]);
+    if ($extraParts !== []) {
+        $details['extra'] = implode(', ', $extraParts);
+    }
+
+    log_activity(
+        'manual_brs.entry_save',
+        'manual_brs_entry',
+        $entryId,
+        (int) ($sheet['group_id'] ?? ($ctx['group_id'] ?? 0)) ?: null,
+        $details
+    );
+}
+
+/**
+ * Лог изменения ПА ручного БРС.
+ *
+ * @param array<string, mixed> $student
+ */
+function activity_log_manual_brs_pa(
+    string $academicYear,
+    string $semester,
+    int $curriculumItemId,
+    array $student,
+    ?int $oldGrade,
+    ?int $newGrade
+): void {
+    if ($oldGrade === $newGrade) {
+        return;
+    }
+
+    $ctx = activity_log_journal_context($curriculumItemId);
+    $details = array_merge($ctx, [
+        'module' => 'Ручное БРС',
+        'period_label' => $semester === '2' ? '2 семестр' : '1 семестр',
+        'academic_year' => $academicYear,
+        'student_name' => person_last_first_name((string) ($student['full_name'] ?? '')),
+        'old_pa_grade' => $oldGrade,
+        'pa_grade' => $newGrade,
+        'old_mark' => $oldGrade !== null ? (string) $oldGrade : '—',
+        'mark' => $newGrade !== null ? (string) $newGrade : '—',
+    ]);
+
+    log_activity(
+        'manual_brs.pa_save',
+        'manual_brs_pa',
+        $curriculumItemId,
+        (int) ($student['group_id'] ?? ($ctx['group_id'] ?? 0)) ?: null,
         $details
     );
 }

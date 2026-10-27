@@ -17,6 +17,10 @@ $currentEducatorTab = $currentEducatorTab ?? 'summary';
        class="admin-tabs__item<?= $currentEducatorTab === 'daily_attendance' ? ' admin-tabs__item--active' : '' ?>">
         Пропуски по дням
     </a>
+    <a href="all_students.php"
+       class="admin-tabs__item<?= $currentEducatorTab === 'all_students' ? ' admin-tabs__item--active' : '' ?>">
+        Студенты
+    </a>
     <a href="students.php"
        class="admin-tabs__item<?= $currentEducatorTab === 'students' ? ' admin-tabs__item--active' : '' ?>">
         Информация по студентам

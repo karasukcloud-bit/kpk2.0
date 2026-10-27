@@ -34,10 +34,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'send_announcement' && $allowAnnouncements) {
             $result = send_announcement(
                 (string) ($_POST['title'] ?? ''),
-                (string) ($_POST['body'] ?? '')
+                (string) ($_POST['body'] ?? ''),
+                $_POST['audience'] ?? []
             );
             if ($result['success']) {
-                flash_set('success', 'Общее оповещение отправлено.');
+                flash_set('success', 'Оповещение отправлено выбранным получателям.');
                 header('Location: notifications.php');
                 exit;
             }
@@ -137,22 +138,50 @@ require __DIR__ . '/../header.php';
     </section>
 
     <?php if ($allowAnnouncements): ?>
+    <?php
+    $postedAudience = $_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'send_announcement')
+        ? normalize_notification_audience($_POST['audience'] ?? [])
+        : [];
+    ?>
     <section class="panel">
-        <h2>Общее оповещение</h2>
-        <p class="text-muted">Сообщение увидят все пользователи системы (преподаватели, кураторы, студенты и т.д.).</p>
+        <h2>Групповое оповещение</h2>
+        <p class="text-muted">Выберите, кому отправить уведомление: кураторам, преподавателям и/или студентам.</p>
         <form method="post" class="form form--medium">
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="send_announcement">
             <div class="form__group">
+                <span class="form__label">Получатели</span>
+                <div class="role-checkboxes">
+                    <?php foreach (notification_audience_options() as $audienceKey => $audienceLabel): ?>
+                    <label class="checkbox-label role-checkboxes__item">
+                        <input
+                            type="checkbox"
+                            name="audience[]"
+                            value="<?= e($audienceKey) ?>"
+                            <?= in_array($audienceKey, $postedAudience, true) ? 'checked' : '' ?>
+                        >
+                        <?= e($audienceLabel) ?>
+                    </label>
+                    <?php endforeach; ?>
+                </div>
+            </div>
+            <div class="form__group">
                 <label for="announce_title">Тема</label>
-                <input type="text" id="announce_title" name="title" required maxlength="255">
+                <input
+                    type="text"
+                    id="announce_title"
+                    name="title"
+                    required
+                    maxlength="255"
+                    value="<?= e((string) (($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'send_announcement')) ? ($_POST['title'] ?? '') : '')) ?>"
+                >
             </div>
             <div class="form__group">
                 <label for="announce_body">Текст оповещения</label>
-                <textarea id="announce_body" name="body" rows="5" required></textarea>
+                <textarea id="announce_body" name="body" rows="5" required><?= e((string) (($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') === 'send_announcement')) ? ($_POST['body'] ?? '') : '')) ?></textarea>
             </div>
             <div class="form__actions">
-                <button type="submit" class="btn btn--primary">Опубликовать</button>
+                <button type="submit" class="btn btn--primary">Отправить</button>
             </div>
         </form>
     </section>

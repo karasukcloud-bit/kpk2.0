@@ -379,11 +379,21 @@ function manual_brs_save_entry(
         ]);
     }
 
+    $savedEntry = manual_brs_get_entry($sheetId, $studentId);
+    require_once __DIR__ . '/../../../includes/activity_log.php';
+    activity_log_manual_brs_entry(
+        $sheet,
+        $student,
+        $existing,
+        $calc,
+        $savedEntry ? (int) $savedEntry['id'] : null
+    );
+
     return [
         'success' => true,
         'calc' => $calc,
         'stages' => $stages,
-        'entry' => manual_brs_get_entry($sheetId, $studentId),
+        'entry' => $savedEntry,
     ];
 }
 
@@ -669,6 +679,7 @@ function manual_brs_save_attestation(
     require_once __DIR__ . '/../../../includes/curriculum_composites.php';
     $item = get_curriculum_item_by_id($curriculumItemId);
     $isChildPart = $item !== null && (int) ($item['parent_item_id'] ?? 0) > 0;
+    $oldGrade = manual_brs_get_attestation($academicYear, $semester, $curriculumItemId, $studentId);
 
     if ($grade === null || $grade === '') {
         // Для раздела ПА не хранится — очищение не ошибка.
@@ -681,6 +692,16 @@ function manual_brs_save_attestation(
                AND curriculum_item_id = ? AND student_id = ?'
         );
         $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId]);
+
+        require_once __DIR__ . '/../../../includes/activity_log.php';
+        activity_log_manual_brs_pa(
+            $academicYear,
+            $semester,
+            $curriculumItemId,
+            $student,
+            $oldGrade,
+            null
+        );
 
         return ['success' => true, 'grade' => null];
     }
@@ -704,6 +725,16 @@ function manual_brs_save_attestation(
          ON DUPLICATE KEY UPDATE grade = VALUES(grade)'
     );
     $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId, $grade]);
+
+    require_once __DIR__ . '/../../../includes/activity_log.php';
+    activity_log_manual_brs_pa(
+        $academicYear,
+        $semester,
+        $curriculumItemId,
+        $student,
+        $oldGrade,
+        $grade
+    );
 
     return ['success' => true, 'grade' => $grade];
 }
