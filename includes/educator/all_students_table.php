@@ -15,6 +15,14 @@ $studentListColumns = [
     ['key' => 'phone', 'label' => 'Телефон', 'default' => false],
     ['key' => 'birth_date', 'label' => 'Дата рождения', 'default' => false],
     ['key' => 'gender', 'label' => 'Пол', 'default' => false],
+    ['key' => 'mother_name', 'label' => student_parent_field_label('mother', 'name'), 'default' => false],
+    ['key' => 'mother_phone', 'label' => student_parent_field_label('mother', 'phone'), 'default' => false],
+    ['key' => 'mother_workplace', 'label' => student_parent_field_label('mother', 'workplace'), 'default' => false],
+    ['key' => 'mother_education', 'label' => student_parent_field_label('mother', 'education'), 'default' => false],
+    ['key' => 'father_name', 'label' => student_parent_field_label('father', 'name'), 'default' => false],
+    ['key' => 'father_phone', 'label' => student_parent_field_label('father', 'phone'), 'default' => false],
+    ['key' => 'father_workplace', 'label' => student_parent_field_label('father', 'workplace'), 'default' => false],
+    ['key' => 'father_education', 'label' => student_parent_field_label('father', 'education'), 'default' => false],
     ['key' => 'residence_type', 'label' => 'Проживание', 'default' => false],
     ['key' => 'is_nonresident', 'label' => 'Иногородний', 'default' => false],
     ['key' => 'is_low_income', 'label' => 'Малообеспеченная', 'default' => false],
@@ -36,6 +44,22 @@ $renderStudentListCell = static function (array $student, string $key): string {
             return format_student_birth_date(isset($student['birth_date']) ? (string) $student['birth_date'] : null);
         case 'gender':
             return student_gender_label(isset($student['gender']) ? (string) $student['gender'] : null);
+        case 'mother_name':
+            return (string) (($student['mother_name'] ?? '') !== '' ? $student['mother_name'] : '—');
+        case 'mother_phone':
+            return (string) (($student['mother_phone'] ?? '') !== '' ? $student['mother_phone'] : '—');
+        case 'mother_workplace':
+            return (string) (($student['mother_workplace'] ?? '') !== '' ? $student['mother_workplace'] : '—');
+        case 'mother_education':
+            return student_education_label(isset($student['mother_education']) ? (string) $student['mother_education'] : null);
+        case 'father_name':
+            return (string) (($student['father_name'] ?? '') !== '' ? $student['father_name'] : '—');
+        case 'father_phone':
+            return (string) (($student['father_phone'] ?? '') !== '' ? $student['father_phone'] : '—');
+        case 'father_workplace':
+            return (string) (($student['father_workplace'] ?? '') !== '' ? $student['father_workplace'] : '—');
+        case 'father_education':
+            return student_education_label(isset($student['father_education']) ? (string) $student['father_education'] : null);
         case 'residence_type':
             return student_residence_type_label(isset($student['residence_type']) ? (string) $student['residence_type'] : null);
         case 'is_nonresident':

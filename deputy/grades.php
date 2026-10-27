@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/organization.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/gradebook.php';
+require_once __DIR__ . '/../includes/gradebook_composites.php';
 
 require_login();
 if (!can_use_deputy_panel()) {
@@ -71,6 +72,12 @@ require __DIR__ . '/../includes/header.php';
                         $groupId = (int) $group['id'];
                         $status = get_gradebook_completion_status($groupId, $year, $semester);
                         $studentCount = $status['students'];
+                        $incompleteSections = group_has_incomplete_composite_sections(
+                            $groupId,
+                            $year,
+                            $semester,
+                            'journal'
+                        );
                         ?>
                         <tr>
                             <td><?= $index + 1 ?></td>
@@ -88,6 +95,9 @@ require __DIR__ . '/../includes/header.php';
                                     <span class="text-muted gradebook-status-count">
                                         <?= (int) $status['filled'] ?>/<?= (int) $status['expected'] ?>
                                     </span>
+                                <?php endif; ?>
+                                <?php if ($incompleteSections): ?>
+                                    <span class="badge badge--gradebook-sections">Есть незаполненные разделы</span>
                                 <?php endif; ?>
                             </td>
                             <td class="table__actions">

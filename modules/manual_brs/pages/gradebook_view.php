@@ -12,6 +12,8 @@ require_once __DIR__ . '/../../../includes/organization.php';
 require_once __DIR__ . '/../../../includes/students.php';
 require_once __DIR__ . '/../../../includes/gradebook.php';
 require_once __DIR__ . '/../../../includes/curriculum.php';
+require_once __DIR__ . '/../../../includes/gradebook_composites.php';
+require_once __DIR__ . '/../../../includes/gradebook_composite_ui.php';
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 
@@ -74,6 +76,7 @@ if ($manualBrsPanel === 'curator') {
 $isControlWeek = false;
 $sheetTitle = '';
 $orgName = '';
+$compositeMap = [];
 
 if ($group !== null) {
     $students = get_students_by_group($groupId);
@@ -87,6 +90,13 @@ if ($group !== null) {
         $students,
         $subjects,
         $grades
+    );
+    $compositeMap = build_gradebook_composite_fill_map(
+        $students,
+        $subjects,
+        $year,
+        $semester,
+        'manual_brs'
     );
     $sheetTitle = manual_brs_gradebook_title((string) $group['number'], $semester, $year);
     $isControlWeek = $subjects !== []
@@ -177,6 +187,12 @@ require __DIR__ . '/../../../includes/header.php';
                                     'manual_brs'
                                 );
                                 $studentCount = (int) ($status['students'] ?? 0);
+                                $incompleteSections = group_has_incomplete_composite_sections(
+                                    $gId,
+                                    $year,
+                                    $semester,
+                                    'manual_brs'
+                                );
                                 ?>
                                 <tr>
                                     <td><?= $index + 1 ?></td>
@@ -199,6 +215,9 @@ require __DIR__ . '/../../../includes/header.php';
                                             <span class="text-muted gradebook-status-count">
                                                 <?= (int) $status['filled'] ?>/<?= (int) $status['expected'] ?>
                                             </span>
+                                        <?php endif; ?>
+                                        <?php if ($incompleteSections): ?>
+                                            <span class="badge badge--gradebook-sections">Есть незаполненные разделы</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="table__actions">
@@ -292,9 +311,7 @@ require __DIR__ . '/../../../includes/header.php';
                             <tr>
                                 <th class="gradebook-table__student-col">Студенты</th>
                                 <?php foreach ($subjects as $subject): ?>
-                                <th class="gradebook-table__subject-col">
-                                    <span class="gradebook-subject-title"><?= e($subject['subject_name']) ?></span>
-                                </th>
+                                <?php render_gradebook_subject_header($subject, $compositeMap); ?>
                                 <?php endforeach; ?>
                             </tr>
                         </thead>
@@ -333,7 +350,9 @@ require __DIR__ . '/../../../includes/header.php';
 
                 <p class="text-muted table-hint manual-brs-no-print">
                     Источник: модуль «Ручное БРС». Обычная электронная ведомость и журнал не изменяются.
+                    У составных дисциплин в шапке — заполненность разделов и ПА; нажмите на столбец для расшифровки.
                 </p>
+                <?php render_gradebook_composite_modals($compositeMap); ?>
 
                 <div class="gradebook-lists">
                     <h2>Списки студентов</h2>

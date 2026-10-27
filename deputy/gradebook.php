@@ -7,6 +7,8 @@ require_once __DIR__ . '/../includes/organization.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 require_once __DIR__ . '/../includes/grading.php';
+require_once __DIR__ . '/../includes/gradebook_composites.php';
+require_once __DIR__ . '/../includes/gradebook_composite_ui.php';
 
 require_login();
 if (!can_use_deputy_panel()) {
@@ -31,6 +33,13 @@ $subjects = get_group_curriculum_subjects($groupId, $year, $semester);
 $grades = get_gradebook_grades_from_journal($groupId, $year, $semester);
 $summary = build_gradebook_summary($students, $subjects, $grades);
 $studentLists = build_gradebook_student_lists($students, $subjects, $grades);
+$compositeMap = build_gradebook_composite_fill_map(
+    $students,
+    $subjects,
+    $year,
+    $semester,
+    'journal'
+);
 $gradingConfig = get_grading_config();
 $periodHint = gradebook_period_mismatch_hint($period);
 
@@ -78,9 +87,7 @@ require __DIR__ . '/../includes/header.php';
                         <tr>
                             <th class="gradebook-table__student-col">Студенты</th>
                             <?php foreach ($subjects as $subject): ?>
-                            <th class="gradebook-table__subject-col">
-                                <span class="gradebook-subject-title"><?= e($subject['subject_name']) ?></span>
-                            </th>
+                            <?php render_gradebook_subject_header($subject, $compositeMap); ?>
                             <?php endforeach; ?>
                         </tr>
                     </thead>
@@ -110,7 +117,9 @@ require __DIR__ . '/../includes/header.php';
                 Оценки подставляются автоматически из итогов электронного журнала
                 (<?= $gradingConfig['system'] === 'brs' ? 'БРС' : 'средний балл' ?>)
                 и не редактируются.
+                У составных дисциплин (БВС, МДК) в шапке — заполненность разделов и ПА; нажмите на столбец, чтобы открыть расшифровку.
             </p>
+            <?php render_gradebook_composite_modals($compositeMap); ?>
 
             <div class="gradebook-lists">
                 <h2>Списки студентов</h2>
