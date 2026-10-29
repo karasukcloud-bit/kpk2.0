@@ -7,7 +7,7 @@ declare(strict_types=1);
  * При переносе на сервер измените эти значения.
  */
 return [
-    'host'     => 'localhost',
+    'host'     => '127.0.1.30',
     'dbname'   => 'spo_progress',
     'charset'  => 'utf8mb4',
     'username' => 'root',

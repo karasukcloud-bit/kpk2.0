@@ -15,6 +15,7 @@ if (!can_use_deputy_panel()) {
 
 $summarySource = 'journal';
 $summaryGradebookHref = 'gradebook.php';
+$summarySelfUrl = 'summary.php';
 $summaryPanelLead = 'Сводная ведомость по всем группам';
 $summaryHeading = 'Сводная ведомость';
 $summarySourceLabel = 'Оценки из электронного журнала.';

@@ -54,6 +54,7 @@ function activity_log_action_options(): array
         'journal.grade_save' => 'Изменение оценки в журнале',
         'manual_brs.entry_save' => 'Изменение оценки в ручном БРС',
         'manual_brs.pa_save' => 'Изменение ПА в ручном БРС',
+        'archive.import_json' => 'Импорт архивных ведомостей (JSON)',
     ];
 }
 

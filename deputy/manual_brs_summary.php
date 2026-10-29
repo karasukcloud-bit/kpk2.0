@@ -20,6 +20,7 @@ if (!is_manual_brs_gradebook_active()) {
 
 $summarySource = 'manual_brs';
 $summaryGradebookHref = 'manual_brs_gradebook.php';
+$summarySelfUrl = 'manual_brs_summary.php';
 $summaryPanelLead = 'Сводные ведомости Ручное БРС';
 $summaryHeading = 'Сводные ведомости Ручное БРС';
 $summarySourceLabel = 'Оценки из временного модуля «Ручное БРС».';

@@ -135,6 +135,53 @@ require __DIR__ . '/../header.php';
         <div class="alert alert--error"><?= e($error) ?></div>
     <?php endif; ?>
 
+    <section class="panel" data-archive-json-import data-import-url="archive_import_json.php" data-csrf="<?= e(csrf_token()) ?>">
+        <h2>Импорт ведомостей из JSON</h2>
+        <p class="text-muted">
+            Выберите один или несколько файлов ведомостей (.json). Сначала рекомендуется
+            «Проверить» (без записи), затем «Импортировать». Год и семестр берутся из файла.
+            Для прошлых учебных лет карточки не попадают в текущий состав группы (выпускники).
+            Большие наборы файлов отправляются пакетами автоматически.
+        </p>
+        <div class="form form--medium">
+            <div class="form__group">
+                <label for="archive_json_files">Файлы JSON</label>
+                <input
+                    type="file"
+                    id="archive_json_files"
+                    name="files[]"
+                    accept=".json,application/json"
+                    multiple
+                    data-archive-json-files
+                >
+            </div>
+            <div class="form__group form__group--checkbox">
+                <label class="checkbox-label">
+                    <input type="checkbox" data-archive-json-allow-create value="1">
+                    Создавать отсутствующих студентов (на проде только если dry-run показал MISSING)
+                </label>
+            </div>
+            <div class="form__actions">
+                <button type="button" class="btn btn--ghost" data-archive-json-dry>Проверить</button>
+                <button type="button" class="btn btn--primary" data-archive-json-run>Импортировать</button>
+            </div>
+            <p class="text-muted" data-archive-json-status hidden></p>
+            <div class="table-wrap" data-archive-json-result hidden>
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Файл / группа</th>
+                            <th>Статус</th>
+                            <th>Оценок</th>
+                            <th>Замечания</th>
+                        </tr>
+                    </thead>
+                    <tbody data-archive-json-tbody></tbody>
+                </table>
+            </div>
+        </div>
+    </section>
+
     <section class="panel">
         <h2>Архивация текущего периода</h2>
         <p class="text-muted">
@@ -360,5 +407,174 @@ require __DIR__ . '/../header.php';
     </div>
 </div>
 <?php endif; ?>
+
+<script>
+(function () {
+    const root = document.querySelector('[data-archive-json-import]');
+    if (!root) return;
+
+    const filesInput = root.querySelector('[data-archive-json-files]');
+    const allowCreate = root.querySelector('[data-archive-json-allow-create]');
+    const statusEl = root.querySelector('[data-archive-json-status]');
+    const resultWrap = root.querySelector('[data-archive-json-result]');
+    const tbody = root.querySelector('[data-archive-json-tbody]');
+    const dryBtn = root.querySelector('[data-archive-json-dry]');
+    const runBtn = root.querySelector('[data-archive-json-run]');
+    const importUrl = root.dataset.importUrl || 'archive_import_json.php';
+    const csrf = root.dataset.csrf || '';
+    const BATCH_SIZE = 15; // PHP max_file_uploads обычно 20
+
+    function setBusy(busy) {
+        dryBtn.disabled = busy;
+        runBtn.disabled = busy;
+        filesInput.disabled = busy;
+    }
+
+    function showStatus(text, isError) {
+        statusEl.hidden = false;
+        statusEl.textContent = text;
+        statusEl.classList.toggle('alert', true);
+        statusEl.classList.toggle('alert--error', !!isError);
+        statusEl.classList.toggle('alert--success', !isError);
+        statusEl.classList.toggle('text-muted', false);
+    }
+
+    function escapeHtml(value) {
+        return String(value).replace(/</g, '&lt;').replace(/&/g, '&amp;');
+    }
+
+    function appendResultRows(rows, dryRun) {
+        rows.forEach(function (row) {
+            const tr = document.createElement('tr');
+            const title = row.label ? (row.file + ' → ' + row.label) : row.file;
+            let note = '';
+            if (!row.ok) {
+                note = row.error || 'Ошибка';
+            } else {
+                const missing = row.students
+                    ? row.students.filter(function (s) {
+                        return String(s.flag).indexOf('MISSING') === 0;
+                    }).map(function (s) { return s.name; })
+                    : [];
+                const parts = [];
+                if (row.historical) parts.push('исторический период');
+                if (row.missing > 0) {
+                    parts.push(
+                        'нет в системе: ' + missing.slice(0, 5).join(', ')
+                        + (missing.length > 5 ? '…' : '')
+                    );
+                }
+                if (parts.length === 0) parts.push('ок');
+                note = parts.join('; ');
+            }
+            tr.innerHTML =
+                '<td>' + escapeHtml(title) + '</td>' +
+                '<td>' + (row.ok ? (dryRun ? 'Проверка' : 'Импорт') : 'Ошибка') + '</td>' +
+                '<td>' + (row.ok ? String(row.grades != null ? row.grades : '—') : '—') + '</td>' +
+                '<td>' + escapeHtml(note) + '</td>';
+            if (!row.ok || (row.missing > 0)) tr.classList.add('table__row--warn');
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function postBatch(fileBatch, dryRun) {
+        const formData = new FormData();
+        formData.append('csrf_token', csrf);
+        formData.append('dry_run', dryRun ? '1' : '0');
+        if (allowCreate.checked) formData.append('allow_create', '1');
+        fileBatch.forEach(function (file) { formData.append('files[]', file); });
+
+        const response = await fetch(importUrl, {
+            method: 'POST',
+            body: formData,
+            credentials: 'same-origin'
+        });
+        const raw = await response.text();
+        let data;
+        try {
+            data = JSON.parse(raw);
+        } catch (e) {
+            throw new Error(
+                'Сервер вернул не JSON (HTTP ' + response.status + '). '
+                + 'Частая причина: слишком много файлов за раз или лимит PHP. '
+                + raw.trim().slice(0, 180)
+            );
+        }
+        if (!response.ok && !data.results) {
+            throw new Error(data.error || ('Ошибка запроса (HTTP ' + response.status + ')'));
+        }
+        return data;
+    }
+
+    async function runImport(dryRun) {
+        if (!filesInput.files || filesInput.files.length === 0) {
+            showStatus('Выберите хотя бы один JSON-файл.', true);
+            return;
+        }
+        const allFiles = Array.from(filesInput.files);
+        if (!dryRun) {
+            const ok = window.confirm(
+                'Импортировать ' + allFiles.length + ' файл(ов) в архив ведомостей?'
+            );
+            if (!ok) return;
+        }
+
+        setBusy(true);
+        resultWrap.hidden = true;
+        tbody.innerHTML = '';
+
+        const batches = [];
+        for (let i = 0; i < allFiles.length; i += BATCH_SIZE) {
+            batches.push(allFiles.slice(i, i + BATCH_SIZE));
+        }
+
+        let failed = 0;
+        let processed = 0;
+        try {
+            for (let b = 0; b < batches.length; b++) {
+                showStatus(
+                    (dryRun ? 'Проверка' : 'Импорт')
+                    + '… пакет ' + (b + 1) + '/' + batches.length
+                    + ' (' + processed + '/' + allFiles.length + ' файлов)',
+                    false
+                );
+                const data = await postBatch(batches[b], dryRun);
+                const rows = data.results || [];
+                appendResultRows(rows, !!data.dry_run);
+                failed += Number(data.failed || 0);
+                processed += batches[b].length;
+                resultWrap.hidden = tbody.children.length === 0;
+            }
+
+            if (failed === 0) {
+                showStatus(
+                    dryRun
+                        ? 'Проверка ок: все ' + allFiles.length + ' файл(ов), ФИО найдены. Можно импортировать.'
+                        : 'Импорт завершён: ' + allFiles.length + ' файл(ов).',
+                    false
+                );
+                if (!dryRun) {
+                    window.setTimeout(function () { window.location.reload(); }, 1200);
+                }
+            } else {
+                showStatus(
+                    dryRun
+                        ? 'Проверка: есть отсутствующие ФИО или ошибки (' + failed + '). '
+                            + 'Поправьте JSON или включите «Создавать…» осознанно.'
+                        : 'Импорт завершился с ошибками (' + failed + ').',
+                    true
+                );
+            }
+        } catch (e) {
+            showStatus(e && e.message ? e.message : 'Не удалось выполнить запрос.', true);
+        } finally {
+            setBusy(false);
+        }
+    }
+
+    dryBtn.addEventListener('click', function () { runImport(true); });
+    runBtn.addEventListener('click', function () { runImport(false); });
+})();
+</script>
 
 <?php require __DIR__ . '/../footer.php'; ?>

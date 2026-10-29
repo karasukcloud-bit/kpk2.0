@@ -396,6 +396,341 @@ function get_group_gradebook_overview(
     ];
 }
 
+/** Объединение предметов ведомости без дублей (важно для semester=both). */
+function merge_gradebook_subjects(array ...$subjectLists): array
+{
+    $merged = [];
+    foreach ($subjectLists as $subjects) {
+        foreach ($subjects as $subject) {
+            $itemId = (int) ($subject['curriculum_item_id'] ?? 0);
+            if ($itemId <= 0 || isset($merged[$itemId])) {
+                continue;
+            }
+            $merged[$itemId] = $subject;
+        }
+    }
+
+    return array_values($merged);
+}
+
+/** Объединение карт оценок student_id → item_id → grade. */
+function merge_gradebook_grades(array ...$gradeMaps): array
+{
+    $merged = [];
+    foreach ($gradeMaps as $grades) {
+        foreach ($grades as $studentId => $items) {
+            $studentId = (int) $studentId;
+            foreach ($items as $itemId => $grade) {
+                if ($grade === null || $grade === '') {
+                    continue;
+                }
+                $merged[$studentId][(int) $itemId] = (int) $grade;
+            }
+        }
+    }
+
+    return $merged;
+}
+
+/**
+ * Сводка ведомости группы за весь учебный год (1 + 2 семестр).
+ * Предметы semester=both учитываются один раз.
+ */
+function get_group_gradebook_year_overview(
+    int $groupId,
+    string $academicYear,
+    string $source = 'journal'
+): array {
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    $students = get_students_by_group($groupId);
+    $subjects1 = get_group_curriculum_subjects($groupId, $academicYear, '1');
+    $subjects2 = get_group_curriculum_subjects($groupId, $academicYear, '2');
+    $subjects = merge_gradebook_subjects($subjects1, $subjects2);
+    $studentCount = count($students);
+    $subjectCount = count($subjects);
+    $expected = $studentCount * $subjectCount;
+    $grades = [];
+
+    if ($expected > 0) {
+        $grades1 = get_gradebook_grades_by_source($groupId, $academicYear, '1', $source);
+        $grades2 = get_gradebook_grades_by_source($groupId, $academicYear, '2', $source);
+        $grades = merge_gradebook_grades($grades1, $grades2);
+    }
+
+    $filled = 0;
+    if ($expected > 0) {
+        foreach ($students as $student) {
+            $studentId = (int) $student['id'];
+            foreach ($subjects as $subject) {
+                $itemId = (int) $subject['curriculum_item_id'];
+                if (isset($grades[$studentId][$itemId])) {
+                    $filled++;
+                }
+            }
+        }
+    }
+
+    $summary = build_gradebook_summary($students, $subjects, $grades);
+    $lists = build_gradebook_student_lists($students, $subjects, $grades);
+
+    return [
+        'students' => $studentCount,
+        'subjects' => $subjectCount,
+        'filled' => $filled,
+        'expected' => $expected,
+        'complete' => $expected > 0 && $filled === $expected,
+        'empty' => $expected === 0,
+        'summary' => $summary,
+        'with_twos' => count($lists['with_twos']),
+        'only_good' => count($lists['only_good']),
+        'excellent' => count($lists['excellent']),
+        'lists' => $lists,
+        'source' => $source,
+        'period' => 'year',
+    ];
+}
+
+/** Пустые агрегаты колледжа для сводной ведомости. */
+function empty_college_gradebook_totals(): array
+{
+    return [
+        'students' => 0,
+        'assessed' => 0,
+        'absolute' => 0,
+        'quality' => 0,
+        'with_twos' => 0,
+        'only_good' => 0,
+        'excellent' => 0,
+        'complete' => 0,
+        'incomplete' => 0,
+        'empty' => 0,
+        'one_two' => 0,
+        'one_three' => 0,
+        'grade_counts' => [2 => 0, 3 => 0, 4 => 0, 5 => 0],
+        'grade_sum' => 0,
+        'filled_grades' => 0,
+    ];
+}
+
+/** Производные KPI колледжа из агрегатов. */
+function derive_college_gradebook_metrics(array $totals): array
+{
+    $assessed = (int) ($totals['assessed'] ?? 0);
+    $students = (int) ($totals['students'] ?? 0);
+    $filled = (int) ($totals['filled_grades'] ?? 0);
+    $gradeCounts = $totals['grade_counts'] ?? [2 => 0, 3 => 0, 4 => 0, 5 => 0];
+    $satisfactoryOnly = max(
+        0,
+        $assessed
+        - (int) ($totals['with_twos'] ?? 0)
+        - (int) ($totals['only_good'] ?? 0)
+        - (int) ($totals['excellent'] ?? 0)
+    );
+
+    $absolutePercent = $assessed > 0
+        ? round((int) $totals['absolute'] / $assessed * 100, 1)
+        : 0.0;
+    $qualityPercent = $assessed > 0
+        ? round((int) $totals['quality'] / $assessed * 100, 1)
+        : 0.0;
+    $averageGrade = $filled > 0
+        ? round((int) $totals['grade_sum'] / $filled, 2)
+        : 0.0;
+    $souPercent = $filled > 0
+        ? round(
+            (
+                (int) ($gradeCounts[5] ?? 0) * 100
+                + (int) ($gradeCounts[4] ?? 0) * 64
+                + (int) ($gradeCounts[3] ?? 0) * 36
+                + (int) ($gradeCounts[2] ?? 0) * 16
+            ) / $filled,
+            1
+        )
+        : 0.0;
+
+    return [
+        'absolute_percent' => $absolutePercent,
+        'quality_percent' => $qualityPercent,
+        'assessed_percent' => $students > 0 ? round($assessed / $students * 100, 1) : 0.0,
+        'not_assessed' => max(0, $students - $assessed),
+        'satisfactory_only' => $satisfactoryOnly,
+        'twos_percent' => $assessed > 0
+            ? round((int) $totals['with_twos'] / $assessed * 100, 1)
+            : 0.0,
+        'excellent_percent' => $assessed > 0
+            ? round((int) $totals['excellent'] / $assessed * 100, 1)
+            : 0.0,
+        'only_good_percent' => $assessed > 0
+            ? round((int) $totals['only_good'] / $assessed * 100, 1)
+            : 0.0,
+        'average_grade' => $averageGrade,
+        'sou_percent' => $souPercent,
+        'one_two_percent' => $students > 0
+            ? round((int) $totals['one_two'] / $students * 100, 1)
+            : 0.0,
+        'one_three_percent' => $students > 0
+            ? round((int) $totals['one_three'] / $students * 100, 1)
+            : 0.0,
+        'no_debt_percent' => $assessed > 0
+            ? round(($assessed - (int) $totals['with_twos']) / $assessed * 100, 1)
+            : 0.0,
+        'student_composition_labels' => ['Отличники', 'Только 4–5', 'Удовл. (есть 3)', 'Неуспевающие («2»)'],
+        'student_composition_values' => [
+            (int) ($totals['excellent'] ?? 0),
+            (int) ($totals['only_good'] ?? 0),
+            $satisfactoryOnly,
+            (int) ($totals['with_twos'] ?? 0),
+        ],
+        'grade_distribution_labels' => ['«5»', '«4»', '«3»', '«2»'],
+        'grade_distribution_values' => [
+            (int) ($gradeCounts[5] ?? 0),
+            (int) ($gradeCounts[4] ?? 0),
+            (int) ($gradeCounts[3] ?? 0),
+            (int) ($gradeCounts[2] ?? 0),
+        ],
+    ];
+}
+
+/**
+ * Полный отчёт сводной ведомости колледжа за семестр или весь год.
+ * $semester: 1 | 2 | year
+ * @return array{rows:array,totals:array,metrics:array,specialty_stats:array,charts:array}
+ */
+function build_college_gradebook_report(
+    string $academicYear,
+    string $semester,
+    string $source = 'journal',
+    ?array $groups = null
+): array {
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    $isYear = $semester === 'year' || $semester === 'both';
+    $semester = $isYear ? 'year' : normalize_gradebook_semester($semester);
+    $groups = $groups ?? get_all_groups();
+    $rows = [];
+    $totals = empty_college_gradebook_totals();
+
+    foreach ($groups as $group) {
+        $overview = $isYear
+            ? get_group_gradebook_year_overview((int) $group['id'], $academicYear, $source)
+            : get_group_gradebook_overview((int) $group['id'], $academicYear, $semester, $source);
+        $summary = $overview['summary'];
+        $assessed = (int) $summary['assessed_students'];
+
+        $rows[] = [
+            'group' => $group,
+            'overview' => $overview,
+        ];
+
+        $totals['students'] += (int) $overview['students'];
+        $totals['assessed'] += $assessed;
+        $totals['absolute'] += (int) ($summary['absolute_count'] ?? 0);
+        $totals['quality'] += (int) ($summary['quality_count'] ?? 0);
+        $totals['with_twos'] += (int) $overview['with_twos'];
+        $totals['only_good'] += (int) $overview['only_good'];
+        $totals['excellent'] += (int) $overview['excellent'];
+        $totals['one_two'] += (int) ($summary['one_two_count'] ?? 0);
+        $totals['one_three'] += (int) ($summary['one_three_count'] ?? 0);
+        $totals['filled_grades'] += (int) ($summary['filled_grades'] ?? 0);
+        $gradeCounts = $summary['grade_counts'] ?? [2 => 0, 3 => 0, 4 => 0, 5 => 0];
+        foreach ([2, 3, 4, 5] as $g) {
+            $cnt = (int) ($gradeCounts[$g] ?? 0);
+            $totals['grade_counts'][$g] += $cnt;
+            $totals['grade_sum'] += $g * $cnt;
+        }
+
+        if (!empty($overview['empty'])) {
+            $totals['empty']++;
+        } elseif (!empty($overview['complete'])) {
+            $totals['complete']++;
+        } else {
+            $totals['incomplete']++;
+        }
+    }
+
+    $specialtyStats = [];
+    foreach ($rows as $row) {
+        $group = $row['group'];
+        $key = gradebook_specialty_key_from_group($group);
+        $summary = $row['overview']['summary'];
+        if (!isset($specialtyStats[$key])) {
+            $specialtyStats[$key] = [
+                'label' => gradebook_specialty_label_from_group($group),
+                'assessed' => 0,
+                'absolute' => 0,
+                'quality' => 0,
+                'students' => 0,
+                'groups' => 0,
+            ];
+        }
+        $specialtyStats[$key]['assessed'] += (int) ($summary['assessed_students'] ?? 0);
+        $specialtyStats[$key]['absolute'] += (int) ($summary['absolute_count'] ?? 0);
+        $specialtyStats[$key]['quality'] += (int) ($summary['quality_count'] ?? 0);
+        $specialtyStats[$key]['students'] += (int) ($row['overview']['students'] ?? 0);
+        $specialtyStats[$key]['groups']++;
+    }
+
+    uasort($specialtyStats, static function (array $a, array $b): int {
+        $gen = gradebook_general_education_label();
+        if ($a['label'] === $gen && $b['label'] !== $gen) {
+            return 1;
+        }
+        if ($b['label'] === $gen && $a['label'] !== $gen) {
+            return -1;
+        }
+
+        return strcmp($a['label'], $b['label']);
+    });
+
+    $groupLabels = [];
+    $groupAbsolute = [];
+    $groupQuality = [];
+    foreach ($rows as $row) {
+        $groupLabels[] = (string) $row['group']['number'];
+        $groupAbsolute[] = (float) ($row['overview']['summary']['absolute_percent'] ?? 0);
+        $groupQuality[] = (float) ($row['overview']['summary']['quality_percent'] ?? 0);
+    }
+
+    $specialtyLabels = [];
+    $specialtyAbsolute = [];
+    $specialtyQuality = [];
+    $specialtyStudentsLabels = [];
+    $specialtyStudentsValues = [];
+    foreach ($specialtyStats as $stat) {
+        $specialtyLabels[] = (string) $stat['label'];
+        $assessed = (int) $stat['assessed'];
+        $specialtyAbsolute[] = $assessed > 0
+            ? round($stat['absolute'] / $assessed * 100, 1)
+            : 0.0;
+        $specialtyQuality[] = $assessed > 0
+            ? round($stat['quality'] / $assessed * 100, 1)
+            : 0.0;
+        $specialtyStudentsLabels[] = (string) $stat['label'];
+        $specialtyStudentsValues[] = (int) $stat['students'];
+    }
+
+    $metrics = derive_college_gradebook_metrics($totals);
+
+    return [
+        'academic_year' => $academicYear,
+        'semester' => $semester,
+        'source' => $source,
+        'rows' => $rows,
+        'totals' => $totals,
+        'metrics' => $metrics,
+        'specialty_stats' => $specialtyStats,
+        'charts' => [
+            'group_labels' => $groupLabels,
+            'group_absolute' => $groupAbsolute,
+            'group_quality' => $groupQuality,
+            'specialty_labels' => $specialtyLabels,
+            'specialty_absolute' => $specialtyAbsolute,
+            'specialty_quality' => $specialtyQuality,
+            'specialty_students_labels' => $specialtyStudentsLabels,
+            'specialty_students_values' => $specialtyStudentsValues,
+        ],
+    ];
+}
+
 function save_grade_entry(int $studentId, int $curriculumItemId, string $grade): array
 {
     $student = get_student_by_id($studentId);
@@ -440,8 +775,14 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
     $subjectCount = count($subjects);
     $expectedGrades = $totalStudents * $subjectCount;
 
+    $emptyMetrics = [
+        'grade_counts' => [2 => 0, 3 => 0, 4 => 0, 5 => 0],
+        'average_grade' => 0.0,
+        'sou_percent' => 0.0,
+    ];
+
     if ($totalStudents === 0 || $subjects === []) {
-        return [
+        return array_merge([
             'total_students' => $totalStudents,
             'assessed_students' => 0,
             'filled_grades' => 0,
@@ -454,7 +795,7 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
             'one_three_count' => 0,
             'one_two_percent' => 0.0,
             'one_three_percent' => 0.0,
-        ];
+        ], $emptyMetrics);
     }
 
     $assessedStudents = 0;
@@ -463,6 +804,8 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
     $qualityCount = 0;
     $oneTwoCount = 0;
     $oneThreeCount = 0;
+    $gradeCounts = [2 => 0, 3 => 0, 4 => 0, 5 => 0];
+    $gradeSum = 0;
 
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
@@ -477,6 +820,10 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
                 $grade = (int) $studentGrades[$itemId];
                 $values[] = $grade;
                 $filledGrades++;
+                $gradeSum += $grade;
+                if (isset($gradeCounts[$grade])) {
+                    $gradeCounts[$grade]++;
+                }
                 if ($grade === 2) {
                     $twos++;
                 } elseif ($grade === 3) {
@@ -507,6 +854,20 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
         }
     }
 
+    $averageGrade = $filledGrades > 0 ? round($gradeSum / $filledGrades, 2) : 0.0;
+    // Степень обученности (СОУ) по всем выставленным оценкам.
+    $souPercent = $filledGrades > 0
+        ? round(
+            (
+                $gradeCounts[5] * 100
+                + $gradeCounts[4] * 64
+                + $gradeCounts[3] * 36
+                + $gradeCounts[2] * 16
+            ) / $filledGrades,
+            1
+        )
+        : 0.0;
+
     if ($assessedStudents === 0) {
         return [
             'total_students' => $totalStudents,
@@ -521,6 +882,9 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
             'one_three_count' => $oneThreeCount,
             'one_two_percent' => round($oneTwoCount / $totalStudents * 100, 1),
             'one_three_percent' => round($oneThreeCount / $totalStudents * 100, 1),
+            'grade_counts' => $gradeCounts,
+            'average_grade' => $averageGrade,
+            'sou_percent' => $souPercent,
         ];
     }
 
@@ -537,6 +901,9 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
         'one_three_count' => $oneThreeCount,
         'one_two_percent' => round($oneTwoCount / $totalStudents * 100, 1),
         'one_three_percent' => round($oneThreeCount / $totalStudents * 100, 1),
+        'grade_counts' => $gradeCounts,
+        'average_grade' => $averageGrade,
+        'sou_percent' => $souPercent,
     ];
 }
 
@@ -751,8 +1118,15 @@ function finalize_gradebook_aggregates(array $college, array $specialties): arra
     ];
 }
 
-function resolve_gradebook_year_period(string $academicYear, string $source = 'journal'): ?array
-{
+/**
+ * Какой период брать для сравнения лет.
+ * $preferSemester: 1 | 2 | year | '' (авто: сначала 2, потом 1).
+ */
+function resolve_gradebook_year_period(
+    string $academicYear,
+    string $source = 'journal',
+    string $preferSemester = ''
+): ?array {
     require_once __DIR__ . '/archive.php';
 
     $academicYear = normalize_academic_year($academicYear) ?? '';
@@ -761,10 +1135,21 @@ function resolve_gradebook_year_period(string $academicYear, string $source = 'j
     }
 
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    if ($preferSemester === 'year' || $preferSemester === 'both') {
+        return [
+            'academic_year' => $academicYear,
+            'semester' => 'year',
+            'archive_id' => null,
+        ];
+    }
+
+    $semesterOrder = in_array($preferSemester, ['1', '2'], true)
+        ? [$preferSemester]
+        : ['2', '1'];
 
     // Архив — только стандартный контур; ручное БРС всегда из живых данных.
     if ($source === 'journal') {
-        foreach (['2', '1'] as $semester) {
+        foreach ($semesterOrder as $semester) {
             $archive = get_archive_period('gradebook', $academicYear, $semester);
             if ($archive) {
                 return [
@@ -781,7 +1166,7 @@ function resolve_gradebook_year_period(string $academicYear, string $source = 'j
         return null;
     }
 
-    foreach (['2', '1'] as $semester) {
+    foreach ($semesterOrder as $semester) {
         foreach ($groups as $group) {
             $subjects = get_group_curriculum_subjects((int) $group['id'], $academicYear, $semester);
             if ($subjects !== []) {
@@ -871,17 +1256,55 @@ function aggregate_gradebook_college_and_specialties(
     return finalize_gradebook_aggregates($college, $specialties);
 }
 
-function build_gradebook_three_years_comparison(string $baseYear, string $source = 'journal'): array
-{
+/**
+ * Сравнение успеваемости за 3 учебных года.
+ * $periodMode: 1 | 2 | year | '' (автовыбор семестра).
+ */
+function build_gradebook_three_years_comparison(
+    string $baseYear,
+    string $source = 'journal',
+    string $periodMode = ''
+): array {
     require_once __DIR__ . '/attendance.php';
 
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    if ($periodMode === 'both') {
+        $periodMode = 'year';
+    }
+    if (!in_array($periodMode, ['1', '2', 'year', ''], true)) {
+        $periodMode = '';
+    }
+
     $years = get_last_academic_years($baseYear, 3);
     $yearLabels = [];
     $yearAggregates = [];
 
     foreach ($years as $year) {
-        $period = resolve_gradebook_year_period($year, $source);
+        if ($periodMode === 'year') {
+            $report = build_college_gradebook_report($year, 'year', $source);
+            $yearLabels[] = $year . ' · оба семестра';
+            $specialtyAgg = [];
+            foreach ($report['specialty_stats'] as $key => $stat) {
+                $assessed = (int) $stat['assessed'];
+                $specialtyAgg[$key] = [
+                    'label' => (string) $stat['label'],
+                    'assessed' => $assessed,
+                    'absolute_percent' => gradebook_percent_from_counts((int) $stat['absolute'], $assessed),
+                    'quality_percent' => gradebook_percent_from_counts((int) $stat['quality'], $assessed),
+                ];
+            }
+            $yearAggregates[] = [
+                'college' => [
+                    'assessed' => (int) $report['totals']['assessed'],
+                    'absolute_percent' => (float) $report['metrics']['absolute_percent'],
+                    'quality_percent' => (float) $report['metrics']['quality_percent'],
+                ],
+                'specialties' => $specialtyAgg,
+            ];
+            continue;
+        }
+
+        $period = resolve_gradebook_year_period($year, $source, $periodMode);
         if ($period === null) {
             $yearLabels[] = $year;
             $yearAggregates[] = null;

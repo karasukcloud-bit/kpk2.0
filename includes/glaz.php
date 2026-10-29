@@ -50,10 +50,11 @@ function get_all_academic_debts(): array
     $excluded = get_student_ids_excluded_from_glaz();
 
     $stmt = db()->query(
-        "SELECT g.student_id, g.curriculum_item_id, g.group_id,
+        "SELECT g.student_id, g.curriculum_item_id,
+                COALESCE(st.group_id, g.group_id) AS group_id,
                 ap.academic_year, ap.semester, ap.archived_at,
-                ags.full_name AS student_name,
-                agg.group_number,
+                COALESCE(st.full_name, ags.full_name) AS student_name,
+                COALESCE(cur_g.number, agg.group_number) AS group_number,
                 agsub.subject_name
          FROM archive_gradebook_grades g
          INNER JOIN archive_periods ap
@@ -68,6 +69,10 @@ function get_all_academic_debts(): array
             ON agsub.archive_id = g.archive_id
            AND agsub.group_id = g.group_id
            AND agsub.curriculum_item_id = g.curriculum_item_id
+         LEFT JOIN students st
+            ON st.id = g.student_id AND st.removed_at IS NULL
+         LEFT JOIN study_groups cur_g
+            ON cur_g.id = st.group_id
          WHERE g.grade = 2"
     );
 

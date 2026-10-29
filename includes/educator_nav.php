@@ -9,6 +9,10 @@ $currentEducatorTab = $currentEducatorTab ?? 'summary';
        class="admin-tabs__item<?= $currentEducatorTab === 'summary' ? ' admin-tabs__item--active' : '' ?>">
         Сводка по пропускам
     </a>
+    <a href="absence_rating.php"
+       class="admin-tabs__item<?= $currentEducatorTab === 'absence_rating' ? ' admin-tabs__item--active' : '' ?>">
+        Рейтинг по пропускам
+    </a>
     <a href="group_attendance.php"
        class="admin-tabs__item<?= $currentEducatorTab === 'group_attendance' ? ' admin-tabs__item--active' : '' ?>">
         Пропуски

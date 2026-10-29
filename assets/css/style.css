@@ -757,6 +757,173 @@ body {
     margin-top: 1rem;
 }
 
+.summary-college-kpis {
+    margin-bottom: 1.25rem;
+}
+
+.summary-college-charts {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 1.25rem;
+    margin: 0.5rem 0 1.25rem;
+}
+
+.summary-college-chart .subsection-title {
+    margin: 0 0 0.35rem;
+    font-size: 1rem;
+}
+
+.summary-college-chart__hint {
+    margin: 0;
+    font-size: 0.85rem;
+    line-height: 1.3;
+}
+
+.summary-chart-wrap--donut {
+    height: 280px;
+    margin-top: 0.35rem;
+}
+
+.summary-report-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem 1.5rem;
+    margin: 1rem 0 1.25rem;
+    padding: 0.85rem 1rem;
+    background: var(--surface-muted, #f5f7fa);
+    border: 1px solid var(--border-color, #e0e4ea);
+    border-radius: 8px;
+}
+
+.summary-report-filters__group {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+    min-width: 0;
+}
+
+.summary-report-filters__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted, #607080);
+}
+
+.summary-report-filters__tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+}
+
+.summary-report-filters__tab {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.75rem;
+    border: 1px solid var(--border-color, #cfd6e0);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text-color, #243041);
+    text-decoration: none;
+    font-size: 0.9rem;
+    line-height: 1.2;
+}
+
+.summary-report-filters__tab:hover {
+    border-color: #90a4ae;
+    background: #fafbfc;
+}
+
+.summary-report-filters__tab.is-active {
+    border-color: #1565c0;
+    background: #e3f2fd;
+    color: #0d47a1;
+    font-weight: 600;
+}
+
+.summary-compare-kpis {
+    margin-top: 1rem;
+}
+
+.text-success {
+    color: #2e7d32;
+}
+
+.text-danger {
+    color: #c62828;
+}
+
+.absence-rank-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 0.55rem;
+    margin-top: 1rem;
+    max-width: 920px;
+}
+
+.absence-rank-chart__row {
+    display: grid;
+    grid-template-columns: 4.5rem minmax(0, 1fr);
+    gap: 0.75rem;
+    align-items: center;
+}
+
+.absence-rank-chart__label {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #37474f;
+    text-align: right;
+    line-height: 1.2;
+}
+
+.absence-rank-chart__track {
+    position: relative;
+    min-height: 1.65rem;
+    background: #eceff1;
+    border-radius: 3px;
+    overflow: hidden;
+}
+
+.absence-rank-chart__bar {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 1.65rem;
+    padding: 0 0.55rem;
+    background: #00838f;
+    border-radius: 3px;
+    color: #fff;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1;
+    white-space: nowrap;
+}
+
+.absence-rank-chart__value {
+    text-shadow: 0 1px 1px rgba(0, 0, 0, 0.15);
+}
+
+.absence-rank-chart__zero {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.65rem;
+    padding-left: 0.45rem;
+    color: #90a4ae;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+@media (max-width: 640px) {
+    .absence-rank-chart__row {
+        grid-template-columns: 3.25rem minmax(0, 1fr);
+        gap: 0.5rem;
+    }
+
+    .absence-rank-chart__label {
+        font-size: 0.85rem;
+    }
+}
+
 .educator-attendance-page .subsection-title:first-of-type {
     margin-top: 0;
 }

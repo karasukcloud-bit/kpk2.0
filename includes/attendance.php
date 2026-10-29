@@ -668,7 +668,11 @@ function fetch_attendance_orphan_student_names(
     array $excludeStudentIds
 ): array {
     $sql = 'SELECT ae.student_id,
-                   COALESCE(NULLIF(ae.student_name, \'\'), s.full_name, \'Удалённый студент\') AS full_name
+                   COALESCE(
+                       NULLIF(MAX(ae.student_name), \'\'),
+                       MAX(s.full_name),
+                       \'Удалённый студент\'
+                   ) AS full_name
             FROM attendance_entries ae
             INNER JOIN attendance_days ad ON ad.id = ae.attendance_day_id
             LEFT JOIN students s ON s.id = ae.student_id
@@ -702,7 +706,7 @@ function fetch_attendance_orphan_student_names(
         $params = array_merge($params, $excludeStudentIds);
     }
 
-    $sql .= ' GROUP BY ae.student_id, full_name';
+    $sql .= ' GROUP BY ae.student_id';
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -740,6 +744,58 @@ function build_educator_attendance_report(
     return $rows;
 }
 
+/**
+ * Рейтинг групп по неуважительным пропускам.
+ * $period: 1 | 2 | year
+ *
+ * @return list<array{
+ *   group_id:int,
+ *   group_number:string,
+ *   student_count:int,
+ *   unexcused:int,
+ *   per_student_unexcused:float
+ * }>
+ */
+function build_group_unexcused_absence_rating(string $academicYear, string $period = 'year'): array
+{
+    $semester = null;
+    if ($period === '1' || $period === '2') {
+        $semester = $period;
+    }
+
+    $report = build_educator_attendance_report($academicYear, null, $semester);
+    $rows = [];
+
+    foreach ($report as $row) {
+        $summary = $row['summary'] ?? [];
+        $rows[] = [
+            'group_id' => (int) ($row['group_id'] ?? 0),
+            'group_number' => (string) ($row['group_number'] ?? ''),
+            'student_count' => (int) ($summary['student_count'] ?? 0),
+            'unexcused' => (int) ($summary['unexcused'] ?? 0),
+            'per_student_unexcused' => (float) ($summary['per_student_unexcused'] ?? 0),
+        ];
+    }
+
+    usort(
+        $rows,
+        static function (array $a, array $b): int {
+            $byTotal = $b['unexcused'] <=> $a['unexcused'];
+            if ($byTotal !== 0) {
+                return $byTotal;
+            }
+            $byPer = $b['per_student_unexcused'] <=> $a['per_student_unexcused'];
+            if ($byPer !== 0) {
+                return $byPer;
+            }
+
+            return strcmp($a['group_number'], $b['group_number']);
+        }
+    );
+
+    return $rows;
+}
+
 function format_educator_unexcused_students_list(array $students): string
 {
     if ($students === []) {
@@ -769,8 +825,12 @@ function fetch_top_unexcused_students(string $academicYear, string $semester, in
     $limit = max(1, min(50, $limit));
     $stmt = db()->prepare(
         'SELECT ae.student_id,
-                COALESCE(NULLIF(ae.student_name, \'\'), s.full_name, \'Удалённый студент\') AS full_name,
-                COALESCE(g.number, dg.number, \'\') AS group_number,
+                COALESCE(
+                    NULLIF(MAX(ae.student_name), \'\'),
+                    MAX(s.full_name),
+                    \'Удалённый студент\'
+                ) AS full_name,
+                COALESCE(MAX(g.number), MAX(dg.number), \'\') AS group_number,
                 COALESCE(SUM(ae.unexcused_lessons), 0) AS unexcused_lessons,
                 COALESCE(SUM(ae.excused_lessons), 0) AS excused_lessons
          FROM attendance_entries ae
@@ -780,9 +840,9 @@ function fetch_top_unexcused_students(string $academicYear, string $semester, in
          LEFT JOIN study_groups dg ON dg.id = ad.group_id
          WHERE ad.academic_year = ?
            AND ad.attendance_date BETWEEN ? AND ?
-         GROUP BY ae.student_id, full_name, group_number
-         HAVING unexcused_lessons > 0
-         ORDER BY unexcused_lessons DESC, full_name ASC
+         GROUP BY ae.student_id
+         HAVING SUM(ae.unexcused_lessons) > 0
+         ORDER BY SUM(ae.unexcused_lessons) DESC, full_name ASC
          LIMIT ' . $limit
     );
     $stmt->execute([$academicYear, $bounds[0], $bounds[1]]);
@@ -1341,7 +1401,7 @@ function fetch_attendance_unexcused_total(string $academicYear, ?string $semeste
 function fetch_attendance_reason_stats(string $academicYear, ?string $semester = null): array
 {
     $sql = 'SELECT COALESCE(ar.id, 0) AS reason_id,
-                   COALESCE(NULLIF(ar.name, \'\'), \'Без указанной причины\') AS reason_name,
+                   COALESCE(NULLIF(MAX(ar.name), \'\'), \'Без указанной причины\') AS reason_name,
                    SUM(ae.excused_lessons) AS lessons,
                    COUNT(DISTINCT ae.student_id) AS students
             FROM attendance_entries ae
@@ -1360,7 +1420,7 @@ function fetch_attendance_reason_stats(string $academicYear, ?string $semester =
         $params[] = $bounds[1];
     }
 
-    $sql .= ' GROUP BY ar.id, ar.name ORDER BY lessons DESC, reason_name ASC';
+    $sql .= ' GROUP BY ar.id ORDER BY lessons DESC, reason_name ASC';
 
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
