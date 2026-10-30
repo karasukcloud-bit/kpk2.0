@@ -114,6 +114,8 @@ function run_migrations(PDO $pdo): void
     ensure_student_activities_schema($pdo);
     require_once __DIR__ . '/characteristic.php';
     ensure_student_characteristics_schema($pdo);
+    require_once __DIR__ . '/curator_monthly_report.php';
+    ensure_curator_monthly_reports_schema($pdo);
     ensure_activity_logs_schema($pdo);
     ensure_courseworks_schema($pdo);
     ensure_practices_schema($pdo);
