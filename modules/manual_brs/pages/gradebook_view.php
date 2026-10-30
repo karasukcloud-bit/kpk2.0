@@ -61,7 +61,7 @@ if ($manualBrsPanel === 'curator') {
             http_response_code(403);
             exit('Доступ запрещён.');
         }
-        $currentDeputyTab = 'manual_brs_gradebook';
+        $currentDeputyTab = 'grades';
     }
     $groups = get_all_groups();
     if ($groupId > 0) {
@@ -126,7 +126,8 @@ require __DIR__ . '/../../../includes/header.php';
                 <p class="text-muted">Ведомость ручного БРС (временный модуль)</p>
             </div>
             <?php if ($manualBrsPanel !== 'curator' && $group !== null): ?>
-                <a href="<?= e(manual_brs_gradebook_url($manualBrsPanel)) ?>" class="btn btn--ghost">← К группам</a>
+                <a href="<?= e($manualBrsPanel === 'deputy' ? 'grades.php?source=manual_brs' : manual_brs_gradebook_url($manualBrsPanel)) ?>"
+                   class="btn btn--ghost">← К группам</a>
             <?php endif; ?>
         </div>
         <?php if ($manualBrsPanel === 'curator'): ?>

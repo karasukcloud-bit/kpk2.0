@@ -11,7 +11,7 @@ $summaryHeading = (string) ($summaryHeading ?? 'Сводная ведомост�
 $summarySourceLabel = (string) ($summarySourceLabel ?? 'Оценки из электронного журнала.');
 $pageTitle = (string) ($pageTitle ?? 'Сводная ведомость — Панель завуча');
 $currentDeputyTab = (string) ($currentDeputyTab ?? 'summary');
-$summarySelfUrl = (string) ($summarySelfUrl ?? ($summarySource === 'manual_brs' ? 'manual_brs_summary.php' : 'summary.php'));
+$summarySelfUrl = (string) ($summarySelfUrl ?? 'summary.php');
 
 require_once __DIR__ . '/attendance.php';
 
@@ -31,8 +31,12 @@ $manualBrsAvailable = is_manual_brs_gradebook_active();
 $yearOptions = get_last_academic_years($activePeriod['academic_year'], 4);
 $groups = get_all_groups();
 
-$summaryQuery = static function (array $overrides = []) use ($year, $viewSem): string {
-    $params = array_merge(['year' => $year, 'sem' => $viewSem], $overrides);
+$summaryQuery = static function (array $overrides = []) use ($year, $viewSem, $summarySource): string {
+    $params = array_merge([
+        'year' => $year,
+        'sem' => $viewSem,
+        'source' => $summarySource,
+    ], $overrides);
     return http_build_query($params);
 };
 
@@ -89,19 +93,13 @@ require __DIR__ . '/header.php';
 
         <div class="summary-report-filters">
             <?php if ($manualBrsAvailable): ?>
-            <div class="summary-report-filters__group">
-                <span class="summary-report-filters__label">Источник оценок</span>
-                <div class="summary-report-filters__tabs" role="tablist">
-                    <a href="summary.php?<?= e($summaryQuery()) ?>"
-                       class="summary-report-filters__tab<?= $summarySource === 'journal' ? ' is-active' : '' ?>">
-                        Электронный журнал
-                    </a>
-                    <a href="manual_brs_summary.php?<?= e($summaryQuery()) ?>"
-                       class="summary-report-filters__tab<?= $summarySource === 'manual_brs' ? ' is-active' : '' ?>">
-                        Ручное БРС
-                    </a>
-                </div>
-            </div>
+            <?php
+            $sourceFilterCurrent = $summarySource;
+            $sourceFilterUrl = static function (array $overrides) use ($summaryQuery): string {
+                return 'summary.php?' . $summaryQuery($overrides);
+            };
+            require __DIR__ . '/deputy_source_filter.php';
+            ?>
             <?php endif; ?>
 
             <div class="summary-report-filters__group">
@@ -332,25 +330,37 @@ require __DIR__ . '/header.php';
     </section>
 
     <section class="panel">
-        <h2>Абсолютная успеваемость по группам: 1 vs 2</h2>
+        <div class="summary-chart-head">
+            <h2>Абсолютная успеваемость по группам: 1 vs 2</h2>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-compare-groups-abs"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-compare-groups-abs" aria-label="Сравнение абсолютной успеваемости по группам"></canvas>
         </div>
     </section>
     <section class="panel">
-        <h2>Качественная успеваемость по группам: 1 vs 2</h2>
+        <div class="summary-chart-head">
+            <h2>Качественная успеваемость по группам: 1 vs 2</h2>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-compare-groups-qual"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-compare-groups-qual" aria-label="Сравнение качественной успеваемости по группам"></canvas>
         </div>
     </section>
     <section class="panel">
-        <h2>Абсолютная успеваемость по специальностям: 1 vs 2</h2>
+        <div class="summary-chart-head">
+            <h2>Абсолютная успеваемость по специальностям: 1 vs 2</h2>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-compare-spec-abs"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-compare-spec-abs" aria-label="Сравнение абсолютной успеваемости по специальностям"></canvas>
         </div>
     </section>
     <section class="panel">
-        <h2>Качественная успеваемость по специальностям: 1 vs 2</h2>
+        <div class="summary-chart-head">
+            <h2>Качественная успеваемость по специальностям: 1 vs 2</h2>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-compare-spec-qual"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-compare-spec-qual" aria-label="Сравнение качественной успеваемости по специальностям"></canvas>
         </div>
@@ -371,60 +381,90 @@ require __DIR__ . '/header.php';
     $qualityPercent = $metrics['quality_percent'];
     ?>
     <section class="panel">
-        <h2>Абсолютная успеваемость по группам</h2>
-        <p class="text-muted">
-            Сравнение групп за период <?= e($periodCaption) ?>.
-            Среднее по колледжу: <?= e((string) $absolutePercent) ?>%.
-        </p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Абсолютная успеваемость по группам</h2>
+                <p class="text-muted">
+                    Сравнение групп за период <?= e($periodCaption) ?>.
+                    Среднее по колледжу: <?= e((string) $absolutePercent) ?>%.
+                </p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-absolute-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-absolute-chart" aria-label="Диаграмма абсолютной успеваемости по группам"></canvas>
         </div>
     </section>
 
     <section class="panel">
-        <h2>Качественная успеваемость по группам</h2>
-        <p class="text-muted">
-            Сравнение групп за период <?= e($periodCaption) ?>.
-            Среднее по колледжу: <?= e((string) $qualityPercent) ?>%.
-        </p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Качественная успеваемость по группам</h2>
+                <p class="text-muted">
+                    Сравнение групп за период <?= e($periodCaption) ?>.
+                    Среднее по колледжу: <?= e((string) $qualityPercent) ?>%.
+                </p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-quality-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-quality-chart" aria-label="Диаграмма качественной успеваемости по группам"></canvas>
         </div>
     </section>
 
     <section class="panel">
-        <h2>Абсолютная успеваемость по специальностям</h2>
-        <p class="text-muted">
-            Сравнение специальностей за период <?= e($periodCaption) ?>.
-            Среднее по колледжу: <?= e((string) $absolutePercent) ?>%.
-        </p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Абсолютная успеваемость по специальностям</h2>
+                <p class="text-muted">
+                    Сравнение специальностей за период <?= e($periodCaption) ?>.
+                    Среднее по колледжу: <?= e((string) $absolutePercent) ?>%.
+                </p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-specialty-absolute-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-absolute-chart" aria-label="Диаграмма абсолютной успеваемости по специальностям"></canvas>
         </div>
     </section>
 
     <section class="panel">
-        <h2>Качественная успеваемость по специальностям</h2>
-        <p class="text-muted">
-            Сравнение специальностей за период <?= e($periodCaption) ?>.
-            Среднее по колледжу: <?= e((string) $qualityPercent) ?>%.
-        </p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Качественная успеваемость по специальностям</h2>
+                <p class="text-muted">
+                    Сравнение специальностей за период <?= e($periodCaption) ?>.
+                    Среднее по колледжу: <?= e((string) $qualityPercent) ?>%.
+                </p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-specialty-quality-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-quality-chart" aria-label="Диаграмма качественной успеваемости по специальностям"></canvas>
         </div>
     </section>
 
     <section class="panel">
-        <h2>Абсолютная успеваемость по специальностям за 3 года</h2>
-        <p class="text-muted">Сравнение по учебным годам: <?= e($yearsCompareLabel) ?>.</p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Абсолютная успеваемость по специальностям за 3 года</h2>
+                <p class="text-muted">Сравнение по учебным годам: <?= e($yearsCompareLabel) ?>.</p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-specialty-absolute-years-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-absolute-years-chart" aria-label="Сравнение абсолютной успеваемости по специальностям за три года"></canvas>
         </div>
     </section>
 
     <section class="panel">
-        <h2>Качественная успеваемость по специальностям за 3 года</h2>
-        <p class="text-muted">Сравнение по учебным годам: <?= e($yearsCompareLabel) ?>.</p>
+        <div class="summary-chart-head">
+            <div>
+                <h2>Качественная успеваемость по специальностям за 3 года</h2>
+                <p class="text-muted">Сравнение по учебным годам: <?= e($yearsCompareLabel) ?>.</p>
+            </div>
+            <div class="summary-chart-sort" data-chart-sort="deputy-summary-specialty-quality-years-chart"></div>
+        </div>
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-quality-years-chart" aria-label="Сравнение качественной успеваемости по специальностям за три года"></canvas>
         </div>
@@ -532,13 +572,86 @@ require __DIR__ . '/header.php';
 <?php if ($groups !== []): ?>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
+const summaryChartRegistry = {};
+
+const fillChartSortControls = () => {
+    document.querySelectorAll('[data-chart-sort]').forEach((node) => {
+        if (node.dataset.ready === '1') {
+            return;
+        }
+        node.dataset.ready = '1';
+        node.innerHTML = ''
+            + '<span class="summary-chart-sort__label">Сортировка</span>'
+            + '<button type="button" class="summary-chart-sort__btn is-active" data-sort="default">По умолчанию</button>'
+            + '<button type="button" class="summary-chart-sort__btn" data-sort="desc">По убыванию</button>'
+            + '<button type="button" class="summary-chart-sort__btn" data-sort="asc">По возрастанию</button>';
+        node.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-sort]');
+            if (!btn) {
+                return;
+            }
+            const mode = btn.getAttribute('data-sort');
+            const chartId = node.getAttribute('data-chart-sort');
+            node.querySelectorAll('[data-sort]').forEach((el) => {
+                el.classList.toggle('is-active', el === btn);
+            });
+            applySummaryChartSort(chartId, mode);
+        });
+    });
+};
+
+const buildSortedIndexes = (keys, labels, mode) => {
+    const items = keys.map((key, index) => ({
+        key: Number(key) || 0,
+        label: String(labels[index] ?? ''),
+        index,
+    }));
+    if (mode === 'asc') {
+        items.sort((a, b) => a.key - b.key || a.label.localeCompare(b.label, 'ru'));
+    } else if (mode === 'desc') {
+        items.sort((a, b) => b.key - a.key || a.label.localeCompare(b.label, 'ru'));
+    } else {
+        items.sort((a, b) => a.index - b.index);
+    }
+    return items.map((item) => item.index);
+};
+
+const applySummaryChartSort = (chartId, mode) => {
+    const entry = summaryChartRegistry[chartId];
+    if (!entry || !entry.chart) {
+        return;
+    }
+    const order = buildSortedIndexes(entry.sortKeys, entry.baseLabels, mode);
+    entry.chart.data.labels = order.map((index) => entry.baseLabels[index]);
+    entry.datasets.forEach((dataset, datasetIndex) => {
+        entry.chart.data.datasets[datasetIndex].data = order.map((index) => dataset[index]);
+    });
+    if (entry.average != null) {
+        const avgDataset = entry.chart.data.datasets.find((ds) => ds.type === 'line');
+        if (avgDataset) {
+            avgDataset.data = entry.chart.data.labels.map(() => entry.average);
+        }
+    }
+    entry.chart.update();
+};
+
+const registerSummaryChart = (chartId, chart, baseLabels, datasets, sortKeys, average = null) => {
+    summaryChartRegistry[chartId] = {
+        chart,
+        baseLabels: baseLabels.slice(),
+        datasets: datasets.map((row) => row.slice()),
+        sortKeys: sortKeys.slice(),
+        average,
+    };
+};
+
 const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLabel, barColor, barBorder, rotateXLabels = false) => {
     const chartNode = document.getElementById(canvasId);
     if (!chartNode || typeof Chart === 'undefined') {
         return;
     }
 
-    new Chart(chartNode, {
+    const chart = new Chart(chartNode, {
         data: {
             labels,
             datasets: [
@@ -566,6 +679,7 @@ const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLa
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
                 tooltip: {
@@ -577,9 +691,13 @@ const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLa
                 },
             },
             scales: {
-                x: rotateXLabels ? {
-                    ticks: { maxRotation: 45, minRotation: 15 },
-                } : {},
+                x: {
+                    ticks: {
+                        font: { size: 13, weight: '700' },
+                        color: '#243041',
+                        ...(rotateXLabels ? { maxRotation: 45, minRotation: 15 } : {}),
+                    },
+                },
                 y: {
                     beginAtZero: true,
                     max: 100,
@@ -590,6 +708,8 @@ const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLa
             },
         },
     });
+
+    registerSummaryChart(canvasId, chart, labels, [values], values, collegeAverage);
 };
 
 const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, maxY = 100, asPercent = true) => {
@@ -598,7 +718,7 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
         return;
     }
 
-    new Chart(chartNode, {
+    const chart = new Chart(chartNode, {
         type: 'bar',
         data: {
             labels,
@@ -624,6 +744,7 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
                 tooltip: {
@@ -637,7 +758,12 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
             },
             scales: {
                 x: {
-                    ticks: { maxRotation: 45, minRotation: 0 },
+                    ticks: {
+                        font: { size: 13, weight: '700' },
+                        color: '#243041',
+                        maxRotation: 45,
+                        minRotation: 0,
+                    },
                 },
                 y: {
                     beginAtZero: true,
@@ -649,6 +775,11 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
             },
         },
     });
+
+    const sortKeys = labels.map((_, index) => (
+        (Number(values1[index]) || 0) + (Number(values2[index]) || 0)
+    ) / 2);
+    registerSummaryChart(canvasId, chart, labels, [values1, values2], sortKeys);
 };
 
 const yearComparePalette = ['#1565c0', '#6a1b9a', '#ef6c00'];
@@ -661,14 +792,18 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
 
     const metricRows = compareData[metricKey] || [];
     const labels = (compareData.specialties || []).map((item) => item.label);
+    const yearCount = (compareData.years || []).length;
+    const datasetsData = (compareData.years || []).map((year, index) => (
+        metricRows.map((row) => row[index] ?? 0)
+    ));
 
-    new Chart(chartNode, {
+    const chart = new Chart(chartNode, {
         type: 'bar',
         data: {
             labels,
             datasets: (compareData.years || []).map((year, index) => ({
                 label: (compareData.year_labels || [])[index] || year,
-                data: metricRows.map((row) => row[index] ?? 0),
+                data: datasetsData[index],
                 backgroundColor: yearComparePalette[index % yearComparePalette.length],
                 borderColor: yearComparePalette[index % yearComparePalette.length],
                 borderWidth: 1,
@@ -678,6 +813,7 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
                 tooltip: {
@@ -689,7 +825,14 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
                 },
             },
             scales: {
-                x: { ticks: { maxRotation: 45, minRotation: 15 } },
+                x: {
+                    ticks: {
+                        font: { size: 13, weight: '700' },
+                        color: '#243041',
+                        maxRotation: 45,
+                        minRotation: 15,
+                    },
+                },
                 y: {
                     beginAtZero: true,
                     max: 100,
@@ -698,6 +841,10 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
             },
         },
     });
+
+    const lastYearIndex = Math.max(0, yearCount - 1);
+    const sortKeys = metricRows.map((row) => Number(row[lastYearIndex] ?? 0) || 0);
+    registerSummaryChart(canvasId, chart, labels, datasetsData, sortKeys);
 };
 
 const renderCollegeYearsChart = (canvasId, compareData) => {
@@ -798,6 +945,7 @@ const renderCollegeDonutChart = (canvasId, labels, values, colors) => {
 };
 
 (() => {
+    fillChartSortControls();
 <?php if ($isCompare && $report1 && $report2): ?>
     const groupLabels = <?= json_encode($report1['charts']['group_labels'], JSON_UNESCAPED_UNICODE) ?>;
     renderCompareBars(

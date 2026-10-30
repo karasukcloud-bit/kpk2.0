@@ -13,11 +13,36 @@ $period = get_active_gradebook_period();
 $year = $period['academic_year'];
 $monthOptions = get_academic_year_months($year);
 $month = resolve_attendance_month($year, $_GET['month'] ?? null);
+$view = (string) ($_GET['view'] ?? 'month');
+if (!in_array($view, ['month', 'sem1', 'sem2', 'year'], true)) {
+    $view = 'month';
+}
 
-$monthReport = build_educator_attendance_report($year, $month);
 $semester1Report = build_educator_attendance_report($year, null, '1');
 $semester2Report = build_educator_attendance_report($year, null, '2');
 $yearReport = build_educator_attendance_report($year);
+$monthReport = $view === 'month'
+    ? build_educator_attendance_report($year, $month)
+    : [];
+
+if ($view === 'month') {
+    $rows = $monthReport;
+    $tableTitle = 'За месяц: ' . format_attendance_month($month);
+} elseif ($view === 'sem1') {
+    $rows = $semester1Report;
+    $tableTitle = 'За 1 семестр';
+} elseif ($view === 'sem2') {
+    $rows = $semester2Report;
+    $tableTitle = 'За 2 семестр';
+} else {
+    $rows = $yearReport;
+    $tableTitle = 'За учебный год';
+}
+
+$viewQuery = static function (array $overrides = []) use ($view, $month): string {
+    return http_build_query(array_merge(['view' => $view, 'month' => $month], $overrides));
+};
+
 $chartData = build_attendance_year_chart_data($year);
 $perStudentChartData = build_attendance_year_per_student_chart_data($year);
 $compareCharts = build_attendance_three_years_comparison_set($year);
@@ -45,39 +70,50 @@ require __DIR__ . '/../includes/header.php';
     </section>
 
     <section class="panel">
-        <form method="get" class="form form--filter">
-            <div class="form__row form__row--filter">
-                <div class="form__group">
-                    <label for="month">Месяц для первой таблицы</label>
-                    <select id="month" name="month" onchange="this.form.submit()">
+        <h2>Сводка пропусков по группам</h2>
+        <p class="text-muted">Учебный год <?= e($year) ?>.</p>
+
+        <div class="summary-report-filters">
+            <div class="summary-report-filters__group">
+                <span class="summary-report-filters__label">Период</span>
+                <div class="summary-report-filters__tabs">
+                    <a href="attendance.php?<?= e($viewQuery(['view' => 'month'])) ?>"
+                       class="summary-report-filters__tab<?= $view === 'month' ? ' is-active' : '' ?>">
+                        За месяц
+                    </a>
+                    <a href="attendance.php?<?= e($viewQuery(['view' => 'sem1'])) ?>"
+                       class="summary-report-filters__tab<?= $view === 'sem1' ? ' is-active' : '' ?>">
+                        1 семестр
+                    </a>
+                    <a href="attendance.php?<?= e($viewQuery(['view' => 'sem2'])) ?>"
+                       class="summary-report-filters__tab<?= $view === 'sem2' ? ' is-active' : '' ?>">
+                        2 семестр
+                    </a>
+                    <a href="attendance.php?<?= e($viewQuery(['view' => 'year'])) ?>"
+                       class="summary-report-filters__tab<?= $view === 'year' ? ' is-active' : '' ?>">
+                        Учебный год
+                    </a>
+                </div>
+            </div>
+
+            <?php if ($view === 'month'): ?>
+            <div class="summary-report-filters__group">
+                <span class="summary-report-filters__label">Месяц</span>
+                <form method="get" class="form form--filter educator-attendance-month-form">
+                    <input type="hidden" name="view" value="month">
+                    <select id="month" name="month" onchange="this.form.submit()" aria-label="Месяц">
                         <?php foreach ($monthOptions as $option): ?>
                         <option value="<?= e($option['value']) ?>"<?= $option['value'] === $month ? ' selected' : '' ?>>
                             <?= e($option['label']) ?>
                         </option>
                         <?php endforeach; ?>
                     </select>
-                </div>
+                </form>
             </div>
-        </form>
-        <p class="text-muted">Учебный год <?= e($year) ?>.</p>
+            <?php endif; ?>
+        </div>
 
-        <?php
-        $rows = $monthReport;
-        $tableTitle = 'За месяц: ' . format_attendance_month($month);
-        require __DIR__ . '/../includes/educator/attendance_table.php';
-
-        $rows = $semester1Report;
-        $tableTitle = 'За 1 семестр';
-        require __DIR__ . '/../includes/educator/attendance_table.php';
-
-        $rows = $semester2Report;
-        $tableTitle = 'За 2 семестр';
-        require __DIR__ . '/../includes/educator/attendance_table.php';
-
-        $rows = $yearReport;
-        $tableTitle = 'За учебный год';
-        require __DIR__ . '/../includes/educator/attendance_table.php';
-        ?>
+        <?php require __DIR__ . '/../includes/educator/attendance_table.php'; ?>
     </section>
 
     <?php require __DIR__ . '/../includes/educator/attention_groups.php'; ?>

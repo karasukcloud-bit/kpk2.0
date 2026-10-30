@@ -5,7 +5,7 @@ declare(strict_types=1);
 /** Общая страница рейтинга завуча. Ожидает $ratingSource: journal | manual_brs */
 
 $ratingSource = ($ratingSource ?? 'journal') === 'manual_brs' ? 'manual_brs' : 'journal';
-$ratingSelfUrl = $ratingSelfUrl ?? ($ratingSource === 'manual_brs' ? 'manual_brs_rating.php' : 'rating.php');
+$ratingSelfUrl = $ratingSelfUrl ?? 'rating.php';
 $ratingPanelLead = $ratingPanelLead ?? 'Рейтинг студентов по успеваемости';
 $ratingSourceLabel = $ratingSourceLabel
     ?? ($ratingSource === 'manual_brs'
@@ -13,6 +13,7 @@ $ratingSourceLabel = $ratingSourceLabel
         : 'Средний балл считается по итоговым оценкам из электронного журнала.');
 $ratingEmptyText = $ratingEmptyText
     ?? 'Нет студентов с выставленными итоговыми оценками за выбранный период.';
+$manualBrsAvailable = is_manual_brs_gradebook_active();
 
 $period = get_active_gradebook_period();
 $year = $period['academic_year'];
@@ -39,6 +40,22 @@ if ($scope === 'specialty') {
 } else {
     $scopeId = 0;
 }
+
+$ratingQuery = static function (array $overrides = []) use ($ratingSource, $scope, $scopeId): string {
+    $params = array_merge([
+        'source' => $ratingSource,
+        'scope' => $scope,
+    ], $overrides);
+    if (array_key_exists('id', $overrides) && $overrides['id'] === null) {
+        unset($params['id']);
+    } elseif (($params['scope'] ?? '') !== 'college' && $scopeId > 0 && !array_key_exists('id', $overrides)) {
+        $params['id'] = $scopeId;
+    }
+    return http_build_query(array_filter(
+        $params,
+        static fn ($v) => $v !== null && $v !== ''
+    ));
+};
 
 $items = filter_student_rating_items($rating['items'], $scope, $scopeId);
 
@@ -84,25 +101,37 @@ require __DIR__ . '/header.php';
     </section>
 
     <section class="panel">
-        <nav class="admin-tabs rating-scope-tabs">
-            <a
-                href="<?= e($ratingSelfUrl) ?>?scope=college"
-                class="admin-tabs__item<?= $scope === 'college' ? ' admin-tabs__item--active' : '' ?>"
-            >По колледжу</a>
-            <a
-                href="<?= e($ratingSelfUrl) ?>?scope=specialty"
-                class="admin-tabs__item<?= $scope === 'specialty' ? ' admin-tabs__item--active' : '' ?>"
-            >По специальностям</a>
-            <a
-                href="<?= e($ratingSelfUrl) ?>?scope=group"
-                class="admin-tabs__item<?= $scope === 'group' ? ' admin-tabs__item--active' : '' ?>"
-            >По группам</a>
-        </nav>
-
         <p class="text-muted">
             Период: учебный год <?= e($year) ?> · <?= e(semester_label($semester)) ?>.
             <?= e($ratingSourceLabel) ?>
         </p>
+
+        <?php if ($manualBrsAvailable): ?>
+        <div class="summary-report-filters">
+            <?php
+            $sourceFilterCurrent = $ratingSource;
+            $sourceFilterUrl = static function (array $overrides) use ($ratingSelfUrl, $ratingQuery): string {
+                return $ratingSelfUrl . '?' . $ratingQuery($overrides);
+            };
+            require __DIR__ . '/deputy_source_filter.php';
+            ?>
+        </div>
+        <?php endif; ?>
+
+        <nav class="admin-tabs rating-scope-tabs">
+            <a
+                href="<?= e($ratingSelfUrl) ?>?<?= e($ratingQuery(['scope' => 'college', 'id' => null])) ?>"
+                class="admin-tabs__item<?= $scope === 'college' ? ' admin-tabs__item--active' : '' ?>"
+            >По колледжу</a>
+            <a
+                href="<?= e($ratingSelfUrl) ?>?<?= e($ratingQuery(['scope' => 'specialty', 'id' => null])) ?>"
+                class="admin-tabs__item<?= $scope === 'specialty' ? ' admin-tabs__item--active' : '' ?>"
+            >По специальностям</a>
+            <a
+                href="<?= e($ratingSelfUrl) ?>?<?= e($ratingQuery(['scope' => 'group', 'id' => null])) ?>"
+                class="admin-tabs__item<?= $scope === 'group' ? ' admin-tabs__item--active' : '' ?>"
+            >По группам</a>
+        </nav>
 
         <?php if ($scope === 'specialty'): ?>
             <?php if ($rating['specialties'] === []): ?>
@@ -110,6 +139,7 @@ require __DIR__ . '/header.php';
             <?php else: ?>
                 <form method="get" class="form form--filter" action="<?= e($ratingSelfUrl) ?>">
                     <input type="hidden" name="scope" value="specialty">
+                    <input type="hidden" name="source" value="<?= e($ratingSource) ?>">
                     <div class="form__group">
                         <label for="rating_specialty">Специальность</label>
                         <select id="rating_specialty" name="id" onchange="this.form.submit()">
@@ -131,6 +161,7 @@ require __DIR__ . '/header.php';
             <?php else: ?>
                 <form method="get" class="form form--filter" action="<?= e($ratingSelfUrl) ?>">
                     <input type="hidden" name="scope" value="group">
+                    <input type="hidden" name="source" value="<?= e($ratingSource) ?>">
                     <div class="form__group">
                         <label for="rating_group">Группа</label>
                         <select id="rating_group" name="id" onchange="this.form.submit()">

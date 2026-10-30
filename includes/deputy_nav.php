@@ -13,12 +13,6 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'grades' ? ' admin-tabs__item--active' : '' ?>">
         Электронные ведомости
     </a>
-    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
-    <a href="manual_brs_gradebook.php"
-       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_gradebook' ? ' admin-tabs__item--active' : '' ?>">
-        Ведомости Ручное БРС
-    </a>
-    <?php endif; ?>
     <a href="record_books.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'record_books' ? ' admin-tabs__item--active' : '' ?>">
         Зачётные книжки
@@ -27,32 +21,18 @@ $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
        class="admin-tabs__item<?= $currentDeputyTab === 'summary' ? ' admin-tabs__item--active' : '' ?>">
         Сводная ведомость
     </a>
-    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
-    <a href="manual_brs_summary.php"
-       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_summary' ? ' admin-tabs__item--active' : '' ?>">
-        Сводные ведомости Ручное БРС
+    <a href="subject_performance.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'subject_performance' ? ' admin-tabs__item--active' : '' ?>">
+        Успеваемость по предметам
     </a>
-    <?php endif; ?>
     <a href="rating.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'rating' ? ' admin-tabs__item--active' : '' ?>">
         Рейтинг студентов
     </a>
-    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
-    <a href="manual_brs_rating.php"
-       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_rating' ? ' admin-tabs__item--active' : '' ?>">
-        Рейтинг Ручное БРС
-    </a>
-    <?php endif; ?>
     <a href="glaz.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'glaz' ? ' admin-tabs__item--active' : '' ?>">
         ГЛАЗ
     </a>
-    <?php if (is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php')): ?>
-    <a href="manual_brs_glaz.php"
-       class="admin-tabs__item<?= $currentDeputyTab === 'manual_brs_glaz' ? ' admin-tabs__item--active' : '' ?>">
-        ГЛАЗ Ручное БРС
-    </a>
-    <?php endif; ?>
     <a href="expelled.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'expelled' ? ' admin-tabs__item--active' : '' ?>">
         Отчисленные

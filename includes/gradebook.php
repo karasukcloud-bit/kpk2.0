@@ -1387,3 +1387,167 @@ function build_gradebook_three_years_comparison(
         'college_quality' => $collegeQuality,
     ];
 }
+
+/**
+ * Успеваемость по предметам в разрезе специальностей.
+ * $semester: 1 | 2 | year
+ *
+ * @return array{
+ *   specialties: array<string, array{
+ *     key:string,
+ *     label:string,
+ *     groups:int,
+ *     subjects: list<array{
+ *       key:string,
+ *       name:string,
+ *       assessed:int,
+ *       absolute:int,
+ *       quality:int,
+ *       absolute_percent:float,
+ *       quality_percent:float,
+ *       average_grade:float
+ *     }>
+ *   }>
+ * }
+ */
+function build_specialty_subjects_performance_report(
+    string $academicYear,
+    string $semester,
+    string $source = 'journal',
+    ?array $groups = null
+): array {
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    $isYear = $semester === 'year' || $semester === 'both';
+    $semesters = $isYear ? ['1', '2'] : [normalize_gradebook_semester($semester)];
+    $groups = $groups ?? get_all_groups();
+
+    /** @var array<string, array{key:string,label:string,groups:array<int,true>,subjects:array<string,array<string,mixed>>}> $specialties */
+    $specialties = [];
+
+    foreach ($groups as $group) {
+        $groupId = (int) $group['id'];
+        $specialtyKey = gradebook_specialty_key_from_group($group);
+        $specialtyLabel = gradebook_specialty_label_from_group($group);
+
+        if (!isset($specialties[$specialtyKey])) {
+            $specialties[$specialtyKey] = [
+                'key' => $specialtyKey,
+                'label' => $specialtyLabel,
+                'groups' => [],
+                'subjects' => [],
+            ];
+        }
+        $specialties[$specialtyKey]['groups'][$groupId] = true;
+
+        $students = get_students_by_group($groupId);
+        if ($students === []) {
+            continue;
+        }
+
+        $seenItemIds = [];
+        foreach ($semesters as $sem) {
+            $subjects = get_group_curriculum_subjects($groupId, $academicYear, $sem);
+            if ($subjects === []) {
+                continue;
+            }
+            $grades = get_gradebook_grades_by_source($groupId, $academicYear, $sem, $source);
+
+            foreach ($subjects as $subject) {
+                $itemId = (int) ($subject['curriculum_item_id'] ?? 0);
+                if ($itemId <= 0 || isset($seenItemIds[$itemId])) {
+                    continue;
+                }
+                $seenItemIds[$itemId] = true;
+
+                $subjectId = (int) ($subject['subject_id'] ?? 0);
+                $subjectName = trim((string) ($subject['subject_name'] ?? ''));
+                if ($subjectName === '') {
+                    $subjectName = 'Без названия';
+                }
+                $subjectKey = $subjectId > 0
+                    ? 'sid:' . $subjectId
+                    : 'name:' . mb_strtolower($subjectName);
+
+                if (!isset($specialties[$specialtyKey]['subjects'][$subjectKey])) {
+                    $specialties[$specialtyKey]['subjects'][$subjectKey] = [
+                        'key' => $subjectKey,
+                        'name' => $subjectName,
+                        'assessed' => 0,
+                        'absolute' => 0,
+                        'quality' => 0,
+                        'grade_sum' => 0,
+                    ];
+                }
+
+                foreach ($students as $student) {
+                    $studentId = (int) $student['id'];
+                    if (!isset($grades[$studentId][$itemId])) {
+                        continue;
+                    }
+                    $grade = (int) $grades[$studentId][$itemId];
+                    $bucket = &$specialties[$specialtyKey]['subjects'][$subjectKey];
+                    $bucket['assessed']++;
+                    $bucket['grade_sum'] += $grade;
+                    if ($grade >= 3) {
+                        $bucket['absolute']++;
+                    }
+                    if ($grade >= 4) {
+                        $bucket['quality']++;
+                    }
+                    unset($bucket);
+                }
+            }
+        }
+    }
+
+    $result = [];
+    foreach ($specialties as $key => $specialty) {
+        $subjects = [];
+        foreach ($specialty['subjects'] as $subject) {
+            $assessed = (int) $subject['assessed'];
+            if ($assessed <= 0) {
+                continue;
+            }
+            $subjects[] = [
+                'key' => (string) $subject['key'],
+                'name' => (string) $subject['name'],
+                'assessed' => $assessed,
+                'absolute' => (int) $subject['absolute'],
+                'quality' => (int) $subject['quality'],
+                'absolute_percent' => gradebook_percent_from_counts((int) $subject['absolute'], $assessed),
+                'quality_percent' => gradebook_percent_from_counts((int) $subject['quality'], $assessed),
+                'average_grade' => round((int) $subject['grade_sum'] / $assessed, 2),
+            ];
+        }
+
+        usort(
+            $subjects,
+            static fn (array $a, array $b): int => strcmp($a['name'], $b['name'])
+        );
+
+        if ($subjects === []) {
+            continue;
+        }
+
+        $result[$key] = [
+            'key' => $key,
+            'label' => (string) $specialty['label'],
+            'groups' => count($specialty['groups']),
+            'subjects' => $subjects,
+        ];
+    }
+
+    uasort($result, static function (array $a, array $b): int {
+        $gen = gradebook_general_education_label();
+        if ($a['label'] === $gen && $b['label'] !== $gen) {
+            return 1;
+        }
+        if ($b['label'] === $gen && $a['label'] !== $gen) {
+            return -1;
+        }
+
+        return strcmp($a['label'], $b['label']);
+    });
+
+    return ['specialties' => $result];
+}

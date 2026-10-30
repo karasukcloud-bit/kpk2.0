@@ -757,6 +757,45 @@ body {
     margin-top: 1rem;
 }
 
+.subject-perf-specialty {
+    margin-top: 1rem;
+}
+
+.subject-perf-specialty__count {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35rem;
+    margin-left: 0.35rem;
+    padding: 0.05rem 0.35rem;
+    border-radius: 999px;
+    background: rgba(21, 101, 192, 0.12);
+    color: #0d47a1;
+    font-size: 0.78rem;
+    font-weight: 700;
+}
+
+.summary-report-filters__tab.is-active .subject-perf-specialty__count {
+    background: rgba(13, 71, 161, 0.18);
+}
+
+.subject-perf-chart-wrap {
+    margin-top: 0.75rem;
+}
+
+.educator-attendance-month-form {
+    margin: 0;
+}
+
+.educator-attendance-month-form select {
+    min-width: 11rem;
+    padding: 0.35rem 0.6rem;
+    border: 1px solid var(--border-color, #cfd6e0);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 0.9rem;
+}
+
 .summary-college-kpis {
     margin-bottom: 1.25rem;
 }
@@ -851,6 +890,64 @@ body {
 
 .text-danger {
     color: #c62828;
+}
+
+.summary-chart-head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 0.75rem 1.25rem;
+    margin-bottom: 0.35rem;
+}
+
+.summary-chart-head h2 {
+    margin: 0 0 0.35rem;
+}
+
+.summary-chart-head .text-muted {
+    margin: 0;
+}
+
+.summary-chart-sort {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.summary-chart-sort__label {
+    font-size: 0.78rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: var(--text-muted, #607080);
+    margin-right: 0.15rem;
+}
+
+.summary-chart-sort__btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.3rem 0.7rem;
+    border: 1px solid var(--border-color, #cfd6e0);
+    border-radius: 6px;
+    background: #fff;
+    color: var(--text-color, #243041);
+    font-size: 0.85rem;
+    line-height: 1.2;
+    cursor: pointer;
+}
+
+.summary-chart-sort__btn:hover {
+    border-color: #90a4ae;
+    background: #fafbfc;
+}
+
+.summary-chart-sort__btn.is-active {
+    border-color: #1565c0;
+    background: #e3f2fd;
+    color: #0d47a1;
+    font-weight: 600;
 }
 
 .absence-rank-chart {

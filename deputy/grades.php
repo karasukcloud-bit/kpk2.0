@@ -19,6 +19,17 @@ $year = $period['academic_year'];
 $semester = $period['semester'];
 $groups = get_all_groups();
 
+$manualBrsAvailable = is_manual_brs_gradebook_active();
+$source = (string) ($_GET['source'] ?? 'journal');
+if ($source === 'manual_brs' && !$manualBrsAvailable) {
+    $source = 'journal';
+}
+$source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+$sourceLabel = $source === 'manual_brs'
+    ? 'Оценки из модуля «Ручное БРС».'
+    : 'Оценки подставляются из электронного журнала.';
+$openBase = $source === 'manual_brs' ? 'manual_brs_gradebook.php' : 'gradebook.php';
+
 $pageTitle = 'Электронные ведомости — Панель завуча';
 $showHeader = true;
 $basePath = '../';
@@ -41,8 +52,20 @@ require __DIR__ . '/../includes/header.php';
         <h2>Выберите группу</h2>
         <p class="text-muted">
             Период ведомости: учебный год <?= e($year) ?> · <?= e(semester_label($semester)) ?>.
-            Оценки подставляются из электронного журнала.
+            <?= e($sourceLabel) ?>
         </p>
+
+        <?php if ($manualBrsAvailable): ?>
+        <div class="summary-report-filters">
+            <?php
+            $sourceFilterCurrent = $source;
+            $sourceFilterUrl = 'grades.php';
+            $sourceFilterQuery = [];
+            require __DIR__ . '/../includes/deputy_source_filter.php';
+            ?>
+        </div>
+        <?php endif; ?>
+
         <?php
         $periodHint = gradebook_period_mismatch_hint($period);
         if ($periodHint):
@@ -70,13 +93,13 @@ require __DIR__ . '/../includes/header.php';
                         <?php foreach ($groups as $index => $group): ?>
                         <?php
                         $groupId = (int) $group['id'];
-                        $status = get_gradebook_completion_status($groupId, $year, $semester);
+                        $status = get_gradebook_completion_status($groupId, $year, $semester, $source);
                         $studentCount = $status['students'];
                         $incompleteSections = group_has_incomplete_composite_sections(
                             $groupId,
                             $year,
                             $semester,
-                            'journal'
+                            $source
                         );
                         ?>
                         <tr>
@@ -102,7 +125,7 @@ require __DIR__ . '/../includes/header.php';
                             </td>
                             <td class="table__actions">
                                 <a
-                                    href="gradebook.php?group_id=<?= $groupId ?>"
+                                    href="<?= e($openBase) ?>?group_id=<?= $groupId ?>"
                                     class="btn btn--primary btn--sm"
                                 >Открыть ведомость</a>
                             </td>

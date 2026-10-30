@@ -13,12 +13,27 @@ if (!can_use_deputy_panel()) {
     exit('Доступ запрещён. Требуются права завуча или администратора.');
 }
 
-$summarySource = 'journal';
-$summaryGradebookHref = 'gradebook.php';
+$source = (string) ($_GET['source'] ?? 'journal');
+if ($source === 'manual_brs' && !is_manual_brs_gradebook_active()) {
+    $source = 'journal';
+}
+$source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+
+if ($source === 'manual_brs') {
+    $summarySource = 'manual_brs';
+    $summaryGradebookHref = 'manual_brs_gradebook.php';
+    $summaryPanelLead = 'Сводная ведомость по всем группам';
+    $summaryHeading = 'Сводная ведомость';
+    $summarySourceLabel = 'Оценки из временного модуля «Ручное БРС».';
+} else {
+    $summarySource = 'journal';
+    $summaryGradebookHref = 'gradebook.php';
+    $summaryPanelLead = 'Сводная ведомость по всем группам';
+    $summaryHeading = 'Сводная ведомость';
+    $summarySourceLabel = 'Оценки из электронного журнала.';
+}
+
 $summarySelfUrl = 'summary.php';
-$summaryPanelLead = 'Сводная ведомость по всем группам';
-$summaryHeading = 'Сводная ведомость';
-$summarySourceLabel = 'Оценки из электронного журнала.';
 $pageTitle = 'Сводная ведомость — Панель завуча';
 $currentDeputyTab = 'summary';
 

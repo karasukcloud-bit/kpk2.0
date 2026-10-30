@@ -7,6 +7,7 @@ require_once __DIR__ . '/../includes/glaz.php';
 require_once __DIR__ . '/../includes/teachers.php';
 require_once __DIR__ . '/../includes/organization.php';
 require_once __DIR__ . '/../includes/notifications.php';
+require_once __DIR__ . '/../includes/gradebook.php';
 
 require_login();
 if (!can_use_deputy_panel()) {
@@ -14,23 +15,50 @@ if (!can_use_deputy_panel()) {
     exit('Доступ запрещён. Требуются права завуча или администратора.');
 }
 
+$manualBrsAvailable = is_manual_brs_gradebook_active();
+$source = (string) ($_GET['source'] ?? 'journal');
+if ($source === 'manual_brs' && !$manualBrsAvailable) {
+    $source = 'journal';
+}
+$source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+
+if ($source === 'manual_brs') {
+    require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
+    require_once __DIR__ . '/../modules/manual_brs/includes/glaz.php';
+}
+
 $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
     } elseif (($_POST['action'] ?? '') === 'send_glaz') {
-        $result = send_glaz_to_teachers();
+        $result = send_glaz_to_teachers($source);
         if (!empty($result['success'])) {
-            flash_set('success', 'График отправлен преподавателям: ' . (int) $result['sent'] . ' оповещений.');
-            header('Location: glaz.php');
+            $msg = $source === 'manual_brs'
+                ? 'График ГЛАЗ (Ручное БРС) отправлен преподавателям: '
+                : 'График отправлен преподавателям: ';
+            flash_set('success', $msg . (int) $result['sent'] . ' оповещений.');
+            header('Location: glaz.php?source=' . urlencode($source));
             exit;
         }
         $error = $result['error'] ?? 'Не удалось отправить график.';
     }
 }
 
-$debts = get_all_academic_debts();
-$scheduleIndex = get_glaz_schedules_index();
+if ($source === 'manual_brs') {
+    $debts = get_all_manual_brs_academic_debts();
+    $scheduleIndex = get_glaz_schedules_index('manual_brs');
+    $glazSourceNote = 'Источник: модуль «Ручное БРС». В график попадают студенты с итоговой оценкой «2».';
+    $glazSaveUrl = 'manual_brs_glaz_save.php';
+    $sendConfirm = 'Отправить график ГЛАЗ (Ручное БРС) всем преподавателям?';
+} else {
+    $debts = get_all_academic_debts();
+    $scheduleIndex = get_glaz_schedules_index('journal');
+    $glazSourceNote = 'Источник: электронный журнал / архив ведомостей. Незавершённые семестры в график не включаются.';
+    $glazSaveUrl = 'glaz_save.php';
+    $sendConfirm = 'Отправить график ГЛАЗ всем преподавателям?';
+}
+
 $tableGroups = build_glaz_table_groups($debts, $scheduleIndex['schedules']);
 $teachers = get_all_teachers();
 $organization = get_organization();
@@ -62,7 +90,7 @@ require __DIR__ . '/../includes/header.php';
                     <button
                         type="submit"
                         class="btn btn--primary btn--sm"
-                        onclick="return confirm('Отправить график ГЛАЗ всем преподавателям?');"
+                        onclick="return confirm(<?= json_encode($sendConfirm, JSON_UNESCAPED_UNICODE) ?>);"
                     >Отправить преподавателям</button>
                 </form>
                 <button type="button" class="btn btn--ghost" data-glaz-print>Печать</button>
@@ -71,6 +99,19 @@ require __DIR__ . '/../includes/header.php';
         </div>
         <?php require __DIR__ . '/../includes/deputy_nav.php'; ?>
     </section>
+
+    <?php if ($manualBrsAvailable): ?>
+    <section class="panel glaz-no-print">
+        <div class="summary-report-filters">
+            <?php
+            $sourceFilterCurrent = $source;
+            $sourceFilterUrl = 'glaz.php';
+            $sourceFilterQuery = [];
+            require __DIR__ . '/../includes/deputy_source_filter.php';
+            ?>
+        </div>
+    </section>
+    <?php endif; ?>
 
     <?php if ($success): ?>
         <div class="alert alert--success glaz-no-print"><?= e($success) ?></div>
