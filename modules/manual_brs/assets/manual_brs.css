@@ -255,6 +255,20 @@
         print-color-adjust: exact;
     }
 
+    .manual-brs-gradebook-print-area .gradebook-table__subject-col {
+        height: 160px !important;
+        vertical-align: bottom !important;
+    }
+
+    .manual-brs-gradebook-print-area .gradebook-subject-title {
+        writing-mode: vertical-rl !important;
+        transform: rotate(180deg) !important;
+        white-space: normal !important;
+        max-width: 2.5em !important;
+        overflow: hidden !important;
+        font-size: 0.75rem !important;
+    }
+
     .manual-brs-highlight-twos .gradebook-grade--two {
         background: #ffcdd2 !important;
         color: #b71c1c !important;

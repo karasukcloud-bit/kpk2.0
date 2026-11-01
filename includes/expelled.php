@@ -266,7 +266,7 @@ function get_expelled_record_book(int $expelledId): array
         'SELECT academic_year, semester, curriculum_item_id, subject_name, teacher_name, attestation_form, grade
          FROM expelled_record_book
          WHERE expelled_id = ?
-         ORDER BY academic_year DESC, semester DESC, subject_name ASC'
+         ORDER BY academic_year ASC, semester ASC, subject_name ASC'
     );
     $stmt->execute([$expelledId]);
     $rows = $stmt->fetchAll();
@@ -359,13 +359,13 @@ function get_expelled_restoration(int $expelledId): ?array
 function collect_student_debts_snapshot(int $studentId): array
 {
     $debts = [];
-    foreach (get_all_academic_debts() as $debt) {
+    foreach (get_all_glaz_debts() as $debt) {
         if ((int) $debt['student_id'] === $studentId) {
             $debts[] = $debt;
         }
     }
 
-    $schedules = get_glaz_schedules_index()['schedules'];
+    $schedules = get_glaz_schedules_index(null)['schedules'];
     $result = [];
     foreach ($debts as $debt) {
         $key = (string) $debt['debt_key'];
@@ -387,6 +387,21 @@ function collect_student_debts_snapshot(int $studentId): array
     return $result;
 }
 
+function student_has_active_expulsion(int $studentId): bool
+{
+    if ($studentId < 1 || !db()->query("SHOW TABLES LIKE 'expelled_students'")->fetch()) {
+        return false;
+    }
+    $stmt = db()->prepare(
+        'SELECT id FROM expelled_students
+         WHERE original_student_id = ? AND is_restored = 0
+         LIMIT 1'
+    );
+    $stmt->execute([$studentId]);
+
+    return (bool) $stmt->fetch();
+}
+
 function expel_student(
     int $studentId,
     string $orderNumber,
@@ -396,6 +411,9 @@ function expel_student(
     $student = get_student_by_id($studentId);
     if ($student === null) {
         return ['success' => false, 'error' => 'Студент не найден.'];
+    }
+    if (student_has_active_expulsion($studentId)) {
+        return ['success' => false, 'error' => 'Студент уже числится среди отчисленных.'];
     }
 
     $orderNumber = trim($orderNumber);

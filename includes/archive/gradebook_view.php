@@ -8,6 +8,7 @@ require_once __DIR__ . '/../auth.php';
 require_once __DIR__ . '/../archive.php';
 require_once __DIR__ . '/../teachers.php';
 require_once __DIR__ . '/../students.php';
+require_once __DIR__ . '/../gradebook.php';
 
 if ($archivePanel === 'curator') {
     require_curator_panel();
@@ -60,6 +61,16 @@ $subjects = $sheet['subjects'];
 $grades = $sheet['grades'];
 $showGradeChanges = $archivePanel !== 'curator';
 $changes = $showGradeChanges ? $sheet['changes'] : [];
+$studentsForLists = array_map(
+    static fn (array $student): array => ['id' => (int) $student['student_id']] + $student,
+    $students
+);
+$summary = ($subjects !== [] && $students !== [])
+    ? build_gradebook_summary($studentsForLists, $subjects, $grades)
+    : null;
+$studentLists = ($subjects !== [] && $students !== [])
+    ? build_gradebook_student_lists($studentsForLists, $subjects, $grades)
+    : null;
 $success = flash_get('success');
 $backPeriod = urlencode((string) $archive['academic_year'] . '|' . (string) $archive['semester']);
 
@@ -81,21 +92,17 @@ require __DIR__ . '/../header.php';
     <section class="panel">
         <div class="panel__header">
             <div>
-                <h1>Архив: ведомость группы <?= e($group['group_number']) ?></h1>
-                <p class="text-muted">
-                    <?= e($archive['academic_year']) ?> · <?= e(semester_label((string) $archive['semester'])) ?>
-                    <?php if (!empty($group['specialty_name'])): ?>
-                        · <?= e($group['specialty_name']) ?>
-                    <?php endif; ?>
-                </p>
+                <h1>Архивная ведомость</h1>
             </div>
-            <a href="archive.php?period=<?= e($backPeriod) ?>" class="btn btn--ghost">← Назад</a>
-            <?php if ($subjects !== [] && $students !== []): ?>
-            <a
-                href="archive_gradebook_pdf.php?id=<?= $archiveId ?>&group_id=<?= $groupId ?>"
-                class="btn btn--secondary"
-            >Скачать PDF</a>
-            <?php endif; ?>
+            <div class="panel__header-actions">
+                <a href="archive.php?period=<?= e($backPeriod) ?>" class="btn btn--ghost">← Назад</a>
+                <?php if ($subjects !== [] && $students !== []): ?>
+                <a
+                    href="archive_gradebook_pdf.php?id=<?= $archiveId ?>&group_id=<?= $groupId ?>"
+                    class="btn btn--secondary"
+                >Скачать PDF</a>
+                <?php endif; ?>
+            </div>
         </div>
         <?php
         if ($archivePanel === 'admin') {
@@ -119,6 +126,16 @@ require __DIR__ . '/../header.php';
         <?php if ($subjects === [] || $students === []): ?>
             <p class="text-muted">В архиве нет данных по этой группе.</p>
         <?php else: ?>
+            <?php
+            render_gradebook_sheet_header(
+                (string) $group['group_number'],
+                (string) $archive['academic_year'],
+                (string) $archive['semester'],
+                (string) ($group['specialty_name'] ?? ''),
+                (string) ($group['curator_name'] ?? ''),
+                $summary
+            );
+            ?>
             <div class="table-wrap">
                 <table class="table gradebook-table gradebook-table--readonly">
                     <thead>
@@ -194,6 +211,9 @@ require __DIR__ . '/../header.php';
             </div>
             <?php if ($canEdit): ?>
             <p class="text-muted table-hint">Нажмите на оценку, чтобы изменить её в архиве. Текущие отметки журнала не меняются — обновляется только итог.</p>
+            <?php endif; ?>
+            <?php if ($studentLists !== null): ?>
+                <?php render_gradebook_student_lists($studentLists); ?>
             <?php endif; ?>
         <?php endif; ?>
     </section>

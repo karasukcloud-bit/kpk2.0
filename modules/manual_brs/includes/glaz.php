@@ -115,7 +115,7 @@ function get_all_manual_brs_academic_debts(): array
                     }
 
                     $suggestedCommissionIds = array_values(array_unique($suggestedCommissionIds));
-                    $key = glaz_debt_key($studentId, $itemId, $year, $semester);
+                    $key = glaz_debt_key($studentId, $itemId, $year, $semester, 'manual_brs');
 
                     $debts[] = [
                         'student_id' => $studentId,
@@ -127,6 +127,8 @@ function get_all_manual_brs_academic_debts(): array
                         'academic_year' => $year,
                         'semester' => $semester,
                         'period_label' => glaz_period_label($year, $semester),
+                        'source' => 'manual_brs',
+                        'source_label' => glaz_source_label('manual_brs'),
                         'debt_key' => $key,
                         'archived_at' => null,
                         'cause_detail' => $causeDetail,
@@ -137,29 +139,7 @@ function get_all_manual_brs_academic_debts(): array
         }
     }
 
-    usort($debts, static function (array $a, array $b): int {
-        $groupCmp = strnatcasecmp($a['group_number'], $b['group_number']);
-        if ($groupCmp !== 0) {
-            return $groupCmp;
-        }
-
-        $nameCmp = strcasecmp($a['student_name'], $b['student_name']);
-        if ($nameCmp !== 0) {
-            return $nameCmp;
-        }
-
-        $yearCmp = strcmp($b['academic_year'], $a['academic_year']);
-        if ($yearCmp !== 0) {
-            return $yearCmp;
-        }
-
-        $semCmp = strcmp($a['semester'], $b['semester']);
-        if ($semCmp !== 0) {
-            return $semCmp;
-        }
-
-        return strcasecmp($a['subject_name'], $b['subject_name']);
-    });
+    glaz_sort_debts($debts);
 
     return $debts;
 }

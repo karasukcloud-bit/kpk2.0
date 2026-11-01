@@ -33,7 +33,8 @@ $result = save_glaz_schedule(
     (string) ($_POST['semester'] ?? ''),
     (string) ($_POST['liquidation_date'] ?? ''),
     (string) ($_POST['liquidation_time'] ?? ''),
-    isset($_POST['commission']) && is_array($_POST['commission']) ? $_POST['commission'] : []
+    isset($_POST['commission']) && is_array($_POST['commission']) ? $_POST['commission'] : [],
+    (string) ($_POST['source'] ?? 'journal')
 );
 
 echo json_encode($result, JSON_UNESCAPED_UNICODE);

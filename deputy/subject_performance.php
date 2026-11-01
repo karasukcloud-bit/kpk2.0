@@ -354,6 +354,40 @@ require __DIR__ . '/../includes/header.php';
         entry.chart.update();
     };
 
+    const barValueLabels = {
+        id: 'barValueLabels',
+        afterDatasetsDraw(chart) {
+            const meta = chart.getDatasetMeta(0);
+            if (!meta || meta.hidden) {
+                return;
+            }
+            const { ctx, chartArea } = chart;
+            ctx.save();
+            ctx.font = '600 11px Segoe UI, system-ui, sans-serif';
+            ctx.textBaseline = 'middle';
+            meta.data.forEach((el, i) => {
+                const raw = chart.data.datasets[0].data[i];
+                if (raw == null || Number.isNaN(Number(raw))) {
+                    return;
+                }
+                const text = String(raw) + '%';
+                const { x, y } = el.getProps(['x', 'y'], true);
+                const textWidth = ctx.measureText(text).width;
+                const pad = 6;
+                if (x + pad + textWidth <= chartArea.right) {
+                    ctx.fillStyle = '#1e293b';
+                    ctx.textAlign = 'left';
+                    ctx.fillText(text, x + pad, y);
+                } else {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.textAlign = 'right';
+                    ctx.fillText(text, Math.max(chartArea.left + pad, x - pad), y);
+                }
+            });
+            ctx.restore();
+        },
+    };
+
     const renderHorizontal = (canvasId, chartLabels, values, average, barLabel, color) => {
         const node = document.getElementById(canvasId);
         if (!node || typeof Chart === 'undefined') {
@@ -387,6 +421,7 @@ require __DIR__ . '/../includes/header.php';
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 550, easing: 'easeOutQuart' },
+                layout: { padding: { right: 36 } },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
@@ -412,6 +447,7 @@ require __DIR__ . '/../includes/header.php';
                     },
                 },
             },
+            plugins: [barValueLabels],
         });
         registry[canvasId] = {
             chart,

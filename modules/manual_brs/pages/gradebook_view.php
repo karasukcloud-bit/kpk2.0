@@ -116,7 +116,7 @@ $basePath = '../';
 require __DIR__ . '/../../../includes/header.php';
 ?>
 
-<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261023c">
+<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261101a">
 
 <div class="dashboard dashboard--wide">
     <section class="panel manual-brs-no-print">
@@ -358,14 +358,14 @@ require __DIR__ . '/../../../includes/header.php';
                 <div class="gradebook-lists">
                     <h2>Списки студентов</h2>
                     <div class="gradebook-lists__grid">
-                        <div class="gradebook-lists__col gradebook-lists__col--wide">
+                        <div class="gradebook-lists__col gradebook-lists__col--wide gradebook-lists__col--failing">
                             <h3>Неуспевающие (оценка «2»)</h3>
                             <div>
                                 <?= manual_brs_render_failing_students_html($studentLists['with_twos']) ?>
                             </div>
                         </div>
-                        <div class="gradebook-lists__col">
-                            <h3>Только оценки 4–5</h3>
+                        <div class="gradebook-lists__col gradebook-lists__col--good">
+                            <h3>Хорошисты (только 4–5)</h3>
                             <div>
                                 <?php if ($studentLists['only_good'] === []): ?>
                                     <p class="text-muted">Нет студентов</p>
@@ -380,7 +380,7 @@ require __DIR__ . '/../../../includes/header.php';
                                 <?php endif; ?>
                             </div>
                         </div>
-                        <div class="gradebook-lists__col">
+                        <div class="gradebook-lists__col gradebook-lists__col--excellent">
                             <h3>Отличники (все «5»)</h3>
                             <div>
                                 <?php if ($studentLists['excellent'] === []): ?>

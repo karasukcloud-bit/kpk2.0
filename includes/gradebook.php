@@ -608,6 +608,7 @@ function build_college_gradebook_report(
     $groups = $groups ?? get_all_groups();
     $rows = [];
     $totals = empty_college_gradebook_totals();
+    $unassessedStudents = [];
 
     foreach ($groups as $group) {
         $overview = $isYear
@@ -620,6 +621,17 @@ function build_college_gradebook_report(
             'group' => $group,
             'overview' => $overview,
         ];
+
+        $groupNumber = (string) ($group['number'] ?? '');
+        foreach ($overview['lists']['unassessed'] ?? [] as $student) {
+            $unassessedStudents[] = [
+                'student_id' => (int) ($student['student_id'] ?? 0),
+                'full_name' => (string) ($student['full_name'] ?? ''),
+                'group_id' => (int) $group['id'],
+                'group_number' => $groupNumber,
+                'reason' => (string) ($student['reason'] ?? 'no_grades'),
+            ];
+        }
 
         $totals['students'] += (int) $overview['students'];
         $totals['assessed'] += $assessed;
@@ -710,6 +722,18 @@ function build_college_gradebook_report(
 
     $metrics = derive_college_gradebook_metrics($totals);
 
+    usort(
+        $unassessedStudents,
+        static function (array $a, array $b): int {
+            $groupCmp = strnatcasecmp((string) $a['group_number'], (string) $b['group_number']);
+            if ($groupCmp !== 0) {
+                return $groupCmp;
+            }
+
+            return strcasecmp((string) $a['full_name'], (string) $b['full_name']);
+        }
+    );
+
     return [
         'academic_year' => $academicYear,
         'semester' => $semester,
@@ -718,6 +742,7 @@ function build_college_gradebook_report(
         'totals' => $totals,
         'metrics' => $metrics,
         'specialty_stats' => $specialtyStats,
+        'unassessed_students' => $unassessedStudents,
         'charts' => [
             'group_labels' => $groupLabels,
             'group_absolute' => $groupAbsolute,
@@ -767,6 +792,279 @@ function save_grade_entry(int $studentId, int $curriculumItemId, string $grade):
     $stmt->execute([$studentId, $curriculumItemId, (int) $grade]);
 
     return ['success' => true];
+}
+
+/**
+ * Метрики шапки PDF по названиям предметов (без обрезки текста).
+ *
+ * @param list<string> $subjectNames
+ * @return array{header_mm:float,text_mm:float,line_mm:float,col_mm:float}
+ */
+function gradebook_pdf_header_metrics(array $subjectNames): array
+{
+    $maxLen = 8;
+    $maxLines = 1;
+    foreach ($subjectNames as $name) {
+        $parts = gradebook_pdf_subject_name_parts((string) $name);
+        $maxLines = max($maxLines, count($parts));
+        foreach ($parts as $part) {
+            $maxLen = max($maxLen, mb_strlen($part));
+        }
+    }
+
+    // ~1.25mm на символ при 6pt DejaVu Sans.
+    $textMm = max(30.0, round($maxLen * 1.25 + 3, 1));
+    $lineMm = 4.0;
+    $colMm = max(11.0, round($maxLines * $lineMm + 3, 1));
+    $headerMm = $textMm + 4.0;
+
+    return [
+        'header_mm' => $headerMm,
+        'text_mm' => $textMm,
+        'line_mm' => $lineMm,
+        'col_mm' => $colMm,
+    ];
+}
+
+/**
+ * CSS вертикальных названий предметов для PDF.
+ * Как в электронной ведомости: повёрнутый текст снизу вверх (Dompdf: rotate -90deg).
+ *
+ * @param array{header_mm?:float,text_mm?:float,line_mm?:float,col_mm?:float}|null $metrics
+ */
+function gradebook_pdf_subject_styles(?array $metrics = null): string
+{
+    $headerMm = (float) ($metrics['header_mm'] ?? 52);
+    $textMm = (float) ($metrics['text_mm'] ?? 48);
+    $lineMm = (float) ($metrics['line_mm'] ?? 4);
+    $colMm = (float) ($metrics['col_mm'] ?? 11);
+
+    return <<<CSS
+.pdf-table {
+    width: auto;
+    max-width: 100%;
+}
+.pdf-table__subject,
+.pdf-table__grade {
+    width: {$colMm}mm;
+    max-width: {$colMm}mm;
+    padding: 0.4mm 0.15mm;
+}
+.pdf-table__subject {
+    height: {$headerMm}mm;
+    vertical-align: bottom;
+    text-align: left;
+    background: #f0f0f0;
+    font-weight: bold;
+    overflow: visible;
+}
+.pdf-table__grade {
+    text-align: center;
+    font-size: 8pt;
+    font-weight: bold;
+}
+.pdf-table__grade--two {
+    background: #ffe8e8;
+    color: #b42318;
+}
+.pdf-subject-rot {
+    width: {$textMm}mm;
+    min-width: {$textMm}mm;
+    margin-top: {$textMm}mm;
+    margin-left: 1.5mm;
+    transform: rotate(-90deg);
+    transform-origin: top left;
+}
+.pdf-subject-line {
+    display: block;
+    width: {$textMm}mm;
+    min-width: {$textMm}mm;
+    height: {$lineMm}mm;
+    font-size: 6pt;
+    line-height: {$lineMm}mm;
+    font-weight: bold;
+    color: #111;
+    white-space: nowrap;
+}
+CSS;
+}
+
+/**
+ * Делит название максимум на 2 строки для PDF (без обрезки).
+ * @return list<string>
+ */
+function gradebook_pdf_subject_name_parts(string $name, int $oneLineMax = 38): array
+{
+    $normalized = preg_replace('/\s+/u', ' ', trim($name));
+    $name = is_string($normalized) ? $normalized : trim($name);
+    if ($name === '') {
+        return ['—'];
+    }
+
+    if (mb_strlen($name) <= $oneLineMax) {
+        return [$name];
+    }
+
+    $words = preg_split('/\s+/u', $name) ?: [$name];
+    if (count($words) < 2) {
+        return [$name];
+    }
+
+    $best = null;
+    $acc = '';
+    foreach ($words as $idx => $word) {
+        $acc = $acc === '' ? $word : ($acc . ' ' . $word);
+        $restWords = array_slice($words, $idx + 1);
+        if ($restWords === []) {
+            break;
+        }
+        $rest = implode(' ', $restWords);
+        $score = abs(mb_strlen($acc) - mb_strlen($rest));
+        if ($best === null || $score < $best['score']) {
+            $best = ['line1' => $acc, 'line2' => $rest, 'score' => $score];
+        }
+    }
+
+    if ($best === null) {
+        return [$name];
+    }
+
+    return [$best['line1'], $best['line2']];
+}
+
+function gradebook_pdf_subject_th(string $name): string
+{
+    $html = '<th class="pdf-table__subject"><div class="pdf-subject-rot">';
+    foreach (gradebook_pdf_subject_name_parts($name) as $line) {
+        $html .= '<div class="pdf-subject-line">' . e($line) . '</div>';
+    }
+    $html .= '</div></th>';
+
+    return $html;
+}
+
+function gradebook_pdf_grade_td(mixed $value): string
+{
+    if ($value === null || $value === '') {
+        return '<td class="pdf-table__grade">—</td>';
+    }
+
+    $grade = (int) $value;
+    $class = 'pdf-table__grade';
+    if ($grade === 2) {
+        $class .= ' pdf-table__grade--two';
+    }
+
+    return '<td class="' . $class . '">' . e((string) $grade) . '</td>';
+}
+
+/** Имя файла: «Ведомость 101 группа 1 семестр 2024-2025.pdf». */
+function gradebook_pdf_download_filename(
+    string $groupNumber,
+    string $semester,
+    string $academicYear,
+    string $suffix = ''
+): string {
+    $group = trim($groupNumber);
+    $sem = trim($semester);
+    $year = str_replace('/', '-', trim($academicYear));
+    $suffix = trim($suffix);
+    $name = 'Ведомость ' . $group . ' группа ' . $sem . ' семестр ' . $year;
+    if ($suffix !== '') {
+        $name .= ' ' . $suffix;
+    }
+    $name .= '.pdf';
+    $safe = preg_replace('/[\\\\\\/:\\*\\?"<>|]+/u', '_', $name);
+
+    return is_string($safe) && $safe !== '' ? $safe : 'vedomost.pdf';
+}
+
+function send_gradebook_pdf_download(string $filename, string $pdf): void
+{
+    $ascii = preg_replace('/[^\x20-\x7E]+/', '_', $filename) ?: 'vedomost.pdf';
+    header('Content-Type: application/pdf');
+    header(
+        'Content-Disposition: attachment; filename="' . $ascii . '"; filename*=UTF-8\'\''
+        . rawurlencode($filename)
+    );
+    header('Content-Length: ' . (string) strlen($pdf));
+    header('Cache-Control: private, max-age=0, must-revalidate');
+    echo $pdf;
+    exit;
+}
+
+/**
+ * Шапка ведомости как в PDF: организация, заголовок, семестр·специальность, куратор, сводка.
+ *
+ * @param array{filled_grades?:int,expected_grades?:int,absolute_percent?:float|int|string,quality_percent?:float|int|string,absolute_count?:int,quality_count?:int,assessed_students?:int}|null $summary
+ */
+function render_gradebook_sheet_header(
+    string $groupNumber,
+    string $academicYear,
+    string $semester,
+    ?string $specialtyName = null,
+    ?string $curatorName = null,
+    ?array $summary = null,
+    ?string $orgName = null
+): void {
+    if ($orgName === null) {
+        require_once __DIR__ . '/organization.php';
+        $org = get_organization();
+        $orgName = trim((string) ($org['name'] ?? ''));
+    }
+
+    $specialty = trim((string) ($specialtyName ?? ''));
+    $curator = trim((string) ($curatorName ?? ''));
+    $metaLine = semester_label($semester);
+    if ($specialty !== '') {
+        $metaLine .= ' · ' . $specialty;
+    }
+    ?>
+    <header class="gradebook-sheet-header">
+        <?php if ($orgName !== ''): ?>
+            <p class="gradebook-sheet-header__meta"><?= e($orgName) ?></p>
+        <?php endif; ?>
+        <h2 class="gradebook-sheet-header__title">
+            Ведомость успеваемости учебной группы № <?= e($groupNumber) ?>
+            за <?= e($academicYear) ?> учебный год
+        </h2>
+        <p class="gradebook-sheet-header__meta"><?= e($metaLine) ?></p>
+        <?php if ($curator !== ''): ?>
+            <p class="gradebook-sheet-header__meta gradebook-sheet-header__meta--curator">
+                Куратор: <?= e($curator) ?>
+            </p>
+        <?php endif; ?>
+        <?php if (is_array($summary)): ?>
+            <table class="gradebook-sheet-stats">
+                <tr>
+                    <td>
+                        <span class="gradebook-sheet-stats__label">Выставлено оценок</span>
+                        <span class="gradebook-sheet-stats__value">
+                            <?= (int) ($summary['filled_grades'] ?? 0) ?>
+                            из <?= (int) ($summary['expected_grades'] ?? 0) ?>
+                        </span>
+                    </td>
+                    <td>
+                        <span class="gradebook-sheet-stats__label">Абсолютная успеваемость</span>
+                        <span class="gradebook-sheet-stats__value"><?= e((string) ($summary['absolute_percent'] ?? 0)) ?>%</span>
+                        <span class="gradebook-sheet-stats__label">
+                            (<?= (int) ($summary['absolute_count'] ?? 0) ?>
+                            из <?= (int) ($summary['assessed_students'] ?? 0) ?>)
+                        </span>
+                    </td>
+                    <td>
+                        <span class="gradebook-sheet-stats__label">Качественная успеваемость</span>
+                        <span class="gradebook-sheet-stats__value"><?= e((string) ($summary['quality_percent'] ?? 0)) ?>%</span>
+                        <span class="gradebook-sheet-stats__label">
+                            (<?= (int) ($summary['quality_count'] ?? 0) ?>
+                            из <?= (int) ($summary['assessed_students'] ?? 0) ?>)
+                        </span>
+                    </td>
+                </tr>
+            </table>
+        <?php endif; ?>
+    </header>
+    <?php
 }
 
 function build_gradebook_summary(array $students, array $subjects, array $grades): array
@@ -912,6 +1210,8 @@ function build_gradebook_student_lists(array $students, array $subjects, array $
     $withTwos = [];
     $onlyGood = [];
     $excellent = [];
+    $unassessed = [];
+    $hasSubjects = $subjects !== [];
 
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
@@ -942,6 +1242,11 @@ function build_gradebook_student_lists(array $students, array $subjects, array $
         }
 
         if ($values === []) {
+            $unassessed[] = [
+                'student_id' => $studentId,
+                'full_name' => (string) $student['full_name'],
+                'reason' => $hasSubjects ? 'no_grades' : 'no_subjects',
+            ];
             continue;
         }
 
@@ -964,12 +1269,78 @@ function build_gradebook_student_lists(array $students, array $subjects, array $
     usort($withTwos, $sortByName);
     usort($onlyGood, $sortByName);
     usort($excellent, $sortByName);
+    usort($unassessed, $sortByName);
 
     return [
         'with_twos' => $withTwos,
         'only_good' => $onlyGood,
         'excellent' => $excellent,
+        'unassessed' => $unassessed,
     ];
+}
+
+/** Списки под ведомостью: неуспевающие / хорошисты / отличники. */
+function render_gradebook_student_lists(array $lists): void
+{
+    $withTwos = $lists['with_twos'] ?? [];
+    $onlyGood = $lists['only_good'] ?? [];
+    $excellent = $lists['excellent'] ?? [];
+    ?>
+    <div class="gradebook-lists">
+        <h2>Списки студентов</h2>
+        <div class="gradebook-lists__grid">
+            <div class="gradebook-lists__col gradebook-lists__col--failing">
+                <h3>Оценка «2»</h3>
+                <?php if ($withTwos === []): ?>
+                    <p class="text-muted">Нет студентов</p>
+                <?php else: ?>
+                    <ul class="gradebook-lists__items">
+                        <?php foreach ($withTwos as $item): ?>
+                        <li class="gradebook-lists__item">
+                            <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
+                            <?php if (!empty($item['subjects'])): ?>
+                                <ul class="gradebook-lists__subjects">
+                                    <?php foreach ($item['subjects'] as $subjectName): ?>
+                                    <li><?= e((string) $subjectName) ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            <?php endif; ?>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+            <div class="gradebook-lists__col gradebook-lists__col--good">
+                <h3>Хорошисты (только 4–5)</h3>
+                <?php if ($onlyGood === []): ?>
+                    <p class="text-muted">Нет студентов</p>
+                <?php else: ?>
+                    <ul class="gradebook-lists__items">
+                        <?php foreach ($onlyGood as $item): ?>
+                        <li class="gradebook-lists__item">
+                            <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+            <div class="gradebook-lists__col gradebook-lists__col--excellent">
+                <h3>Отличники (все «5»)</h3>
+                <?php if ($excellent === []): ?>
+                    <p class="text-muted">Нет студентов</p>
+                <?php else: ?>
+                    <ul class="gradebook-lists__items">
+                        <?php foreach ($excellent as $item): ?>
+                        <li class="gradebook-lists__item">
+                            <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
+                        </li>
+                        <?php endforeach; ?>
+                    </ul>
+                <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <?php
 }
 
 function gradebook_percent_from_counts(int $numerator, int $denominator): float
@@ -1386,6 +1757,92 @@ function build_gradebook_three_years_comparison(
         'college_absolute' => $collegeAbsolute,
         'college_quality' => $collegeQuality,
     ];
+}
+
+/**
+ * Динамика абс./кач. успеваемости колледжа по годам для карточек на сводной.
+ *
+ * @return list<array{
+ *   key:string,
+ *   title:string,
+ *   current:float,
+ *   vs_prev:float,
+ *   vs_first:float,
+ *   direction:string,
+ *   direction_label:string,
+ *   steps:list<array{from:string,to:string,delta:float}>
+ * }>
+ */
+function gradebook_college_years_trends(array $yearsComparison): array
+{
+    $labels = array_values($yearsComparison['year_labels'] ?? []);
+    $seriesMap = [
+        [
+            'key' => 'absolute',
+            'title' => 'Абсолютная успеваемость',
+            'values' => array_values($yearsComparison['college_absolute'] ?? []),
+        ],
+        [
+            'key' => 'quality',
+            'title' => 'Качественная успеваемость',
+            'values' => array_values($yearsComparison['college_quality'] ?? []),
+        ],
+    ];
+
+    $cards = [];
+    foreach ($seriesMap as $series) {
+        $values = array_map(static fn ($v): float => round((float) $v, 1), $series['values']);
+        $count = count($values);
+        if ($count === 0 || $labels === []) {
+            continue;
+        }
+
+        $current = $values[$count - 1];
+        $prev = $count > 1 ? $values[$count - 2] : $current;
+        $first = $values[0];
+        $vsPrev = round($current - $prev, 1);
+        $vsFirst = round($current - $first, 1);
+
+        if ($vsPrev > 0.05) {
+            $direction = 'up';
+            $directionLabel = 'рост';
+        } elseif ($vsPrev < -0.05) {
+            $direction = 'down';
+            $directionLabel = 'снижение';
+        } else {
+            $direction = 'flat';
+            $directionLabel = 'без изменений';
+        }
+
+        $steps = [];
+        for ($i = 1; $i < $count; $i++) {
+            $steps[] = [
+                'from' => (string) ($labels[$i - 1] ?? ''),
+                'to' => (string) ($labels[$i] ?? ''),
+                'delta' => round($values[$i] - $values[$i - 1], 1),
+            ];
+        }
+
+        $cards[] = [
+            'key' => (string) $series['key'],
+            'title' => (string) $series['title'],
+            'current' => $current,
+            'vs_prev' => $vsPrev,
+            'vs_first' => $vsFirst,
+            'direction' => $direction,
+            'direction_label' => $directionLabel,
+            'steps' => $steps,
+        ];
+    }
+
+    return $cards;
+}
+
+function gradebook_trend_delta_text(float $delta): string
+{
+    $sign = $delta > 0 ? '+' : '';
+
+    return $sign . (string) $delta . ' п.п.';
 }
 
 /**

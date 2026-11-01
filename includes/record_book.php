@@ -184,7 +184,7 @@ function get_student_record_book(int $studentId): array
         'SELECT academic_year, semester, curriculum_item_id, subject_name, teacher_name, attestation_form, grade, updated_at
          FROM student_record_book
          WHERE student_id = ?
-         ORDER BY academic_year DESC, semester DESC, subject_name ASC'
+         ORDER BY academic_year ASC, semester ASC, subject_name ASC'
     );
     $stmt->execute([$studentId]);
     $rows = $stmt->fetchAll();

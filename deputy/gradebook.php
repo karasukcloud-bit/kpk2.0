@@ -76,10 +76,16 @@ require __DIR__ . '/../includes/header.php';
                 Заполните учебный план и журнал, затем обновите страницу.
             </p>
         <?php else: ?>
-            <p>
-                Студентов: <?= count($students) ?>
-                · предметов в плане: <?= count($subjects) ?>
-            </p>
+            <?php
+            render_gradebook_sheet_header(
+                (string) $group['number'],
+                $year,
+                $semester,
+                (string) ($group['specialty_name'] ?? ''),
+                (string) ($group['curator_name'] ?? ''),
+                $summary
+            );
+            ?>
 
             <div class="table-wrap">
                 <table class="table gradebook-table gradebook-table--readonly">
@@ -121,54 +127,7 @@ require __DIR__ . '/../includes/header.php';
             </p>
             <?php render_gradebook_composite_modals($compositeMap); ?>
 
-            <div class="gradebook-lists">
-                <h2>Списки студентов</h2>
-                <div class="gradebook-lists__grid">
-                    <div class="gradebook-lists__col">
-                        <h3>Оценка «2»</h3>
-                        <?php if ($studentLists['with_twos'] === []): ?>
-                            <p class="text-muted">Нет студентов</p>
-                        <?php else: ?>
-                            <ul class="gradebook-lists__items">
-                                <?php foreach ($studentLists['with_twos'] as $item): ?>
-                                <li class="gradebook-lists__item">
-                                    <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
-                                    <span class="gradebook-lists__subjects text-muted"><?= e(implode(', ', $item['subjects'])) ?></span>
-                                </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php endif; ?>
-                    </div>
-                    <div class="gradebook-lists__col">
-                        <h3>Только оценки 4–5</h3>
-                        <?php if ($studentLists['only_good'] === []): ?>
-                            <p class="text-muted">Нет студентов</p>
-                        <?php else: ?>
-                            <ul class="gradebook-lists__items">
-                                <?php foreach ($studentLists['only_good'] as $item): ?>
-                                <li class="gradebook-lists__item">
-                                    <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
-                                </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php endif; ?>
-                    </div>
-                    <div class="gradebook-lists__col">
-                        <h3>Отличники (все «5»)</h3>
-                        <?php if ($studentLists['excellent'] === []): ?>
-                            <p class="text-muted">Нет студентов</p>
-                        <?php else: ?>
-                            <ul class="gradebook-lists__items">
-                                <?php foreach ($studentLists['excellent'] as $item): ?>
-                                <li class="gradebook-lists__item">
-                                    <strong><?= e(person_last_first_name((string) $item['full_name'])) ?></strong>
-                                </li>
-                                <?php endforeach; ?>
-                            </ul>
-                        <?php endif; ?>
-                    </div>
-                </div>
-            </div>
+            <?php render_gradebook_student_lists($studentLists); ?>
         <?php endif; ?>
 
         <div class="form__actions">
@@ -176,23 +135,6 @@ require __DIR__ . '/../includes/header.php';
         </div>
     </section>
 
-    <?php if ($subjects !== []): ?>
-    <section class="panel panel--info">
-        <h2>Сводная информация</h2>
-        <dl class="profile-list">
-            <dt>Выставлено оценок</dt>
-            <dd><?= (int) ($summary['filled_grades'] ?? 0) ?> из <?= (int) ($summary['expected_grades'] ?? 0) ?></dd>
-            <dt>Успеваемость абсолютная</dt>
-            <dd><?= e((string) $summary['absolute_percent']) ?>%</dd>
-            <dt>Успеваемость качественная</dt>
-            <dd><?= e((string) $summary['quality_percent']) ?>%</dd>
-        </dl>
-        <p class="text-muted">
-            Абсолютная успеваемость: доля студентов без оценок «2».
-            Качественная успеваемость: доля студентов, у которых все выставленные оценки не ниже «4».
-        </p>
-    </section>
-    <?php endif; ?>
 </div>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

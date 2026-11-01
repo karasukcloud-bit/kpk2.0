@@ -3,8 +3,9 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/../../../includes/pdf.php';
+require_once __DIR__ . '/../../../includes/gradebook.php';
 
-const MANUAL_BRS_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 9;
+const MANUAL_BRS_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 20;
 
 function manual_brs_gradebook_pdf_build_document(
     int $groupId,
@@ -46,12 +47,12 @@ function manual_brs_gradebook_pdf_build_document(
 
 function manual_brs_gradebook_pdf_filename(array $document): string
 {
-    $group = preg_replace('/[^\p{L}\p{N}\-_]+/u', '_', (string) $document['group']['number']) ?: 'group';
-    $year = str_replace('/', '-', (string) $document['academic_year']);
-    $semester = (string) $document['semester'];
-    $suffix = !empty($document['is_control_week']) ? '_control' : '';
-
-    return 'manual_brs_gradebook_' . $group . '_' . $year . '_sem' . $semester . $suffix . '.pdf';
+    return gradebook_pdf_download_filename(
+        (string) $document['group']['number'],
+        (string) $document['semester'],
+        (string) $document['academic_year'],
+        !empty($document['is_control_week']) ? 'контрольная' : ''
+    );
 }
 
 function stream_manual_brs_gradebook_pdf(int $groupId, string $academicYear, string $semester): void
@@ -64,18 +65,10 @@ function stream_manual_brs_gradebook_pdf(int $groupId, string $academicYear, str
 
     $html = manual_brs_gradebook_pdf_render_html($document);
     $pdf = render_html_to_pdf($html, 'landscape');
-    $filename = manual_brs_gradebook_pdf_filename($document);
-
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . (string) strlen($pdf));
-    header('Cache-Control: private, max-age=0, must-revalidate');
-
-    echo $pdf;
-    exit;
+    send_gradebook_pdf_download(manual_brs_gradebook_pdf_filename($document), $pdf);
 }
 
-function manual_brs_gradebook_pdf_styles(): string
+function manual_brs_gradebook_pdf_styles(?array $headerMetrics = null): string
 {
     return <<<'CSS'
 @page landscape { size: A4 landscape; margin: 10mm 8mm 12mm; }
@@ -145,7 +138,8 @@ body {
 }
 
 .pdf-table {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
 }
@@ -153,7 +147,7 @@ body {
 .pdf-table th,
 .pdf-table td {
     border: 1px solid #333;
-    padding: 3px 4px;
+    padding: 2px 1px;
     vertical-align: middle;
 }
 
@@ -165,16 +159,15 @@ body {
 }
 
 .pdf-table__student {
-    width: 140px;
+    width: 32mm;
+    max-width: 32mm;
     text-align: left;
-    font-size: 9px;
+    font-size: 8px;
+    padding-left: 3px;
+    padding-right: 3px;
 }
-
-.pdf-table__grade {
-    text-align: center;
-    font-weight: 700;
-}
-CSS;
+CSS
+        . gradebook_pdf_subject_styles($headerMetrics);
 }
 
 function manual_brs_gradebook_pdf_render_stats(array $summary): string
@@ -215,9 +208,13 @@ function manual_brs_gradebook_pdf_render_html(array $document): string
     $curator = trim((string) ($group['curator_name'] ?? ''));
     $isControlWeek = !empty($document['is_control_week']);
 
+    $headerMetrics = gradebook_pdf_header_metrics(array_map(
+        static fn (array $subject): string => (string) $subject['subject_name'],
+        $subjects
+    ));
     $subjectChunks = array_chunk($subjects, MANUAL_BRS_GRADEBOOK_PDF_SUBJECTS_PER_PAGE);
     $html = '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><style>';
-    $html .= manual_brs_gradebook_pdf_styles();
+    $html .= manual_brs_gradebook_pdf_styles($headerMetrics);
     $html .= '</style></head><body>';
 
     foreach ($subjectChunks as $chunkIndex => $subjectChunk) {
@@ -252,7 +249,7 @@ function manual_brs_gradebook_pdf_render_html(array $document): string
         $html .= '<table class="pdf-table"><thead><tr>';
         $html .= '<th class="pdf-table__student">Студент</th>';
         foreach ($subjectChunk as $subject) {
-            $html .= '<th>' . e((string) $subject['subject_name']) . '</th>';
+            $html .= gradebook_pdf_subject_th((string) $subject['subject_name']);
         }
         $html .= '</tr></thead><tbody>';
 
@@ -263,8 +260,7 @@ function manual_brs_gradebook_pdf_render_html(array $document): string
             foreach ($subjectChunk as $subject) {
                 $itemId = (int) $subject['curriculum_item_id'];
                 $value = $grades[$studentId][$itemId] ?? null;
-                $html .= '<td class="pdf-table__grade">'
-                    . e($value !== null ? (string) $value : '—') . '</td>';
+                $html .= gradebook_pdf_grade_td($value);
             }
             $html .= '</tr>';
         }

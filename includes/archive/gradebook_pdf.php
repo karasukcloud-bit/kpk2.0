@@ -9,7 +9,7 @@ require_once __DIR__ . '/../curriculum.php';
 require_once __DIR__ . '/../gradebook.php';
 require_once __DIR__ . '/../pdf.php';
 
-const ARCHIVE_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 9;
+const ARCHIVE_GRADEBOOK_PDF_SUBJECTS_PER_PAGE = 20;
 
 function archive_gradebook_pdf_build_document(int $archiveId, int $groupId): ?array
 {
@@ -45,11 +45,11 @@ function archive_gradebook_pdf_build_document(int $archiveId, int $groupId): ?ar
 
 function archive_gradebook_pdf_filename(array $document): string
 {
-    $group = preg_replace('/[^\p{L}\p{N}\-_]+/u', '_', (string) $document['group']['group_number']) ?: 'group';
-    $year = str_replace('/', '-', (string) $document['archive']['academic_year']);
-    $semester = (string) $document['archive']['semester'];
-
-    return 'gradebook_' . $group . '_' . $year . '_sem' . $semester . '.pdf';
+    return gradebook_pdf_download_filename(
+        (string) $document['group']['group_number'],
+        (string) $document['archive']['semester'],
+        (string) $document['archive']['academic_year']
+    );
 }
 
 function stream_archive_gradebook_pdf(int $archiveId, int $groupId): void
@@ -62,18 +62,10 @@ function stream_archive_gradebook_pdf(int $archiveId, int $groupId): void
 
     $html = archive_gradebook_pdf_render_html($document);
     $pdf = render_html_to_pdf($html, 'landscape');
-    $filename = archive_gradebook_pdf_filename($document);
-
-    header('Content-Type: application/pdf');
-    header('Content-Disposition: attachment; filename="' . $filename . '"');
-    header('Content-Length: ' . (string) strlen($pdf));
-    header('Cache-Control: private, max-age=0, must-revalidate');
-
-    echo $pdf;
-    exit;
+    send_gradebook_pdf_download(archive_gradebook_pdf_filename($document), $pdf);
 }
 
-function archive_gradebook_pdf_styles(): string
+function archive_gradebook_pdf_styles(?array $headerMetrics = null): string
 {
     return <<<'CSS'
 @page landscape { size: A4 landscape; margin: 10mm 8mm 12mm; }
@@ -134,7 +126,8 @@ body {
 }
 
 .pdf-table {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 7.5pt;
@@ -142,7 +135,7 @@ body {
 .pdf-table th,
 .pdf-table td {
     border: 0.5pt solid #333;
-    padding: 1.2mm 1mm;
+    padding: 0.8mm 0.4mm;
     vertical-align: middle;
     word-wrap: break-word;
 }
@@ -152,14 +145,15 @@ body {
     text-align: center;
 }
 .pdf-table__student {
-    width: 28mm;
+    width: 32mm;
+    max-width: 32mm;
     text-align: left;
     font-size: 7pt;
+    padding-left: 1mm;
+    padding-right: 1mm;
 }
-.pdf-table__grade {
-    text-align: center;
-}
-CSS;
+CSS
+        . gradebook_pdf_subject_styles($headerMetrics);
 }
 
 function archive_gradebook_pdf_render_stats(array $summary): string
@@ -202,9 +196,13 @@ function archive_gradebook_pdf_render_html(array $document): string
     $students = $sheet['students'];
     $subjects = $sheet['subjects'];
     $grades = $sheet['grades'];
+    $headerMetrics = gradebook_pdf_header_metrics(array_map(
+        static fn (array $subject): string => (string) $subject['subject_name'],
+        $subjects
+    ));
     $subjectChunks = array_chunk($subjects, ARCHIVE_GRADEBOOK_PDF_SUBJECTS_PER_PAGE);
     $html = '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><style>';
-    $html .= archive_gradebook_pdf_styles();
+    $html .= archive_gradebook_pdf_styles($headerMetrics);
     $html .= '</style></head><body>';
 
     foreach ($subjectChunks as $chunkIndex => $subjectChunk) {
@@ -239,7 +237,7 @@ function archive_gradebook_pdf_render_html(array $document): string
         $html .= '<table class="pdf-table"><thead><tr>';
         $html .= '<th class="pdf-table__student">Студент</th>';
         foreach ($subjectChunk as $subject) {
-            $html .= '<th>' . e((string) $subject['subject_name']) . '</th>';
+            $html .= gradebook_pdf_subject_th((string) $subject['subject_name']);
         }
         $html .= '</tr></thead><tbody>';
 
@@ -250,8 +248,7 @@ function archive_gradebook_pdf_render_html(array $document): string
             foreach ($subjectChunk as $subject) {
                 $itemId = (int) $subject['curriculum_item_id'];
                 $value = $grades[$studentId][$itemId] ?? null;
-                $html .= '<td class="pdf-table__grade">'
-                    . e($value !== null ? (string) $value : '—') . '</td>';
+                $html .= gradebook_pdf_grade_td($value);
             }
             $html .= '</tr>';
         }

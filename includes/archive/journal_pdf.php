@@ -8,10 +8,11 @@ require_once __DIR__ . '/../journal.php';
 require_once __DIR__ . '/../ktp.php';
 require_once __DIR__ . '/../students.php';
 require_once __DIR__ . '/../curriculum.php';
+require_once __DIR__ . '/../gradebook.php';
 require_once __DIR__ . '/../pdf.php';
 
 const ARCHIVE_JOURNAL_PDF_LESSONS_PER_PAGE = 12;
-const ARCHIVE_JOURNAL_PDF_SUBJECTS_PER_PAGE = 9;
+const ARCHIVE_JOURNAL_PDF_SUBJECTS_PER_PAGE = 20;
 
 function archive_journal_pdf_build_document(int $archiveId, int $groupId): ?array
 {
@@ -85,7 +86,7 @@ function stream_archive_journal_pdf(int $archiveId, int $groupId): void
     exit;
 }
 
-function archive_journal_pdf_styles(): string
+function archive_journal_pdf_styles(?array $headerMetrics = null): string
 {
     return <<<'CSS'
 @page { margin: 12mm 10mm 14mm; }
@@ -160,7 +161,8 @@ body {
 .pdf-toc li { margin: 2mm 0; }
 
 .pdf-table {
-    width: 100%;
+    width: auto;
+    max-width: 100%;
     border-collapse: collapse;
     table-layout: fixed;
     font-size: 7.5pt;
@@ -168,7 +170,7 @@ body {
 .pdf-table th,
 .pdf-table td {
     border: 0.5pt solid #333;
-    padding: 1.2mm 1mm;
+    padding: 0.8mm 0.4mm;
     vertical-align: middle;
     word-wrap: break-word;
 }
@@ -178,9 +180,12 @@ body {
     text-align: center;
 }
 .pdf-table__student {
-    width: 28mm;
+    width: 32mm;
+    max-width: 32mm;
     text-align: left;
     font-size: 7pt;
+    padding-left: 1mm;
+    padding-right: 1mm;
 }
 .pdf-table__total {
     width: 8mm;
@@ -191,6 +196,11 @@ body {
     text-align: center;
     font-size: 6.5pt;
 }
+.pdf-table__grade {
+    text-align: center;
+}
+CSS
+        . gradebook_pdf_subject_styles($headerMetrics) . <<<'CSS'
 .pdf-lesson-date { display: block; font-weight: bold; }
 .pdf-lesson-type { display: block; font-size: 6pt; color: #555; }
 .pdf-lesson-note { display: block; font-size: 5.5pt; color: #1e3a8a; margin-top: 1px; line-height: 1.15; }
@@ -219,9 +229,19 @@ CSS;
 
 function archive_journal_pdf_render_html(array $document): string
 {
+    $gradebookSubjects = [];
+    if (is_array($document['gradebook'] ?? null) && !empty($document['gradebook']['subjects'])) {
+        foreach ($document['gradebook']['subjects'] as $subject) {
+            $gradebookSubjects[] = (string) ($subject['subject_name'] ?? '');
+        }
+    }
+    $headerMetrics = $gradebookSubjects !== []
+        ? gradebook_pdf_header_metrics($gradebookSubjects)
+        : null;
+
     $parts = [
         '<!DOCTYPE html><html lang="ru"><head><meta charset="UTF-8"><style>',
-        archive_journal_pdf_styles(),
+        archive_journal_pdf_styles($headerMetrics),
         '</style></head><body>',
         archive_journal_pdf_render_title($document),
         archive_journal_pdf_render_toc($document),
@@ -448,7 +468,7 @@ function archive_journal_pdf_render_gradebook(array $document): string
         $html .= '<table class="pdf-table"><thead><tr>';
         $html .= '<th class="pdf-table__student">Студент</th>';
         foreach ($subjectChunk as $subject) {
-            $html .= '<th class="pdf-table__lesson">' . e((string) $subject['subject_name']) . '</th>';
+            $html .= gradebook_pdf_subject_th((string) $subject['subject_name']);
         }
         $html .= '</tr></thead><tbody>';
 
@@ -458,7 +478,7 @@ function archive_journal_pdf_render_gradebook(array $document): string
             foreach ($subjectChunk as $subject) {
                 $itemId = (int) $subject['curriculum_item_id'];
                 $value = $grades[$studentId][$itemId] ?? null;
-                $html .= '<td class="pdf-table__lesson">' . e($value !== null && $value !== '' ? (string) $value : '—') . '</td>';
+                $html .= gradebook_pdf_grade_td($value);
             }
             $html .= '</tr>';
         }

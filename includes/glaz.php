@@ -10,14 +10,63 @@ require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/curriculum.php';
 require_once __DIR__ . '/archive.php';
 
-function glaz_debt_key(int $studentId, int $curriculumItemId, string $academicYear, string $semester): string
+function normalize_glaz_source(string $source): string
 {
-    return $studentId . ':' . $curriculumItemId . ':' . $academicYear . ':' . $semester;
+    return $source === 'manual_brs' ? 'manual_brs' : 'journal';
+}
+
+function glaz_source_label(string $source): string
+{
+    return normalize_glaz_source($source) === 'manual_brs' ? 'Ручное БРС' : 'Журнал';
+}
+
+function glaz_debt_key(
+    int $studentId,
+    int $curriculumItemId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): string {
+    return $studentId . ':' . $curriculumItemId . ':' . $academicYear . ':' . $semester
+        . ':' . normalize_glaz_source($source);
 }
 
 function glaz_period_label(string $academicYear, string $semester): string
 {
     return $academicYear . ' · ' . semester_label($semester);
+}
+
+/** @param list<array<string, mixed>> $debts */
+function glaz_sort_debts(array &$debts): void
+{
+    usort($debts, static function (array $a, array $b): int {
+        $groupCmp = strnatcasecmp((string) $a['group_number'], (string) $b['group_number']);
+        if ($groupCmp !== 0) {
+            return $groupCmp;
+        }
+
+        $nameCmp = strcasecmp((string) $a['student_name'], (string) $b['student_name']);
+        if ($nameCmp !== 0) {
+            return $nameCmp;
+        }
+
+        $yearCmp = strcmp((string) $b['academic_year'], (string) $a['academic_year']);
+        if ($yearCmp !== 0) {
+            return $yearCmp;
+        }
+
+        $semCmp = strcmp((string) $a['semester'], (string) $b['semester']);
+        if ($semCmp !== 0) {
+            return $semCmp;
+        }
+
+        $subjCmp = strcasecmp((string) $a['subject_name'], (string) $b['subject_name']);
+        if ($subjCmp !== 0) {
+            return $subjCmp;
+        }
+
+        return strcmp((string) ($a['source'] ?? 'journal'), (string) ($b['source'] ?? 'journal'));
+    });
 }
 
 /** ID студентов, исключённых из ГЛАЗ (отчисленные; архивы не затрагиваются). */
@@ -36,7 +85,8 @@ function get_student_ids_excluded_from_glaz(): array
     $stmt = db()->query(
         'SELECT original_student_id
          FROM expelled_students
-         WHERE original_student_id IS NOT NULL'
+         WHERE original_student_id IS NOT NULL
+           AND is_restored = 0'
     );
     foreach ($stmt->fetchAll() as $row) {
         $ids[(int) $row['original_student_id']] = true;
@@ -55,6 +105,7 @@ function get_all_academic_debts(): array
                 ap.academic_year, ap.semester, ap.archived_at,
                 COALESCE(st.full_name, ags.full_name) AS student_name,
                 COALESCE(cur_g.number, agg.group_number) AS group_number,
+                agg.group_number AS debt_group_number,
                 agsub.subject_name
          FROM archive_gradebook_grades g
          INNER JOIN archive_periods ap
@@ -83,13 +134,10 @@ function get_all_academic_debts(): array
             continue;
         }
 
-        $key = glaz_debt_key(
-            $studentId,
-            (int) $row['curriculum_item_id'],
-            (string) $row['academic_year'],
-            (string) $row['semester']
-        );
         $itemId = (int) $row['curriculum_item_id'];
+        $year = (string) $row['academic_year'];
+        $semester = (string) $row['semester'];
+        $key = glaz_debt_key($studentId, $itemId, $year, $semester, 'journal');
         $causeDetail = '';
         $suggestedCommissionIds = [];
         require_once __DIR__ . '/curriculum_composites.php';
@@ -127,16 +175,25 @@ function get_all_academic_debts(): array
             $suggestedCommissionIds = array_values(array_unique($suggestedCommissionIds));
         }
 
+        $debtGroupNumber = trim((string) ($row['debt_group_number'] ?? ''));
+        $currentGroupNumber = trim((string) ($row['group_number'] ?? ''));
+
         $debts[] = [
             'student_id' => $studentId,
             'curriculum_item_id' => $itemId,
             'group_id' => (int) $row['group_id'],
-            'group_number' => (string) $row['group_number'],
+            'group_number' => $currentGroupNumber,
+            'debt_group_number' => $debtGroupNumber,
+            'debt_group_differs' => $debtGroupNumber !== ''
+                && $currentGroupNumber !== ''
+                && $debtGroupNumber !== $currentGroupNumber,
             'student_name' => (string) $row['student_name'],
             'subject_name' => (string) $row['subject_name'],
-            'academic_year' => (string) $row['academic_year'],
-            'semester' => (string) $row['semester'],
-            'period_label' => glaz_period_label((string) $row['academic_year'], (string) $row['semester']),
+            'academic_year' => $year,
+            'semester' => $semester,
+            'period_label' => glaz_period_label($year, $semester),
+            'source' => 'journal',
+            'source_label' => glaz_source_label('journal'),
             'debt_key' => $key,
             'archived_at' => $row['archived_at'] !== null ? (string) $row['archived_at'] : null,
             'cause_detail' => $causeDetail,
@@ -144,52 +201,58 @@ function get_all_academic_debts(): array
         ];
     }
 
-    usort($debts, static function (array $a, array $b): int {
-        $groupCmp = strnatcasecmp($a['group_number'], $b['group_number']);
-        if ($groupCmp !== 0) {
-            return $groupCmp;
-        }
-
-        $nameCmp = strcasecmp($a['student_name'], $b['student_name']);
-        if ($nameCmp !== 0) {
-            return $nameCmp;
-        }
-
-        $yearCmp = strcmp($b['academic_year'], $a['academic_year']);
-        if ($yearCmp !== 0) {
-            return $yearCmp;
-        }
-
-        $semCmp = strcmp($a['semester'], $b['semester']);
-        if ($semCmp !== 0) {
-            return $semCmp;
-        }
-
-        return strcasecmp($a['subject_name'], $b['subject_name']);
-    });
+    glaz_sort_debts($debts);
 
     return $debts;
 }
 
-function normalize_glaz_source(string $source): string
+/**
+ * Объединённые задолженности ГЛАЗ: архив журнала + ручное БРС (если модуль активен).
+ *
+ * @return list<array<string, mixed>>
+ */
+function get_all_glaz_debts(): array
 {
-    return $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    $debts = get_all_academic_debts();
+
+    if (is_manual_brs_gradebook_active()) {
+        require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
+        require_once __DIR__ . '/../modules/manual_brs/includes/glaz.php';
+        foreach (get_all_manual_brs_academic_debts() as $debt) {
+            $debts[] = $debt;
+        }
+        glaz_sort_debts($debts);
+    }
+
+    return $debts;
 }
 
-function get_glaz_schedules_index(string $source = 'journal'): array
+/**
+ * @param string|null $source null — все источники; иначе один контур
+ */
+function get_glaz_schedules_index(?string $source = null): array
 {
     require_once __DIR__ . '/migrations.php';
     ensure_glaz_schema(db());
 
-    $source = normalize_glaz_source($source);
-    $stmt = db()->prepare(
-        'SELECT id, student_id, curriculum_item_id, academic_year, semester,
-                liquidation_date, liquidation_time
-         FROM glaz_schedules
-         WHERE source = ?'
-    );
-    $stmt->execute([$source]);
-    $rows = $stmt->fetchAll();
+    if ($source === null) {
+        $stmt = db()->query(
+            'SELECT id, student_id, curriculum_item_id, academic_year, semester, source,
+                    liquidation_date, liquidation_time
+             FROM glaz_schedules'
+        );
+        $rows = $stmt->fetchAll();
+    } else {
+        $source = normalize_glaz_source($source);
+        $stmt = db()->prepare(
+            'SELECT id, student_id, curriculum_item_id, academic_year, semester, source,
+                    liquidation_date, liquidation_time
+             FROM glaz_schedules
+             WHERE source = ?'
+        );
+        $stmt->execute([$source]);
+        $rows = $stmt->fetchAll();
+    }
     if ($rows === []) {
         return ['schedules' => [], 'commission' => []];
     }
@@ -220,7 +283,8 @@ function get_glaz_schedules_index(string $source = 'journal'): array
             (int) $row['student_id'],
             (int) $row['curriculum_item_id'],
             (string) $row['academic_year'],
-            (string) $row['semester']
+            (string) $row['semester'],
+            (string) ($row['source'] ?? 'journal')
         );
         $scheduleId = (int) $row['id'];
         $members = $commission[$scheduleId] ?? [];
@@ -242,8 +306,8 @@ function build_glaz_table_groups(array $debts, array $schedules): array
     $groups = [];
 
     foreach ($debts as $debt) {
-        $groupNumber = $debt['group_number'];
-        $studentId = $debt['student_id'];
+        $groupNumber = (string) $debt['group_number'];
+        $studentId = (int) $debt['student_id'];
 
         if (!isset($groups[$groupNumber])) {
             $groups[$groupNumber] = [
@@ -516,7 +580,7 @@ function format_glaz_schedule_display_html(array $schedule, ?int $highlightTeach
     return $html;
 }
 
-function send_glaz_to_teachers(string $source = 'journal'): array
+function send_glaz_to_teachers(?string $source = null): array
 {
     if (!can_use_deputy_panel()) {
         return ['success' => false, 'error' => 'Недостаточно прав.'];
@@ -535,10 +599,14 @@ function send_glaz_to_teachers(string $source = 'journal'): array
         return ['success' => false, 'error' => 'Нет активных преподавателей для рассылки.'];
     }
 
-    $source = normalize_glaz_source($source);
-    $body = $source === 'manual_brs'
-        ? 'Завуч направил график ГЛАЗ (Ручное БРС) для ознакомления.'
-        : 'Завуч направил график ликвидации академической задолженности для ознакомления.';
+    if ($source === null) {
+        $body = 'Завуч направил график ликвидации академической задолженности (ГЛАЗ) для ознакомления.';
+    } else {
+        $source = normalize_glaz_source($source);
+        $body = $source === 'manual_brs'
+            ? 'Завуч направил график ГЛАЗ (Ручное БРС) для ознакомления.'
+            : 'Завуч направил график ликвидации академической задолженности для ознакомления.';
+    }
     $sent = 0;
 
     foreach ($recipients as $teacher) {

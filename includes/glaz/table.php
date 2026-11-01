@@ -6,12 +6,14 @@ declare(strict_types=1);
 /** @var array<string, mixed> $organization */
 /** @var array<int, array<string, mixed>> $teachers */
 $glazEditable = $glazEditable ?? false;
+$glazCanExpel = $glazCanExpel ?? false;
 $glazHighlightGroupNumbers = $glazHighlightGroupNumbers ?? [];
 $glazHighlightTeacherId = $glazHighlightTeacherId ?? null;
 $glazShowLegend = $glazShowLegend ?? false;
 $glazSourceNote = $glazSourceNote
     ?? 'Только архивированные ведомости. Незавершённые семестры в график не включаются.';
 $glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
+$glazShowSourceColumn = $glazShowSourceColumn ?? false;
 ?>
 <section class="panel glaz-print-block">
     <div class="glaz-print-header">
@@ -39,6 +41,9 @@ $glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
                         <th>Студент</th>
                         <th>Предмет</th>
                         <th>Период задолженности</th>
+                        <?php if ($glazShowSourceColumn): ?>
+                        <th>Источник</th>
+                        <?php endif; ?>
                         <th>Дата и время ликвидации</th>
                     </tr>
                 </thead>
@@ -71,6 +76,17 @@ $glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
                                 >!</span>
                                 <?php endif; ?>
                                 <?= e($studentData['student_name']) ?>
+                                <?php if ($glazCanExpel): ?>
+                                <div class="glaz-no-print" style="margin-top:0.35rem">
+                                    <button
+                                        type="button"
+                                        class="btn btn--ghost btn--sm"
+                                        data-glaz-expel-open
+                                        data-student-id="<?= (int) $studentData['student_id'] ?>"
+                                        data-student-name="<?= e($studentData['student_name']) ?>"
+                                    >Отчислить</button>
+                                </div>
+                                <?php endif; ?>
                             </td>
                             <?php $studentRendered = true; endif; ?>
 
@@ -89,7 +105,23 @@ $glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
                                 >!</span>
                                 <?php endif; ?>
                                 <?= e($item['period_label']) ?>
+                                <?php
+                                $debtGroupNumber = trim((string) ($item['debt_group_number'] ?? ''));
+                                $showDebtGroup = $debtGroupNumber !== ''
+                                    && !empty($item['debt_group_differs']);
+                                ?>
+                                <?php if ($showDebtGroup): ?>
+                                <div
+                                    class="glaz-debt-group text-muted"
+                                    title="Группа, в которой возникла академическая задолженность"
+                                >долг в гр. <?= e($debtGroupNumber) ?></div>
+                                <?php endif; ?>
                             </td>
+                            <?php if ($glazShowSourceColumn): ?>
+                            <td class="glaz-cell-source text-muted">
+                                <?= e((string) ($item['source_label'] ?? glaz_source_label((string) ($item['source'] ?? 'journal')))) ?>
+                            </td>
+                            <?php endif; ?>
                             <td class="glaz-cell-schedule">
                                 <div
                                     class="glaz-schedule-display"
@@ -116,6 +148,7 @@ $glazSaveUrl = $glazSaveUrl ?? 'glaz_save.php';
                                     <input type="hidden" name="curriculum_item_id" value="<?= (int) $item['curriculum_item_id'] ?>">
                                     <input type="hidden" name="academic_year" value="<?= e($item['academic_year']) ?>">
                                     <input type="hidden" name="semester" value="<?= e($item['semester']) ?>">
+                                    <input type="hidden" name="source" value="<?= e((string) ($item['source'] ?? 'journal')) ?>">
 
                                     <div class="glaz-schedule-form__row">
                                         <label>

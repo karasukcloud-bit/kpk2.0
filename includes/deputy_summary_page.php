@@ -14,6 +14,7 @@ $currentDeputyTab = (string) ($currentDeputyTab ?? 'summary');
 $summarySelfUrl = (string) ($summarySelfUrl ?? 'summary.php');
 
 require_once __DIR__ . '/attendance.php';
+require_once __DIR__ . '/students.php';
 
 $activePeriod = get_active_gradebook_period();
 $year = normalize_academic_year((string) ($_GET['year'] ?? '')) ?? $activePeriod['academic_year'];
@@ -59,6 +60,9 @@ $yearsComparison = $groups !== [] && !$isCompare
 $yearsCompareLabel = $yearsComparison
     ? implode(', ', $yearsComparison['year_labels'])
     : '';
+$collegeYearsTrends = $yearsComparison
+    ? gradebook_college_years_trends($yearsComparison)
+    : null;
 
 if ($isCompare) {
     $periodCaption = $year . ' · сравнение 1 и 2 семестра';
@@ -476,6 +480,55 @@ require __DIR__ . '/header.php';
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-college-years-chart" aria-label="Сравнение успеваемости колледжа за три года"></canvas>
         </div>
+        <?php if ($collegeYearsTrends): ?>
+        <div class="summary-years-trends">
+            <?php foreach ($collegeYearsTrends as $trend): ?>
+            <?php
+            $dir = (string) $trend['direction'];
+            $vsPrev = (float) $trend['vs_prev'];
+            $vsFirst = (float) $trend['vs_first'];
+            $arrow = $dir === 'up' ? '▲' : ($dir === 'down' ? '▼' : '●');
+            ?>
+            <article class="summary-years-trend summary-years-trend--<?= e((string) $trend['key']) ?> summary-years-trend--<?= e($dir) ?>">
+                <header class="summary-years-trend__head">
+                    <h3 class="summary-years-trend__title"><?= e((string) $trend['title']) ?></h3>
+                    <span class="summary-years-trend__badge"><?= e((string) $trend['direction_label']) ?></span>
+                </header>
+                <div class="summary-years-trend__current">
+                    <span class="summary-years-trend__value"><?= e((string) $trend['current']) ?>%</span>
+                    <span class="summary-years-trend__current-label">текущий период</span>
+                </div>
+                <p class="summary-years-trend__delta">
+                    <span class="summary-years-trend__arrow" aria-hidden="true"><?= $arrow ?></span>
+                    <?= e(gradebook_trend_delta_text($vsPrev)) ?>
+                    к предыдущему периоду
+                </p>
+                <p class="summary-years-trend__span">
+                    За <?= count($trend['steps']) + 1 ?> периода:
+                    <strong><?= e(gradebook_trend_delta_text($vsFirst)) ?></strong>
+                </p>
+                <?php if ($trend['steps'] !== []): ?>
+                <ul class="summary-years-trend__steps">
+                    <?php foreach ($trend['steps'] as $step): ?>
+                    <?php
+                    $stepDelta = (float) $step['delta'];
+                    $stepClass = $stepDelta > 0.05 ? 'is-up' : ($stepDelta < -0.05 ? 'is-down' : 'is-flat');
+                    $stepArrow = $stepDelta > 0.05 ? '▲' : ($stepDelta < -0.05 ? '▼' : '●');
+                    ?>
+                    <li class="summary-years-trend__step <?= $stepClass ?>">
+                        <span class="summary-years-trend__step-arrow" aria-hidden="true"><?= $stepArrow ?></span>
+                        <span class="summary-years-trend__step-delta"><?= e(gradebook_trend_delta_text($stepDelta)) ?></span>
+                        <span class="summary-years-trend__step-range text-muted">
+                            <?= e((string) $step['from']) ?> → <?= e((string) $step['to']) ?>
+                        </span>
+                    </li>
+                    <?php endforeach; ?>
+                </ul>
+                <?php endif; ?>
+            </article>
+            <?php endforeach; ?>
+        </div>
+        <?php endif; ?>
     </section>
 
     <section class="panel panel--info">
@@ -537,8 +590,20 @@ require __DIR__ . '/header.php';
             <dl class="profile-list">
                 <dt>Студентов</dt>
                 <dd><?= (int) $totals['students'] ?></dd>
+                <?php
+                $unassessedStudents = $report['unassessed_students'] ?? [];
+                $unassessedCount = count($unassessedStudents);
+                ?>
                 <dt>Оценённых</dt>
                 <dd><?= (int) $totals['assessed'] ?> (<?= e((string) $metrics['assessed_percent']) ?>%)</dd>
+                <dt>Без оценок</dt>
+                <dd>
+                    <?php if ($unassessedCount > 0): ?>
+                    <a href="#summary-unassessed"><?= $unassessedCount ?></a>
+                    <?php else: ?>
+                    0
+                    <?php endif; ?>
+                </dd>
                 <dt>Выставлено оценок</dt>
                 <dd><?= (int) $totals['filled_grades'] ?></dd>
                 <dt>Средний балл</dt>
@@ -565,7 +630,56 @@ require __DIR__ . '/header.php';
                 <dd><?= (int) $totals['one_three'] ?> (<?= e((string) $metrics['one_three_percent']) ?>%)</dd>
             </dl>
         </div>
+
     </section>
+
+    <?php if ($unassessedCount > 0): ?>
+    <section class="panel summary-unassessed-panel" id="summary-unassessed">
+        <div class="panel__header">
+            <div>
+                <h2>Без итоговых оценок</h2>
+                <p class="text-muted">
+                    Студенты без ни одной итоговой оценки за <?= e($periodCaption) ?>
+                    (<?= $unassessedCount ?> чел., разница «студентов − оценённых»).
+                </p>
+            </div>
+        </div>
+        <div class="table-wrap">
+            <table class="table">
+                <thead>
+                    <tr>
+                        <th>№</th>
+                        <th>Группа</th>
+                        <th>Студент</th>
+                        <th>Примечание</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($unassessedStudents as $index => $member): ?>
+                    <?php
+                    $fullName = trim((string) ($member['full_name'] ?? ''));
+                    $displayName = $fullName !== '' ? person_last_first_name($fullName) : '—';
+                    $reason = (string) ($member['reason'] ?? 'no_grades');
+                    $note = $reason === 'no_subjects'
+                        ? 'В плане группы нет предметов на период'
+                        : 'Нет итоговых оценок';
+                    $gradebookUrl = $summaryGradebookHref . '?group_id=' . (int) ($member['group_id'] ?? 0);
+                    ?>
+                    <tr>
+                        <td><?= $index + 1 ?></td>
+                        <td>
+                            <a href="<?= e($gradebookUrl) ?>"><?= e((string) ($member['group_number'] ?? '')) ?></a>
+                        </td>
+                        <td><?= e($displayName) ?></td>
+                        <td class="text-muted"><?= e($note) ?></td>
+                    </tr>
+                    <?php endforeach; ?>
+                </tbody>
+            </table>
+        </div>
+    </section>
+    <?php endif; ?>
+
     <?php endif; ?>
 </div>
 
@@ -853,6 +967,36 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
         return;
     }
 
+    const absoluteSeries = (compareData.college_absolute || []).map((v) => Number(v) || 0);
+    const qualitySeries = (compareData.college_quality || []).map((v) => Number(v) || 0);
+
+    const barValueLabels = {
+        id: 'collegeYearsBarLabels',
+        afterDatasetsDraw(chart) {
+            const { ctx } = chart;
+            ctx.save();
+            ctx.font = '600 11px Segoe UI, system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            chart.data.datasets.forEach((dataset, datasetIndex) => {
+                const meta = chart.getDatasetMeta(datasetIndex);
+                if (!meta || meta.hidden) {
+                    return;
+                }
+                meta.data.forEach((el, index) => {
+                    const raw = dataset.data[index];
+                    if (raw == null || Number.isNaN(Number(raw))) {
+                        return;
+                    }
+                    const { x, y } = el.getProps(['x', 'y'], true);
+                    ctx.fillStyle = datasetIndex === 0 ? '#0d47a1' : '#1b5e20';
+                    ctx.fillText(String(raw) + '%', x, y - 4);
+                });
+            });
+            ctx.restore();
+        },
+    };
+
     new Chart(chartNode, {
         type: 'bar',
         data: {
@@ -860,7 +1004,7 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
             datasets: [
                 {
                     label: 'Абсолютная успеваемость',
-                    data: compareData.college_absolute || [],
+                    data: absoluteSeries,
                     backgroundColor: 'rgba(21, 101, 192, 0.75)',
                     borderColor: '#1565c0',
                     borderWidth: 1,
@@ -868,7 +1012,7 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
                 },
                 {
                     label: 'Качественная успеваемость',
-                    data: compareData.college_quality || [],
+                    data: qualitySeries,
                     backgroundColor: 'rgba(46, 125, 50, 0.75)',
                     borderColor: '#2e7d32',
                     borderWidth: 1,
@@ -879,12 +1023,22 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 18 } },
             plugins: {
                 legend: { position: 'bottom' },
                 tooltip: {
                     callbacks: {
                         label(context) {
-                            return context.dataset.label + ': ' + context.parsed.y + '%';
+                            const series = context.datasetIndex === 0 ? absoluteSeries : qualitySeries;
+                            const value = Number(context.parsed.y || 0);
+                            const prev = context.dataIndex > 0 ? Number(series[context.dataIndex - 1] || 0) : null;
+                            let text = context.dataset.label + ': ' + value + '%';
+                            if (prev !== null) {
+                                const delta = Math.round((value - prev) * 10) / 10;
+                                const sign = delta > 0 ? '+' : '';
+                                text += ' (' + sign + delta + ' п.п.)';
+                            }
+                            return text;
                         },
                     },
                 },
@@ -897,6 +1051,7 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
                 },
             },
         },
+        plugins: [barValueLabels],
     });
 };
 
@@ -945,6 +1100,7 @@ const renderCollegeDonutChart = (canvasId, labels, values, colors) => {
 };
 
 (() => {
+    try {
     fillChartSortControls();
 <?php if ($isCompare && $report1 && $report2): ?>
     const groupLabels = <?= json_encode($report1['charts']['group_labels'], JSON_UNESCAPED_UNICODE) ?>;
@@ -1091,9 +1247,13 @@ const renderCollegeDonutChart = (canvasId, labels, values, colors) => {
     renderCollegeDonutChart(
         'deputy-summary-college-specialty-chart',
         <?= json_encode($report['charts']['specialty_students_labels'], JSON_UNESCAPED_UNICODE) ?>,
-        <?= json_encode($report['charts']['specialty_students_values'], JSON_UNESCAPED_UNICODE) ?>
+        <?= json_encode($report['charts']['specialty_students_values'], JSON_UNESCAPED_UNICODE) ?>,
+        ['#1565c0', '#2e7d32', '#f9a825', '#6a1b9a', '#00838f', '#c62828', '#5d4037', '#455a64']
     );
 <?php endif; ?>
+    } catch (err) {
+        console.error('Ошибка построения диаграмм сводной:', err);
+    }
 })();
 </script>
 <?php endif; ?>

@@ -36,6 +36,9 @@ require __DIR__ . '/../header.php';
                 <h1><?= $curriculumPanel === 'admin' ? 'Панель администратора' : 'Панель завуча' ?></h1>
                 <p class="text-muted">Учебный план групп на учебный год</p>
             </div>
+            <a href="curriculum_merge_item.php?year=<?= e(urlencode($academicYear)) ?>" class="btn btn--ghost btn--sm">
+                Перенос журнала предмета
+            </a>
         </div>
 
         <?php

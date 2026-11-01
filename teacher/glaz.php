@@ -13,7 +13,7 @@ if (!can_use_teacher_panel() && !can_use_curator_panel()) {
 }
 
 $debts = get_all_academic_debts();
-$scheduleIndex = get_glaz_schedules_index();
+$scheduleIndex = get_glaz_schedules_index('journal');
 $tableGroups = build_glaz_table_groups($debts, $scheduleIndex['schedules']);
 $organization = get_organization();
 $highlights = get_glaz_view_highlights();
@@ -21,6 +21,8 @@ $glazEditable = false;
 $glazHighlightGroupNumbers = $highlights['group_numbers'];
 $glazHighlightTeacherId = $highlights['teacher_id'];
 $glazShowLegend = $glazHighlightGroupNumbers !== [] || $glazHighlightTeacherId !== null;
+$glazShowSourceColumn = false;
+$glazSourceNote = 'Источник: электронный журнал / архив ведомостей (график ликвидации).';
 $teachers = [];
 
 $pageTitle = 'ГЛАЗ — Просмотр';
