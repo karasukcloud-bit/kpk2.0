@@ -9,6 +9,6 @@
         <?php require __DIR__ . '/app_bottom_nav.php'; ?>
         <?php endif; ?>
     </div>
-    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20261101h"></script>
+    <script src="<?= e($basePath ?? '') ?>assets/js/app.js?v=20261102a"></script>
 </body>
 </html>

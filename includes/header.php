@@ -30,6 +30,34 @@ $appShell = $appShellRole !== null
     : null;
 $useAppShell = is_array($appShell);
 $useCuratorShell = $useAppShell;
+
+$scriptBase = basename((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+$heavyPageScripts = [
+    'glaz.php',
+    'summary.php',
+    'rating.php',
+    'subject_performance.php',
+    'gradebook.php',
+    'grades.php',
+    'record_book.php',
+    'record_books.php',
+    'manual_brs_gradebook.php',
+    'report.php',
+    'parent_reports.php',
+    'monthly_report.php',
+    'characteristics.php',
+    'activities.php',
+    'attendance.php',
+    'absence_rating.php',
+    'group_attendance.php',
+    'daily_attendance.php',
+    'all_students.php',
+    'stats.php',
+    'logs.php',
+    'students.php',
+    'teachers.php',
+];
+$showPageLoader = !empty($showPageLoader) || in_array($scriptBase, $heavyPageScripts, true);
 ?>
 <!DOCTYPE html>
 <html lang="ru">
@@ -44,10 +72,26 @@ $useCuratorShell = $useAppShell;
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
-    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261102a">
-    <?php if (!empty($useAppShell)): ?>
+    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261102b">
+    <style>
+        .page-loader{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;background:rgba(247,248,252,.88);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
+        html.page-loader-on .page-loader{opacity:1;visibility:visible;pointer-events:auto}
+        html.page-loader-on,html.page-loader-on body{cursor:progress}
+        .page-loader__spinner{width:2.4rem;height:2.4rem;border:3px solid #dbe3f0;border-top-color:#2563eb;border-radius:50%;animation:page-loader-spin .7s linear infinite}
+        .page-loader__text{margin:0;font:600 .95rem/1.3 system-ui,sans-serif;color:#334155}
+        @keyframes page-loader-spin{to{transform:rotate(360deg)}}
+    </style>
     <script>
     (function () {
+        try {
+            if (sessionStorage.getItem('kpk_page_loader') === '1') {
+                document.documentElement.classList.add('page-loader-on');
+            }
+        } catch (e) {}
+        <?php if (!empty($showPageLoader)): ?>
+        document.documentElement.classList.add('page-loader-on');
+        <?php endif; ?>
+        <?php if (!empty($useAppShell)): ?>
         try {
             var key = localStorage.getItem('kpk_app_sidebar_collapsed');
             var legacy = localStorage.getItem('kpk_curator_sidebar_collapsed');
@@ -55,11 +99,15 @@ $useCuratorShell = $useAppShell;
                 document.documentElement.classList.add('app-sidebar-collapsed');
             }
         } catch (e) {}
+        <?php endif; ?>
     })();
     </script>
-    <?php endif; ?>
 </head>
-<body<?= !empty($useAppShell) ? ' class="body--curator-shell body--app-shell"' : '' ?>>
+<body<?= !empty($useAppShell) ? ' class="body--curator-shell body--app-shell"' : '' ?><?= !empty($showPageLoader) ? ' data-page-loader-auto' : '' ?>>
+    <div class="page-loader" id="pageLoader" role="status" aria-live="polite" aria-busy="true">
+        <div class="page-loader__spinner" aria-hidden="true"></div>
+        <p class="page-loader__text" data-page-loader-text>Загрузка…</p>
+    </div>
     <div class="page<?= !empty($useAppShell) ? ' page--curator-shell' : '' ?>">
         <?php if (!empty($useAppShell)): ?>
         <div class="curator-shell" id="curatorShell">

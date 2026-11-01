@@ -1,4 +1,97 @@
 (function () {
+    const PAGE_LOADER_KEY = 'kpk_page_loader';
+    const HEAVY_PAGE_RE = /\/(glaz|summary|rating|subject_performance|gradebook|grades|record_books?|manual_brs_gradebook|report|parent_reports|monthly_report|characteristics|activities|attendance|absence_rating|group_attendance|daily_attendance|all_students|stats|logs|students|teachers)\.php(?:$|\?)/i;
+
+    const showPageLoader = (message) => {
+        try {
+            sessionStorage.setItem(PAGE_LOADER_KEY, '1');
+        } catch (e) {
+            // ignore
+        }
+        document.documentElement.classList.add('page-loader-on');
+        const text = document.querySelector('[data-page-loader-text]');
+        if (text && message) {
+            text.textContent = message;
+        }
+    };
+
+    const hidePageLoader = () => {
+        try {
+            sessionStorage.removeItem(PAGE_LOADER_KEY);
+        } catch (e) {
+            // ignore
+        }
+        document.documentElement.classList.remove('page-loader-on');
+        const loader = document.getElementById('pageLoader');
+        if (loader) {
+            loader.setAttribute('aria-busy', 'false');
+        }
+    };
+
+    const shouldShowLoaderForUrl = (url) => HEAVY_PAGE_RE.test(url.pathname);
+
+    document.addEventListener('click', (event) => {
+        if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
+            return;
+        }
+        const link = event.target.closest('a[href]');
+        if (!link || link.hasAttribute('download') || link.getAttribute('target') === '_blank') {
+            return;
+        }
+        if (link.dataset.noLoader !== undefined) {
+            return;
+        }
+        const href = link.getAttribute('href') || '';
+        if (href === '' || href.startsWith('#') || href.toLowerCase().startsWith('javascript:')) {
+            return;
+        }
+        let url;
+        try {
+            url = new URL(link.href, window.location.href);
+        } catch (e) {
+            return;
+        }
+        if (url.origin !== window.location.origin) {
+            return;
+        }
+        if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash !== '') {
+            return;
+        }
+        if (link.dataset.pageLoader !== undefined || shouldShowLoaderForUrl(url)) {
+            showPageLoader('Загрузка…');
+        }
+    }, true);
+
+    document.addEventListener('submit', (event) => {
+        const form = event.target;
+        if (!(form instanceof HTMLFormElement) || form.dataset.noLoader !== undefined) {
+            return;
+        }
+        let url;
+        try {
+            url = new URL(form.getAttribute('action') || window.location.href, window.location.href);
+        } catch (e) {
+            return;
+        }
+        if (form.dataset.pageLoader !== undefined || shouldShowLoaderForUrl(url)) {
+            showPageLoader('Загрузка…');
+        }
+    }, true);
+
+    window.addEventListener('pageshow', (event) => {
+        if (event.persisted) {
+            hidePageLoader();
+        }
+    });
+
+    window.addEventListener('load', () => {
+        hidePageLoader();
+    });
+
+    if (document.readyState === 'complete') {
+        hidePageLoader();
+    }
+
     const generatePasswordValue = (length = 8) => {
         const chars = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
         let password = '';
