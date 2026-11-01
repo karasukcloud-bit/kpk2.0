@@ -1760,9 +1760,11 @@ function build_gradebook_three_years_comparison(
 }
 
 /**
- * Динамика абс./кач. успеваемости колледжа по годам для карточек на сводной.
+ * Карточка динамики одного ряда процентов по периодам.
  *
- * @return list<array{
+ * @param list<float|int|string> $values
+ * @param list<string> $labels
+ * @return array{
  *   key:string,
  *   title:string,
  *   current:float,
@@ -1771,68 +1773,130 @@ function build_gradebook_three_years_comparison(
  *   direction:string,
  *   direction_label:string,
  *   steps:list<array{from:string,to:string,delta:float}>
- * }>
+ * }|null
+ */
+function gradebook_series_trend_card(string $key, string $title, array $values, array $labels): ?array
+{
+    $labels = array_values($labels);
+    $series = array_map(static fn ($v): float => round((float) $v, 1), array_values($values));
+    $count = count($series);
+    if ($count === 0 || $labels === []) {
+        return null;
+    }
+
+    $current = $series[$count - 1];
+    $prev = $count > 1 ? $series[$count - 2] : $current;
+    $first = $series[0];
+    $vsPrev = round($current - $prev, 1);
+    $vsFirst = round($current - $first, 1);
+
+    if ($vsPrev > 0.05) {
+        $direction = 'up';
+        $directionLabel = 'рост';
+    } elseif ($vsPrev < -0.05) {
+        $direction = 'down';
+        $directionLabel = 'снижение';
+    } else {
+        $direction = 'flat';
+        $directionLabel = 'без изменений';
+    }
+
+    $steps = [];
+    for ($i = 1; $i < $count; $i++) {
+        $steps[] = [
+            'from' => (string) ($labels[$i - 1] ?? ''),
+            'to' => (string) ($labels[$i] ?? ''),
+            'delta' => round($series[$i] - $series[$i - 1], 1),
+        ];
+    }
+
+    return [
+        'key' => $key,
+        'title' => $title,
+        'current' => $current,
+        'vs_prev' => $vsPrev,
+        'vs_first' => $vsFirst,
+        'direction' => $direction,
+        'direction_label' => $directionLabel,
+        'steps' => $steps,
+    ];
+}
+
+/**
+ * Динамика абс./кач. успеваемости колледжа по годам для карточек на сводной.
+ *
+ * @return list<array<string,mixed>>
  */
 function gradebook_college_years_trends(array $yearsComparison): array
 {
     $labels = array_values($yearsComparison['year_labels'] ?? []);
-    $seriesMap = [
-        [
-            'key' => 'absolute',
-            'title' => 'Абсолютная успеваемость',
-            'values' => array_values($yearsComparison['college_absolute'] ?? []),
-        ],
-        [
-            'key' => 'quality',
-            'title' => 'Качественная успеваемость',
-            'values' => array_values($yearsComparison['college_quality'] ?? []),
-        ],
-    ];
-
     $cards = [];
-    foreach ($seriesMap as $series) {
-        $values = array_map(static fn ($v): float => round((float) $v, 1), $series['values']);
-        $count = count($values);
-        if ($count === 0 || $labels === []) {
+
+    $absolute = gradebook_series_trend_card(
+        'absolute',
+        'Абсолютная успеваемость',
+        array_values($yearsComparison['college_absolute'] ?? []),
+        $labels
+    );
+    if ($absolute !== null) {
+        $cards[] = $absolute;
+    }
+
+    $quality = gradebook_series_trend_card(
+        'quality',
+        'Качественная успеваемость',
+        array_values($yearsComparison['college_quality'] ?? []),
+        $labels
+    );
+    if ($quality !== null) {
+        $cards[] = $quality;
+    }
+
+    return $cards;
+}
+
+/**
+ * Динамика успеваемости по специальностям за 3 года.
+ *
+ * @return list<array<string,mixed>>
+ */
+function gradebook_specialty_years_trends(array $yearsComparison, string $metricKey): array
+{
+    $metricKey = $metricKey === 'specialty_quality' ? 'specialty_quality' : 'specialty_absolute';
+    $cardKey = $metricKey === 'specialty_quality' ? 'quality' : 'absolute';
+    $metricLabel = $cardKey === 'quality' ? 'Кач. успеваемость' : 'Абс. успеваемость';
+    $labels = array_values($yearsComparison['year_labels'] ?? []);
+    $specialties = array_values($yearsComparison['specialties'] ?? []);
+    $rows = array_values($yearsComparison[$metricKey] ?? []);
+    $cards = [];
+
+    foreach ($specialties as $index => $specialty) {
+        $values = $rows[$index] ?? null;
+        if (!is_array($values)) {
             continue;
         }
 
-        $current = $values[$count - 1];
-        $prev = $count > 1 ? $values[$count - 2] : $current;
-        $first = $values[0];
-        $vsPrev = round($current - $prev, 1);
-        $vsFirst = round($current - $first, 1);
-
-        if ($vsPrev > 0.05) {
-            $direction = 'up';
-            $directionLabel = 'рост';
-        } elseif ($vsPrev < -0.05) {
-            $direction = 'down';
-            $directionLabel = 'снижение';
-        } else {
-            $direction = 'flat';
-            $directionLabel = 'без изменений';
+        $hasData = false;
+        foreach ($values as $value) {
+            if ((float) $value > 0.05) {
+                $hasData = true;
+                break;
+            }
+        }
+        if (!$hasData) {
+            continue;
         }
 
-        $steps = [];
-        for ($i = 1; $i < $count; $i++) {
-            $steps[] = [
-                'from' => (string) ($labels[$i - 1] ?? ''),
-                'to' => (string) ($labels[$i] ?? ''),
-                'delta' => round($values[$i] - $values[$i - 1], 1),
-            ];
+        $card = gradebook_series_trend_card(
+            $cardKey,
+            (string) ($specialty['label'] ?? ('Специальность ' . ($index + 1))),
+            $values,
+            $labels
+        );
+        if ($card !== null) {
+            $card['metric_label'] = $metricLabel;
+            $cards[] = $card;
         }
-
-        $cards[] = [
-            'key' => (string) $series['key'],
-            'title' => (string) $series['title'],
-            'current' => $current,
-            'vs_prev' => $vsPrev,
-            'vs_first' => $vsFirst,
-            'direction' => $direction,
-            'direction_label' => $directionLabel,
-            'steps' => $steps,
-        ];
     }
 
     return $cards;
@@ -1843,6 +1907,81 @@ function gradebook_trend_delta_text(float $delta): string
     $sign = $delta > 0 ? '+' : '';
 
     return $sign . (string) $delta . ' п.п.';
+}
+
+/**
+ * Рендер карточек динамики.
+ *
+ * @param list<array<string,mixed>> $cards
+ */
+function render_gradebook_years_trend_cards(
+    array $cards,
+    string $gridClass = '',
+    string $sectionTitle = ''
+): void {
+    if ($cards === []) {
+        return;
+    }
+    $gridClass = trim('summary-years-trends ' . $gridClass);
+    ?>
+    <?php if ($sectionTitle !== ''): ?>
+        <h3 class="summary-years-trends__heading"><?= e($sectionTitle) ?></h3>
+    <?php endif; ?>
+    <div class="<?= e($gridClass) ?>">
+        <?php foreach ($cards as $trend): ?>
+        <?php
+        $dir = (string) ($trend['direction'] ?? 'flat');
+        $vsPrev = (float) ($trend['vs_prev'] ?? 0);
+        $vsFirst = (float) ($trend['vs_first'] ?? 0);
+        $arrow = $dir === 'up' ? '▲' : ($dir === 'down' ? '▼' : '●');
+        $steps = $trend['steps'] ?? [];
+        $metricLabel = trim((string) ($trend['metric_label'] ?? ''));
+        ?>
+        <article class="summary-years-trend summary-years-trend--<?= e((string) ($trend['key'] ?? 'absolute')) ?> summary-years-trend--<?= e($dir) ?>">
+            <header class="summary-years-trend__head">
+                <div class="summary-years-trend__titles">
+                    <?php if ($metricLabel !== ''): ?>
+                        <div class="summary-years-trend__metric"><?= e($metricLabel) ?></div>
+                    <?php endif; ?>
+                    <h3 class="summary-years-trend__title"><?= e((string) ($trend['title'] ?? '')) ?></h3>
+                </div>
+                <span class="summary-years-trend__badge"><?= e((string) ($trend['direction_label'] ?? '')) ?></span>
+            </header>
+            <div class="summary-years-trend__current">
+                <span class="summary-years-trend__value"><?= e((string) ($trend['current'] ?? 0)) ?>%</span>
+                <span class="summary-years-trend__current-label">текущий период</span>
+            </div>
+            <p class="summary-years-trend__delta">
+                <span class="summary-years-trend__arrow" aria-hidden="true"><?= $arrow ?></span>
+                <?= e(gradebook_trend_delta_text($vsPrev)) ?>
+                к предыдущему периоду
+            </p>
+            <p class="summary-years-trend__span">
+                За <?= count($steps) + 1 ?> периода:
+                <strong><?= e(gradebook_trend_delta_text($vsFirst)) ?></strong>
+            </p>
+            <?php if (is_array($steps) && $steps !== []): ?>
+            <ul class="summary-years-trend__steps">
+                <?php foreach ($steps as $step): ?>
+                <?php
+                $stepDelta = (float) ($step['delta'] ?? 0);
+                $stepClass = $stepDelta > 0.05 ? 'is-up' : ($stepDelta < -0.05 ? 'is-down' : 'is-flat');
+                $stepArrow = $stepDelta > 0.05 ? '▲' : ($stepDelta < -0.05 ? '▼' : '●');
+                ?>
+                <li class="summary-years-trend__step <?= $stepClass ?>">
+                    <span class="summary-years-trend__step-arrow" aria-hidden="true"><?= $stepArrow ?></span>
+                    <span class="summary-years-trend__step-delta"><?= e(gradebook_trend_delta_text($stepDelta)) ?></span>
+                    <span class="summary-years-trend__step-range text-muted">
+                        <?= e((string) ($step['from'] ?? '')) ?> → <?= e((string) ($step['to'] ?? '')) ?>
+                    </span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+        </article>
+        <?php endforeach; ?>
+    </div>
+    <?php
 }
 
 /**

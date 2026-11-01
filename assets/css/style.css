@@ -955,6 +955,51 @@ body {
     color: #64748b;
 }
 
+.summary-years-trends__heading {
+    margin: 1.1rem 0 0.75rem;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.summary-years-trends--specialties {
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+}
+
+.summary-years-trend__titles {
+    min-width: 0;
+}
+
+.summary-years-trend__metric {
+    margin: 0 0 0.2rem;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    color: #64748b;
+}
+
+.summary-years-trend--absolute .summary-years-trend__metric {
+    color: #1565c0;
+}
+
+.summary-years-trend--quality .summary-years-trend__metric {
+    color: #2e7d32;
+}
+
+.summary-years-trends--specialties .summary-years-trend__title {
+    font-size: 0.92rem;
+    line-height: 1.3;
+}
+
+.summary-years-trends--specialties .summary-years-trend__step {
+    grid-template-columns: 1rem 4.2rem 1fr;
+}
+
+.summary-years-trends--specialties .summary-years-trend__step-range {
+    font-size: 0.75rem;
+}
+
 @media (max-width: 900px) {
     .summary-years-trends {
         grid-template-columns: 1fr;

@@ -63,6 +63,12 @@ $yearsCompareLabel = $yearsComparison
 $collegeYearsTrends = $yearsComparison
     ? gradebook_college_years_trends($yearsComparison)
     : null;
+$specialtyAbsoluteTrends = $yearsComparison
+    ? gradebook_specialty_years_trends($yearsComparison, 'specialty_absolute')
+    : [];
+$specialtyQualityTrends = $yearsComparison
+    ? gradebook_specialty_years_trends($yearsComparison, 'specialty_quality')
+    : [];
 
 if ($isCompare) {
     $periodCaption = $year . ' · сравнение 1 и 2 семестра';
@@ -459,6 +465,13 @@ require __DIR__ . '/header.php';
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-absolute-years-chart" aria-label="Сравнение абсолютной успеваемости по специальностям за три года"></canvas>
         </div>
+        <?php
+        render_gradebook_years_trend_cards(
+            $specialtyAbsoluteTrends,
+            'summary-years-trends--specialties summary-years-trends--absolute-only',
+            'Динамика абсолютной успеваемости по специальностям'
+        );
+        ?>
     </section>
 
     <section class="panel">
@@ -472,6 +485,13 @@ require __DIR__ . '/header.php';
         <div class="summary-chart-wrap">
             <canvas id="deputy-summary-specialty-quality-years-chart" aria-label="Сравнение качественной успеваемости по специальностям за три года"></canvas>
         </div>
+        <?php
+        render_gradebook_years_trend_cards(
+            $specialtyQualityTrends,
+            'summary-years-trends--specialties summary-years-trends--quality-only',
+            'Динамика качественной успеваемости по специальностям'
+        );
+        ?>
     </section>
 
     <section class="panel">
@@ -481,53 +501,7 @@ require __DIR__ . '/header.php';
             <canvas id="deputy-summary-college-years-chart" aria-label="Сравнение успеваемости колледжа за три года"></canvas>
         </div>
         <?php if ($collegeYearsTrends): ?>
-        <div class="summary-years-trends">
-            <?php foreach ($collegeYearsTrends as $trend): ?>
-            <?php
-            $dir = (string) $trend['direction'];
-            $vsPrev = (float) $trend['vs_prev'];
-            $vsFirst = (float) $trend['vs_first'];
-            $arrow = $dir === 'up' ? '▲' : ($dir === 'down' ? '▼' : '●');
-            ?>
-            <article class="summary-years-trend summary-years-trend--<?= e((string) $trend['key']) ?> summary-years-trend--<?= e($dir) ?>">
-                <header class="summary-years-trend__head">
-                    <h3 class="summary-years-trend__title"><?= e((string) $trend['title']) ?></h3>
-                    <span class="summary-years-trend__badge"><?= e((string) $trend['direction_label']) ?></span>
-                </header>
-                <div class="summary-years-trend__current">
-                    <span class="summary-years-trend__value"><?= e((string) $trend['current']) ?>%</span>
-                    <span class="summary-years-trend__current-label">текущий период</span>
-                </div>
-                <p class="summary-years-trend__delta">
-                    <span class="summary-years-trend__arrow" aria-hidden="true"><?= $arrow ?></span>
-                    <?= e(gradebook_trend_delta_text($vsPrev)) ?>
-                    к предыдущему периоду
-                </p>
-                <p class="summary-years-trend__span">
-                    За <?= count($trend['steps']) + 1 ?> периода:
-                    <strong><?= e(gradebook_trend_delta_text($vsFirst)) ?></strong>
-                </p>
-                <?php if ($trend['steps'] !== []): ?>
-                <ul class="summary-years-trend__steps">
-                    <?php foreach ($trend['steps'] as $step): ?>
-                    <?php
-                    $stepDelta = (float) $step['delta'];
-                    $stepClass = $stepDelta > 0.05 ? 'is-up' : ($stepDelta < -0.05 ? 'is-down' : 'is-flat');
-                    $stepArrow = $stepDelta > 0.05 ? '▲' : ($stepDelta < -0.05 ? '▼' : '●');
-                    ?>
-                    <li class="summary-years-trend__step <?= $stepClass ?>">
-                        <span class="summary-years-trend__step-arrow" aria-hidden="true"><?= $stepArrow ?></span>
-                        <span class="summary-years-trend__step-delta"><?= e(gradebook_trend_delta_text($stepDelta)) ?></span>
-                        <span class="summary-years-trend__step-range text-muted">
-                            <?= e((string) $step['from']) ?> → <?= e((string) $step['to']) ?>
-                        </span>
-                    </li>
-                    <?php endforeach; ?>
-                </ul>
-                <?php endif; ?>
-            </article>
-            <?php endforeach; ?>
-        </div>
+            <?php render_gradebook_years_trend_cards($collegeYearsTrends); ?>
         <?php endif; ?>
     </section>
 
@@ -933,7 +907,18 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
                 tooltip: {
                     callbacks: {
                         label(context) {
-                            return context.dataset.label + ': ' + context.parsed.y + '%';
+                            const value = Number(context.parsed.y || 0);
+                            let text = context.dataset.label + ': ' + value + '%';
+                            const specialtyIndex = context.dataIndex;
+                            const yearIndex = context.datasetIndex;
+                            const row = metricRows[specialtyIndex] || [];
+                            if (yearIndex > 0) {
+                                const prev = Number(row[yearIndex - 1] ?? 0);
+                                const delta = Math.round((value - prev) * 10) / 10;
+                                const sign = delta > 0 ? '+' : '';
+                                text += ' (' + sign + delta + ' п.п.)';
+                            }
+                            return text;
                         },
                     },
                 },
