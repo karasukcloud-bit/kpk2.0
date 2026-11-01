@@ -122,18 +122,19 @@ if ($account) {
 $studentAvatar = normalize_avatar_value((string) ($account['avatar'] ?? 'icon:person'));
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1><?= e($student['full_name']) ?></h1>
-                <p class="text-muted">Группа <?= e($group['number']) ?></p>
-            </div>
-            <a href="group.php?group_id=<?= $groupId ?>" class="btn btn--ghost">← К списку группы</a>
-        </div>
-
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = (string) $student['full_name'];
+    $curatorPageSubtitle = 'Группа ' . (string) $group['number'];
+    $curatorPageIcon = 'student';
+    $curatorPageShowGroup = false;
+    ob_start();
+    ?>
+    <a href="group.php?group_id=<?= $groupId ?>" class="btn btn--ghost">← К списку группы</a>
+    <?php
+    $curatorPageActionsHtml = ob_get_clean();
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($success): ?>
         <div class="alert alert--success"><?= e($success) ?></div>

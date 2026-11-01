@@ -210,16 +210,15 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
 };
 ?>
 
-<div class="dashboard dashboard--wide curator-characteristics-page">
-    <section class="panel no-print">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Генератор характеристик студентов</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page curator-characteristics-page">
+    <?php
+    $curatorPageTitle = 'Характеристики';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'])
+        : 'Генератор характеристик студентов';
+    $curatorPageIcon = 'characteristics';
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($success): ?>
         <div class="alert alert--success no-print"><?= e($success) ?></div>

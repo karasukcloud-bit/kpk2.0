@@ -118,26 +118,35 @@ require __DIR__ . '/../../../includes/header.php';
 
 <link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261101a">
 
-<div class="dashboard dashboard--wide">
+<div class="dashboard dashboard--wide<?= $manualBrsPanel === 'curator' ? ' curator-page' : '' ?>">
+    <?php if ($manualBrsPanel === 'curator'): ?>
+        <?php
+        $curatorPageTitle = 'Ручное БРС';
+        $curatorPageSubtitle = $group
+            ? ('Группа ' . (string) $group['number'] . ' · ведомость')
+            : 'Ведомость ручного БРС';
+        $curatorPageIcon = 'grades';
+        require __DIR__ . '/../../../includes/curator_page_hero.php';
+        ?>
+    <?php else: ?>
     <section class="panel manual-brs-no-print">
         <div class="panel__header">
             <div>
                 <h1><?= e($panelTitles[$manualBrsPanel] ?? 'Ведомость') ?></h1>
                 <p class="text-muted">Ведомость ручного БРС (временный модуль)</p>
             </div>
-            <?php if ($manualBrsPanel !== 'curator' && $group !== null): ?>
+            <?php if ($group !== null): ?>
                 <a href="<?= e($manualBrsPanel === 'deputy' ? 'grades.php?source=manual_brs' : manual_brs_gradebook_url($manualBrsPanel)) ?>"
                    class="btn btn--ghost">← К группам</a>
             <?php endif; ?>
         </div>
-        <?php if ($manualBrsPanel === 'curator'): ?>
-            <?php require __DIR__ . '/../../../includes/curator_nav.php'; ?>
-        <?php elseif ($manualBrsPanel === 'admin'): ?>
+        <?php if ($manualBrsPanel === 'admin'): ?>
             <?php require __DIR__ . '/../../../includes/admin_nav.php'; ?>
         <?php else: ?>
             <?php require __DIR__ . '/../../../includes/deputy_nav.php'; ?>
         <?php endif; ?>
     </section>
+    <?php endif; ?>
 
     <?php if ($error): ?>
         <div class="alert alert--error manual-brs-no-print"><?= e($error) ?></div>

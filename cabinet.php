@@ -63,6 +63,28 @@ $flashError = flash_get('error');
 $error = $error ?? $flashError;
 $pageTitle = 'Личный кабинет';
 $showHeader = true;
+$basePath = '';
+
+if (is_admin()) {
+    $currentAdminTab = 'cabinet';
+} elseif (can_use_curator_panel() && has_role('curator')) {
+    $currentCuratorTab = 'cabinet';
+} elseif (can_use_teacher_panel() && has_role('teacher')) {
+    $currentTeacherTab = 'cabinet';
+} elseif (can_use_deputy_panel() && has_role('deputy')) {
+    $currentDeputyTab = 'cabinet';
+} elseif (can_use_educator_panel() && has_role('educator')) {
+    $currentEducatorTab = 'cabinet';
+} elseif (can_use_curator_panel()) {
+    $currentCuratorTab = 'cabinet';
+} elseif (can_use_teacher_panel()) {
+    $currentTeacherTab = 'cabinet';
+} elseif (can_use_deputy_panel()) {
+    $currentDeputyTab = 'cabinet';
+} elseif (can_use_educator_panel()) {
+    $currentEducatorTab = 'cabinet';
+}
+
 require __DIR__ . '/includes/header.php';
 
 $displayOrDash = static function (?string $value): string {

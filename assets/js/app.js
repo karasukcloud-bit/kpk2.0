@@ -3410,4 +3410,189 @@ document.addEventListener('DOMContentLoaded', () => {
             }
         });
     }
+
+    document.querySelectorAll('[data-header-panel-switch]').forEach((details) => {
+        document.addEventListener('click', (event) => {
+            if (!(event.target instanceof Node) || details.contains(event.target)) {
+                return;
+            }
+            details.open = false;
+        });
+        details.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                details.open = false;
+            }
+        });
+    });
+
+    const curatorGroupSearch = document.querySelector('[data-curator-group-search]');
+    if (curatorGroupSearch) {
+        const emptyHint = document.querySelector('[data-curator-group-empty]');
+        const rows = Array.from(document.querySelectorAll('[data-curator-group-table] tbody tr'));
+        const cards = Array.from(document.querySelectorAll('[data-curator-group-cards] [data-student-name]'));
+        curatorGroupSearch.addEventListener('input', () => {
+            const query = curatorGroupSearch.value.trim().toLowerCase();
+            let visible = 0;
+            rows.forEach((row) => {
+                const name = row.getAttribute('data-student-name') || '';
+                const match = query === '' || name.includes(query);
+                row.hidden = !match;
+                if (match) {
+                    visible += 1;
+                }
+            });
+            let cardVisible = 0;
+            cards.forEach((card) => {
+                const name = card.getAttribute('data-student-name') || '';
+                const match = query === '' || name.includes(query);
+                card.hidden = !match;
+                if (match) {
+                    cardVisible += 1;
+                }
+            });
+            if (emptyHint) {
+                emptyHint.hidden = (rows.length > 0 ? visible : cardVisible) > 0;
+            }
+        });
+    }
+
+    const appShell = document.getElementById('curatorShell');
+    if (appShell && (document.body.classList.contains('body--curator-shell') || document.body.classList.contains('body--app-shell'))) {
+        const storageKey = 'kpk_app_sidebar_collapsed';
+        const backdrop = document.querySelector('[data-app-sidebar-backdrop], [data-curator-sidebar-backdrop]');
+        const openBtn = document.querySelector('[data-app-sidebar-open], [data-curator-sidebar-open]');
+        const toggleBtn = document.querySelector('[data-app-sidebar-toggle], [data-curator-sidebar-toggle]');
+        const isMobile = () => window.matchMedia('(max-width: 960px)').matches;
+
+        const setCollapsed = (collapsed) => {
+            document.body.classList.toggle('body--curator-sidebar-collapsed', collapsed);
+            document.documentElement.classList.toggle('app-sidebar-collapsed', collapsed);
+            try {
+                localStorage.setItem(storageKey, collapsed ? '1' : '0');
+            } catch (e) {
+                // ignore
+            }
+            if (toggleBtn) {
+                toggleBtn.setAttribute('aria-label', collapsed ? 'Развернуть меню' : 'Свернуть меню');
+                toggleBtn.setAttribute('title', collapsed ? 'Развернуть меню' : 'Свернуть меню');
+            }
+        };
+
+        const closeMobileSidebar = () => {
+            document.body.classList.remove('body--curator-sidebar-open');
+            if (backdrop) {
+                backdrop.hidden = true;
+            }
+        };
+
+        const openMobileSidebar = () => {
+            document.body.classList.add('body--curator-sidebar-open');
+            if (backdrop) {
+                backdrop.hidden = false;
+            }
+        };
+
+        try {
+            const legacy = localStorage.getItem('kpk_curator_sidebar_collapsed');
+            const current = localStorage.getItem(storageKey);
+            if (current === '1' || (current === null && legacy === '1')) {
+                setCollapsed(true);
+            }
+        } catch (e) {
+            // ignore
+        }
+
+        toggleBtn?.addEventListener('click', () => {
+            if (isMobile()) {
+                return;
+            }
+            setCollapsed(!document.body.classList.contains('body--curator-sidebar-collapsed'));
+        });
+
+        openBtn?.addEventListener('click', () => {
+            if (document.body.classList.contains('body--curator-sidebar-open')) {
+                closeMobileSidebar();
+            } else {
+                openMobileSidebar();
+            }
+        });
+
+        backdrop?.addEventListener('click', closeMobileSidebar);
+
+        appShell.querySelectorAll('.curator-sidebar__link').forEach((link) => {
+            link.addEventListener('click', () => {
+                if (isMobile()) {
+                    closeMobileSidebar();
+                }
+            });
+        });
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape') {
+                closeMobileSidebar();
+            }
+        });
+
+        window.addEventListener('resize', () => {
+            if (!isMobile()) {
+                closeMobileSidebar();
+            }
+        });
+
+        appShell.querySelector('.curator-sidebar__logout')?.addEventListener('click', () => {
+            if (isMobile()) {
+                closeMobileSidebar();
+            }
+        });
+
+        const bottomNav = document.querySelector('.app-bottom-nav');
+        if (bottomNav && location.hash === '#students') {
+            bottomNav.querySelectorAll('.app-bottom-nav__item').forEach((item) => {
+                const isStudents = (item.getAttribute('href') || '').includes('#students');
+                item.classList.toggle('is-active', isStudents);
+            });
+        }
+    }
+
+    const groupSheet = document.querySelector('[data-group-sheet]');
+    if (groupSheet) {
+        const openBtns = document.querySelectorAll('[data-group-sheet-open]');
+        const closeBtns = groupSheet.querySelectorAll('[data-group-sheet-close]');
+        const searchInput = groupSheet.querySelector('[data-group-sheet-search]');
+        const options = Array.from(groupSheet.querySelectorAll('[data-group-label]'));
+
+        const openSheet = () => {
+            groupSheet.hidden = false;
+            document.body.classList.add('body--app-sheet-open');
+            const list = groupSheet.querySelector('[data-group-sheet-list]');
+            if (list) {
+                list.scrollTop = 0;
+            }
+            if (searchInput && window.matchMedia('(min-width: 961px)').matches) {
+                searchInput.focus();
+            }
+        };
+
+        const closeSheet = () => {
+            groupSheet.hidden = true;
+            document.body.classList.remove('body--app-sheet-open');
+        };
+
+        openBtns.forEach((btn) => btn.addEventListener('click', openSheet));
+        closeBtns.forEach((btn) => btn.addEventListener('click', closeSheet));
+
+        document.addEventListener('keydown', (event) => {
+            if (event.key === 'Escape' && !groupSheet.hidden) {
+                closeSheet();
+            }
+        });
+
+        searchInput?.addEventListener('input', () => {
+            const q = searchInput.value.trim().toLowerCase();
+            options.forEach((opt) => {
+                const label = opt.getAttribute('data-group-label') || '';
+                opt.hidden = q !== '' && !label.includes(q);
+            });
+        });
+    }
 });

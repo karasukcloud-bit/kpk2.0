@@ -65,21 +65,22 @@ $curatorGroups = $groups;
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide curator-activities-page">
-    <section class="panel no-print">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Занятость студентов во внеурочное время (кружки и секции)</p>
-            </div>
-            <?php if ($group && $students !== []): ?>
-            <div class="panel__header-actions">
-                <button type="button" class="btn btn--ghost" data-print-activities>Печать</button>
-            </div>
-            <?php endif; ?>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page curator-activities-page">
+    <?php
+    $curatorPageTitle = 'Занятость студентов';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'] . ' · кружки и секции')
+        : 'Занятость студентов во внеурочное время';
+    $curatorPageIcon = 'activities';
+    ob_start();
+    if ($group && $students !== []):
+    ?>
+    <button type="button" class="btn btn--ghost" data-print-activities>Печать</button>
+    <?php
+    endif;
+    $curatorPageActionsHtml = ob_get_clean();
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($success): ?>
         <div class="alert alert--success no-print"><?= e($success) ?></div>

@@ -5,8 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/includes/auth.php';
 
 if (is_logged_in()) {
-    header('Location: dashboard.php');
-    exit;
+    redirect_to(resolve_post_login_path());
 }
 
 $error = flash_get('error');
@@ -27,8 +26,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         if ($result['success']) {
-            header('Location: dashboard.php');
-            exit;
+            redirect_to(resolve_post_login_path());
         }
 
         $error = $result['error'];

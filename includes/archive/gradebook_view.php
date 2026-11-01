@@ -88,7 +88,27 @@ if ($archivePanel === 'admin') {
 require __DIR__ . '/../header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
+<div class="dashboard dashboard--wide<?= $archivePanel === 'curator' ? ' curator-page' : '' ?>">
+    <?php if ($archivePanel === 'curator'): ?>
+        <?php
+        $curatorPageTitle = 'Архивная ведомость';
+        $curatorPageSubtitle = (string) ($group['group_number'] ?? $group['number'] ?? '');
+        $curatorPageIcon = 'archive';
+        $curatorPageShowGroup = false;
+        ob_start();
+        ?>
+        <a href="archive.php?period=<?= e($backPeriod) ?>" class="btn btn--ghost">← Назад</a>
+        <?php if ($subjects !== [] && $students !== []): ?>
+        <a
+            href="archive_gradebook_pdf.php?id=<?= $archiveId ?>&group_id=<?= $groupId ?>"
+            class="btn btn--secondary"
+        >Скачать PDF</a>
+        <?php endif; ?>
+        <?php
+        $curatorPageActionsHtml = ob_get_clean();
+        require __DIR__ . '/../curator_page_hero.php';
+        ?>
+    <?php else: ?>
     <section class="panel">
         <div class="panel__header">
             <div>
@@ -107,13 +127,12 @@ require __DIR__ . '/../header.php';
         <?php
         if ($archivePanel === 'admin') {
             require __DIR__ . '/../admin_nav.php';
-        } elseif ($archivePanel === 'deputy') {
-            require __DIR__ . '/../deputy_nav.php';
         } else {
-            require __DIR__ . '/../curator_nav.php';
+            require __DIR__ . '/../deputy_nav.php';
         }
         ?>
     </section>
+    <?php endif; ?>
 
     <?php if ($success): ?>
         <div class="alert alert--success"><?= e($success) ?></div>

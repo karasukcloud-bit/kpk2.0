@@ -21,12 +21,8 @@ if (!in_array($viewSem, ['1', '2', 'year'], true)) {
     $viewSem = normalize_gradebook_semester((string) $activePeriod['semester']);
 }
 
-$source = (string) ($_GET['source'] ?? 'journal');
 $manualBrsAvailable = is_manual_brs_gradebook_active();
-if ($source === 'manual_brs' && !$manualBrsAvailable) {
-    $source = 'journal';
-}
-$source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+$source = resolve_grades_source(isset($_GET['source']) ? (string) $_GET['source'] : null);
 
 $yearOptions = get_last_academic_years($activePeriod['academic_year'], 4);
 $report = build_specialty_subjects_performance_report($year, $viewSem, $source);

@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 $currentDeputyTab = $currentDeputyTab ?? 'curriculum';
+if (!empty($useAppShell) || !empty($useCuratorShell)) {
+    return;
+}
 ?>
 <nav class="admin-tabs">
     <a href="curriculum.php"

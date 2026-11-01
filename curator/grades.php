@@ -33,16 +33,15 @@ $curatorGroups = $groups;
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Электронная ведомость группы</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = 'Электронная ведомость';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'] . ' · ' . $year . ' · ' . semester_label($semester))
+        : 'Электронная ведомость группы';
+    $curatorPageIcon = 'grades';
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <section class="panel">
         <?php if ($periodHint): ?>

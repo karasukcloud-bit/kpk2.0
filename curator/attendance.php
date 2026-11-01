@@ -143,16 +143,39 @@ if ($editDayId > 0) {
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide curator-attendance-page">
-    <section class="panel curator-no-print">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Учёт посещаемости группы</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page curator-attendance-page">
+    <?php
+    $curatorPageTitle = 'Посещаемость';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'] . ' · ' . format_attendance_month($month))
+        : 'Учёт посещаемости группы';
+    $curatorPageIcon = 'attendance';
+    ob_start();
+    if ($group !== null):
+    ?>
+    <form method="get" class="curator-group-pill-form curator-no-print">
+        <input type="hidden" name="group_id" value="<?= $groupId ?>">
+        <label class="curator-group-pill curator-group-pill--select" title="Месяц">
+            <span class="curator-group-pill__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="4" width="18" height="18" rx="2"/>
+                    <path d="M16 2v4M8 2v4M3 10h18"/>
+                </svg>
+            </span>
+            <select id="month" name="month" class="curator-group-pill__select" onchange="this.form.submit()" aria-label="Месяц">
+                <?php foreach ($monthOptions as $option): ?>
+                <option value="<?= e($option['value']) ?>"<?= $option['value'] === $month ? ' selected' : '' ?>>
+                    <?= e($option['label']) ?>
+                </option>
+                <?php endforeach; ?>
+            </select>
+        </label>
+    </form>
+    <?php
+    endif;
+    $curatorPageExtraControlsHtml = ob_get_clean();
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <section class="panel">
         <?php if ($success): ?>
@@ -167,22 +190,6 @@ require __DIR__ . '/../includes/header.php';
             <p class="text-muted">Вам ещё не назначена группа.</p>
         <?php elseif ($group === null): ?>
             <p class="text-muted">Выберите группу, чтобы вести учёт посещаемости.</p>
-        <?php else: ?>
-            <form method="get" class="form form--filter curator-no-print">
-                <div class="form__row form__row--filter">
-                    <input type="hidden" name="group_id" value="<?= $groupId ?>">
-                    <div class="form__group">
-                        <label for="month">Месяц</label>
-                        <select id="month" name="month" onchange="this.form.submit()">
-                            <?php foreach ($monthOptions as $option): ?>
-                            <option value="<?= e($option['value']) ?>"<?= $option['value'] === $month ? ' selected' : '' ?>>
-                                <?= e($option['label']) ?>
-                            </option>
-                            <?php endforeach; ?>
-                        </select>
-                    </div>
-                </div>
-            </form>
         <?php endif; ?>
 
         <?php if (empty($groups) || $group === null): ?>

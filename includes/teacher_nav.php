@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 $currentTeacherTab = $currentTeacherTab ?? 'journal';
+if (!empty($useAppShell) || !empty($useCuratorShell)) {
+    return;
+}
 ?>
 <nav class="admin-tabs">
     <a href="<?= e(app_base_path()) ?>teacher/subjects.php"

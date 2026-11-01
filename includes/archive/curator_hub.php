@@ -61,16 +61,14 @@ $curatorGroupId = 0;
 require __DIR__ . '/../header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Архив ведомостей</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = 'Архив';
+    $curatorPageSubtitle = 'Архив ведомостей';
+    $curatorPageIcon = 'archive';
+    $curatorPageShowGroup = false;
+    require __DIR__ . '/../curator_page_hero.php';
+    ?>
 
     <section class="panel">
         <h2>Просмотр архива</h2>

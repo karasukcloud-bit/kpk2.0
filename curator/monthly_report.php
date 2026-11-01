@@ -172,16 +172,15 @@ foreach ($students as $student) {
 }
 ?>
 
-<div class="dashboard dashboard--wide curator-monthly-report-page" data-monthly-report-page>
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Ежемесячный отчёт по воспитательной работе группы</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page curator-monthly-report-page" data-monthly-report-page>
+    <?php
+    $curatorPageTitle = 'Отчёт по группе';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'] . ' · ежемесячный отчёт')
+        : 'Ежемесячный отчёт по воспитательной работе';
+    $curatorPageIcon = 'monthly_report';
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($error): ?>
         <div class="alert alert--error"><?= e($error) ?></div>

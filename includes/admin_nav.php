@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 $currentAdminTab = $currentAdminTab ?? 'teachers';
+if (!empty($useAppShell) || !empty($useCuratorShell)) {
+    return;
+}
 ?>
 <nav class="admin-tabs">
     <a href="teachers.php"

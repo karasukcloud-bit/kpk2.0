@@ -48,18 +48,19 @@ $curatorGroups = get_groups_for_curator();
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Новый студент</h1>
-                <p class="text-muted">Группа <?= e($group['number']) ?></p>
-            </div>
-            <a href="group.php?group_id=<?= $groupId ?>" class="btn btn--ghost">← К списку группы</a>
-        </div>
-
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = 'Новый студент';
+    $curatorPageSubtitle = 'Группа ' . (string) $group['number'];
+    $curatorPageIcon = 'student';
+    $curatorPageShowGroup = false;
+    ob_start();
+    ?>
+    <a href="group.php?group_id=<?= $groupId ?>" class="btn btn--ghost">← К списку группы</a>
+    <?php
+    $curatorPageActionsHtml = ob_get_clean();
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($error): ?>
         <div class="alert alert--error"><?= e($error) ?></div>

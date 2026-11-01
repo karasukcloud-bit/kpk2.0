@@ -17,7 +17,7 @@ $error = $ctx['error'];
 
 $report = $group ? build_group_report($students, $groupId) : null;
 
-$pageTitle = 'Справка по группе — Панель куратора';
+$pageTitle = 'О группе — Панель куратора';
 $showHeader = true;
 $basePath = '../';
 $currentCuratorTab = 'report';
@@ -26,16 +26,15 @@ $curatorGroups = $groups;
 require __DIR__ . '/../includes/header.php';
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Аналитическая справка по группе</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = 'О группе';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'])
+        : 'Аналитическая справка по группе';
+    $curatorPageIcon = 'report';
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($error): ?>
         <div class="alert alert--error"><?= e($error) ?></div>

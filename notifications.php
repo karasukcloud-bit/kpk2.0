@@ -51,6 +51,28 @@ if ($selected && empty($selected['is_read'])) {
 $success = flash_get('success');
 $pageTitle = 'Уведомления';
 $showHeader = true;
+$basePath = '';
+
+if (is_admin()) {
+    $currentAdminTab = 'notifications';
+} elseif (can_use_curator_panel() && has_role('curator')) {
+    $currentCuratorTab = 'notifications';
+} elseif (can_use_teacher_panel() && has_role('teacher')) {
+    $currentTeacherTab = 'notifications';
+} elseif (can_use_deputy_panel() && has_role('deputy')) {
+    $currentDeputyTab = 'notifications';
+} elseif (can_use_educator_panel() && has_role('educator')) {
+    $currentEducatorTab = 'notifications';
+} elseif (can_use_curator_panel()) {
+    $currentCuratorTab = 'notifications';
+} elseif (can_use_teacher_panel()) {
+    $currentTeacherTab = 'notifications';
+} elseif (can_use_deputy_panel()) {
+    $currentDeputyTab = 'notifications';
+} elseif (can_use_educator_panel()) {
+    $currentEducatorTab = 'notifications';
+}
+
 require __DIR__ . '/includes/header.php';
 ?>
 
@@ -82,7 +104,7 @@ require __DIR__ . '/includes/header.php';
         <?php if ($notifications === []): ?>
             <p class="text-muted">Уведомлений пока нет.</p>
         <?php else: ?>
-            <div class="notifications-layout">
+            <div class="notifications-layout<?= $selected === null ? ' is-list' : ' is-detail' ?>">
                 <div class="notifications-list">
                     <?php foreach ($notifications as $row): ?>
                     <?php $isUnread = empty($row['is_read']); ?>
@@ -108,6 +130,7 @@ require __DIR__ . '/includes/header.php';
                     <?php if ($selected === null): ?>
                         <p class="text-muted">Выберите уведомление из списка.</p>
                     <?php else: ?>
+                        <a href="notifications.php" class="btn btn--ghost btn--sm notifications-detail__back">← К списку</a>
                         <div class="notifications-detail__head">
                             <span class="badge<?= $selected['notification_type'] === 'announcement' ? ' badge--deputy' : '' ?>">
                                 <?= e(notification_type_label((string) $selected['notification_type'])) ?>

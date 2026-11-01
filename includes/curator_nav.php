@@ -8,6 +8,11 @@ $curatorGroups = $curatorGroups ?? [];
 $curatorGroupPreserveParams = $curatorGroupPreserveParams ?? [];
 $groupQuery = $curatorGroupId > 0 ? '?group_id=' . $curatorGroupId : '';
 
+// Оболочка куратора: меню в сайдбаре, группа — в hero страницы.
+if (!empty($useCuratorShell)) {
+    return;
+}
+
 $curatorTabIcon = static function (string $name): string {
     $paths = [
         'group' => '<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>',
@@ -53,7 +58,7 @@ $curatorTabIcon = static function (string $name): string {
     <a href="report.php<?= $groupQuery ?>"
        class="admin-tabs__item<?= $currentCuratorTab === 'report' ? ' admin-tabs__item--active' : '' ?>">
         <?= $curatorTabIcon('report') ?>
-        Справка по группе
+        О группе
     </a>
     <a href="monthly_report.php<?= $groupQuery ?>"
        class="admin-tabs__item<?= $currentCuratorTab === 'monthly_report' ? ' admin-tabs__item--active' : '' ?>">

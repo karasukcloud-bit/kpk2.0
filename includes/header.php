@@ -1,10 +1,42 @@
+<?php
+$basePath = $basePath ?? '';
+require_once __DIR__ . '/app_shell.php';
+$appShellRole = null;
+$appShellTab = null;
+if (isset($currentCuratorTab)) {
+    $appShellRole = 'curator';
+    $appShellTab = (string) $currentCuratorTab;
+} elseif (isset($currentAdminTab)) {
+    $appShellRole = 'admin';
+    $appShellTab = (string) $currentAdminTab;
+} elseif (isset($currentDeputyTab)) {
+    $appShellRole = 'deputy';
+    $appShellTab = (string) $currentDeputyTab;
+} elseif (isset($currentTeacherTab)) {
+    $appShellRole = 'teacher';
+    $appShellTab = (string) $currentTeacherTab;
+} elseif (isset($currentEducatorTab)) {
+    $appShellRole = 'educator';
+    $appShellTab = (string) $currentEducatorTab;
+}
+$appBaseEarly = function_exists('app_base_path') ? app_base_path() : '';
+$appShell = $appShellRole !== null
+    ? build_app_shell(
+        $appShellRole,
+        $appShellTab ?? '',
+        $appBaseEarly,
+        (int) ($curatorGroupId ?? 0)
+    )
+    : null;
+$useAppShell = is_array($appShell);
+$useCuratorShell = $useAppShell;
+?>
 <!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title><?= e($pageTitle ?? 'КПК — Успеваемость') ?></title>
-    <?php $basePath = $basePath ?? ''; ?>
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.svg" type="image/svg+xml">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon.png" type="image/png" sizes="32x32">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/favicon-16.png" type="image/png" sizes="16x16">
@@ -12,12 +44,74 @@
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
-    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261101i">
+    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261102a">
+    <?php if (!empty($useAppShell)): ?>
+    <script>
+    (function () {
+        try {
+            var key = localStorage.getItem('kpk_app_sidebar_collapsed');
+            var legacy = localStorage.getItem('kpk_curator_sidebar_collapsed');
+            if (key === '1' || (key === null && legacy === '1')) {
+                document.documentElement.classList.add('app-sidebar-collapsed');
+            }
+        } catch (e) {}
+    })();
+    </script>
+    <?php endif; ?>
 </head>
-<body>
-    <div class="page">
+<body<?= !empty($useAppShell) ? ' class="body--curator-shell body--app-shell"' : '' ?>>
+    <div class="page<?= !empty($useAppShell) ? ' page--curator-shell' : '' ?>">
+        <?php if (!empty($useAppShell)): ?>
+        <div class="curator-shell" id="curatorShell">
+            <?php require __DIR__ . '/app_sidebar.php'; ?>
+            <div class="curator-shell__body">
+        <?php endif; ?>
         <?php if (!empty($showHeader)): ?>
-        <header class="header">
+        <?php
+        $headerUser = null;
+        $headerName = '';
+        $headerAvatar = 'icon:person';
+        $appBase = $appBaseEarly;
+        $activePanel = '';
+        $headerUnreadCount = 0;
+        $panelSwitchLabel = is_array($appShell) ? (string) ($appShell['label'] ?? 'Меню') : 'Меню';
+        if (is_logged_in()) {
+            $headerUser = current_user();
+            $headerName = user_first_middle_name((string) ($headerUser['full_name'] ?? ''));
+            if ($headerName === '') {
+                $headerName = (string) ($headerUser['full_name'] ?? '');
+            }
+            $headerAvatar = (string) ($headerUser['avatar'] ?? 'icon:person');
+            $appBase = app_base_path();
+            $activePanel = current_header_panel();
+            require_once __DIR__ . '/notifications.php';
+            $headerUnreadCount = get_unread_notifications_count((int) $headerUser['id']);
+            if (!is_array($appShell)) {
+                $panelLabels = [
+                    'admin' => 'Админ панель',
+                    'curator' => 'Панель куратора',
+                    'teacher' => 'Панель преподавателя',
+                    'deputy' => 'Панель завуча',
+                    'educator' => 'Панель воспитателя',
+                    'cabinet' => 'Личный кабинет',
+                    'student' => 'Личный кабинет',
+                ];
+                $panelSwitchLabel = $panelLabels[$activePanel] ?? 'Меню';
+            }
+        }
+        ?>
+        <header class="header<?= !empty($useAppShell) ? ' header--curator-shell' : '' ?>">
+            <?php if (!empty($useAppShell)): ?>
+            <button
+                type="button"
+                class="header__sidebar-btn"
+                data-app-sidebar-open
+                aria-label="Открыть меню разделов"
+                title="Меню разделов"
+            >
+                <span class="header__sidebar-btn-icon" aria-hidden="true"></span>
+            </button>
+            <?php endif; ?>
             <a href="<?= e($basePath) ?>dashboard.php" class="header__brand" title="На главную">
                 <span class="header__logo">
                     <img
@@ -32,6 +126,7 @@
                     <span class="header__title-spo">СПО-</span><span class="header__title-progress">ПРОГРЕСС</span>
                 </span>
             </a>
+            <?php if (empty($useAppShell)): ?>
             <a
                 class="header__rustore"
                 href="https://www.rustore.ru/catalog/app/ru.kpk.attendance"
@@ -53,19 +148,73 @@
                     <span class="header__rustore-name">RuStore</span>
                 </span>
             </a>
-            <?php if (is_logged_in()): ?>
-            <?php
-            $headerUser = current_user();
-            $headerName = user_first_middle_name((string) ($headerUser['full_name'] ?? ''));
-            if ($headerName === '') {
-                $headerName = (string) ($headerUser['full_name'] ?? '');
-            }
-            $headerAvatar = (string) ($headerUser['avatar'] ?? 'icon:person');
-            $appBase = app_base_path();
-            $activePanel = current_header_panel();
-            require_once __DIR__ . '/notifications.php';
-            $headerUnreadCount = get_unread_notifications_count((int) $headerUser['id']);
-            ?>
+            <?php endif; ?>
+
+            <?php if (is_logged_in() && !empty($useAppShell)): ?>
+            <div class="header-shell-bar">
+                <details class="header-panel-switch" data-header-panel-switch>
+                    <summary class="header-panel-switch__summary">
+                        <span class="header-panel-switch__icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                                <circle cx="9" cy="7" r="4"/>
+                                <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            </svg>
+                        </span>
+                        <span class="header-panel-switch__label"><?= e($panelSwitchLabel) ?></span>
+                        <span class="header-panel-switch__chevron" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="m6 9 6 6 6-6"/>
+                            </svg>
+                        </span>
+                    </summary>
+                    <div class="header-panel-switch__menu">
+                        <?php if (is_admin()): ?>
+                        <a href="<?= e($appBase) ?>admin/teachers.php" class="header-panel-switch__item<?= $activePanel === 'admin' ? ' is-active' : '' ?>">Админ панель</a>
+                        <?php endif; ?>
+                        <?php if (can_use_curator_panel()): ?>
+                        <a href="<?= e($appBase) ?>curator/group.php" class="header-panel-switch__item<?= $activePanel === 'curator' ? ' is-active' : '' ?>">Панель куратора</a>
+                        <?php endif; ?>
+                        <?php if (can_use_teacher_panel()): ?>
+                        <a href="<?= e($appBase) ?>teacher/subjects.php" class="header-panel-switch__item<?= $activePanel === 'teacher' ? ' is-active' : '' ?>">Панель преподавателя</a>
+                        <?php endif; ?>
+                        <?php if (can_use_deputy_panel()): ?>
+                        <a href="<?= e($appBase) ?>deputy/curriculum.php" class="header-panel-switch__item<?= $activePanel === 'deputy' ? ' is-active' : '' ?>">Панель завуча</a>
+                        <?php endif; ?>
+                        <?php if (can_use_educator_panel()): ?>
+                        <a href="<?= e($appBase) ?>educator/attendance.php" class="header-panel-switch__item<?= $activePanel === 'educator' ? ' is-active' : '' ?>">Панель воспитателя</a>
+                        <?php endif; ?>
+                        <a href="<?= e($appBase) ?><?= is_student_user() ? 'student/cabinet.php' : 'cabinet.php' ?>" class="header-panel-switch__item">Личный кабинет</a>
+                        <a href="<?= e($basePath) ?>logout.php" class="header-panel-switch__item header-panel-switch__item--danger">Выйти</a>
+                    </div>
+                </details>
+
+                <div class="header-shell-bar__actions">
+                    <a
+                        href="<?= e($appBase) ?>notifications.php"
+                        class="header__notify-btn<?= basename((string) ($_SERVER['SCRIPT_NAME'] ?? '')) === 'notifications.php' ? ' is-active' : '' ?>"
+                        title="Уведомления"
+                    >
+                        <span class="header__notify-icon" aria-hidden="true">
+                            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+                                <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                        </span>
+                        <?php if ($headerUnreadCount > 0): ?>
+                        <span class="header__notify-badge"><?= $headerUnreadCount > 99 ? '99+' : (int) $headerUnreadCount ?></span>
+                        <?php endif; ?>
+                    </a>
+                    <a
+                        href="<?= e($appBase) ?><?= is_student_user() ? 'student/cabinet.php' : 'cabinet.php' ?>"
+                        class="header-shell-avatar"
+                        title="Личный кабинет"
+                    >
+                        <?= render_user_avatar($headerAvatar, 'user-avatar--header', $basePath) ?>
+                    </a>
+                </div>
+            </div>
+            <?php elseif (is_logged_in()): ?>
             <button
                 type="button"
                 class="header__menu-btn"

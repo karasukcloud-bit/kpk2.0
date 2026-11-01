@@ -441,6 +441,66 @@ function login_user(array $user): void
     log_activity('auth.login', 'user', (int) $user['id']);
 }
 
+/**
+ * Доступные панели текущего пользователя (для редиректа после входа).
+ *
+ * @return list<array{key:string,label:string,path:string}>
+ */
+function user_home_panels(): array
+{
+    if (is_student_user()) {
+        return [[
+            'key' => 'student',
+            'label' => 'Личный кабинет',
+            'path' => 'student/cabinet.php',
+        ]];
+    }
+
+    if (is_admin()) {
+        return [[
+            'key' => 'admin',
+            'label' => 'Панель администратора',
+            'path' => 'admin/teachers.php',
+        ]];
+    }
+
+    // Приоритет домашней панели: куратор → преподаватель → завуч → воспитатель
+    $panels = [];
+    $roles = current_user_staff_roles();
+    $catalog = [
+        'curator' => ['label' => 'Панель куратора', 'path' => 'curator/group.php'],
+        'teacher' => ['label' => 'Панель преподавателя', 'path' => 'teacher/subjects.php'],
+        'deputy' => ['label' => 'Панель завуча', 'path' => 'deputy/curriculum.php'],
+        'educator' => ['label' => 'Панель воспитателя', 'path' => 'educator/attendance.php'],
+    ];
+
+    foreach ($catalog as $key => $meta) {
+        if (in_array($key, $roles, true)) {
+            $panels[] = [
+                'key' => $key,
+                'label' => $meta['label'],
+                'path' => $meta['path'],
+            ];
+        }
+    }
+
+    return $panels;
+}
+
+/**
+ * Куда вести после входа / при открытии «Главной».
+ * Берётся первая панель по приоритету ролей.
+ */
+function resolve_post_login_path(): string
+{
+    $panels = user_home_panels();
+    if ($panels === []) {
+        return 'cabinet.php';
+    }
+
+    return $panels[0]['path'];
+}
+
 function logout_user(): void
 {
     clear_current_user_cache();

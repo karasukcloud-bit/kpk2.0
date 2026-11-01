@@ -12,12 +12,7 @@ require_once __DIR__ . '/curriculum.php';
  */
 function parent_report_grade_source(?string $requested = null): string
 {
-    $requested = $requested === 'manual_brs' ? 'manual_brs' : 'journal';
-    if ($requested === 'manual_brs' && is_manual_brs_gradebook_active()) {
-        return 'manual_brs';
-    }
-
-    return 'journal';
+    return normalize_grades_source($requested);
 }
 
 function parent_report_source_label(string $source): string

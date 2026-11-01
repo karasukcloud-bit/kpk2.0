@@ -154,6 +154,50 @@ function is_manual_brs_gradebook_active(): bool
     return is_file(__DIR__ . '/../modules/manual_brs/bootstrap.php');
 }
 
+/** journal | manual_brs */
+function normalize_grades_source(?string $source): string
+{
+    $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+    if ($source === 'manual_brs' && !is_manual_brs_gradebook_active()) {
+        return 'journal';
+    }
+
+    return $source;
+}
+
+function persist_grades_source(string $source): void
+{
+    $source = normalize_grades_source($source);
+    $_COOKIE['kpk_grades_source'] = $source;
+    if (headers_sent()) {
+        return;
+    }
+    $path = function_exists('app_base_path') ? app_base_path() : '/';
+    setcookie('kpk_grades_source', $source, [
+        'expires' => time() + 86400 * 365,
+        'path' => $path !== '' ? $path : '/',
+        'samesite' => 'Lax',
+        'httponly' => false,
+    ]);
+}
+
+/**
+ * Источник оценок с сохранением выбора.
+ * Если $requested передан (обычно из $_GET['source']) — сохраняет и возвращает его.
+ * Иначе берёт сохранённый выбор или journal.
+ */
+function resolve_grades_source(?string $requested = null): string
+{
+    if ($requested !== null && $requested !== '') {
+        $source = normalize_grades_source($requested);
+        persist_grades_source($source);
+
+        return $source;
+    }
+
+    return normalize_grades_source($_COOKIE['kpk_grades_source'] ?? 'journal');
+}
+
 /**
  * Оценки по источнику: journal (электронный журнал) или manual_brs (отдельный контур).
  *

@@ -20,8 +20,7 @@ $period = get_active_gradebook_period();
 $year = $period['academic_year'];
 $semester = $period['semester'];
 
-$defaultSource = is_manual_brs_gradebook_active() ? 'manual_brs' : 'journal';
-$source = parent_report_grade_source($_GET['source'] ?? $defaultSource);
+$source = resolve_grades_source(isset($_GET['source']) ? (string) $_GET['source'] : null);
 
 $studentId = isset($_GET['student_id']) ? (int) $_GET['student_id'] : 0;
 $selectedStudent = null;
@@ -89,16 +88,15 @@ $listQuery = static function (array $extra = []) use ($groupId, $source): string
 };
 ?>
 
-<div class="dashboard dashboard--wide">
-    <section class="panel">
-        <div class="panel__header">
-            <div>
-                <h1>Панель куратора</h1>
-                <p class="text-muted">Отчёты по успеваемости и посещаемости для родителей</p>
-            </div>
-        </div>
-        <?php require __DIR__ . '/../includes/curator_nav.php'; ?>
-    </section>
+<div class="dashboard dashboard--wide curator-page">
+    <?php
+    $curatorPageTitle = 'Отчёты родителям';
+    $curatorPageSubtitle = $group
+        ? ('Группа ' . (string) $group['number'])
+        : 'Отчёты по успеваемости и посещаемости для родителей';
+    $curatorPageIcon = 'parent_reports';
+    require __DIR__ . '/../includes/curator_page_hero.php';
+    ?>
 
     <?php if ($error): ?>
         <div class="alert alert--error"><?= e($error) ?></div>

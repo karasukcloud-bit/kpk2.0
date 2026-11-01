@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 $currentEducatorTab = $currentEducatorTab ?? 'summary';
+if (!empty($useAppShell) || !empty($useCuratorShell)) {
+    return;
+}
 ?>
 <nav class="admin-tabs">
     <a href="attendance.php"

@@ -13,11 +13,7 @@ if (!can_use_deputy_panel()) {
     exit('Доступ запрещён. Требуются права завуча или администратора.');
 }
 
-$source = (string) ($_GET['source'] ?? 'journal');
-if ($source === 'manual_brs' && !is_manual_brs_gradebook_active()) {
-    $source = 'journal';
-}
-$source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
+$source = resolve_grades_source(isset($_GET['source']) ? (string) $_GET['source'] : null);
 
 if ($source === 'manual_brs') {
     $summarySource = 'manual_brs';
