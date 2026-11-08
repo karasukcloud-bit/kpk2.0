@@ -21,7 +21,7 @@ if ($source === 'manual_brs') {
     $summaryPanelLead = 'Сводная ведомость по всем группам';
     $summaryHeading = 'Сводная ведомость';
     $summarySourceLabel = 'Оценки из временного модуля «Ручное БРС».';
-} else {
+    } else {
     $summarySource = 'journal';
     $summaryGradebookHref = 'gradebook.php';
     $summaryPanelLead = 'Сводная ведомость по всем группам';

@@ -1,4 +1,4 @@
-﻿:root {
+:root {
     --color-primary: #2563eb;
     --color-primary-dark: #1d4ed8;
     --color-bg: #f1f5f9;
@@ -1991,6 +1991,34 @@ body {
     margin-bottom: 1.25rem;
 }
 
+.panel-divider {
+    border: 0;
+    border-top: 1px solid var(--color-border);
+    margin: 1.5rem 0;
+}
+
+.curriculum-add-subject-head {
+    margin-bottom: 0.75rem;
+}
+
+.curriculum-add-subject-head .subsection-title {
+    margin: 0;
+}
+
+.table tr.is-muted {
+    opacity: 0.65;
+}
+
+.table select {
+    width: 100%;
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font: inherit;
+    background: #fff;
+}
+
 .panel__header-actions {
     display: flex;
     flex-wrap: wrap;
@@ -2338,6 +2366,17 @@ body {
     color: var(--color-muted);
     text-transform: uppercase;
     letter-spacing: 0.03em;
+}
+
+.table input[type="text"] {
+    width: 100%;
+    min-width: 0;
+    padding: 0.45rem 0.6rem;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font: inherit;
+    background: #fff;
+    color: inherit;
 }
 
 .table__row--clickable {
@@ -9115,6 +9154,14 @@ tr.is-selected-month td {
 
 .body--curator-shell .curator-shell__body > .main {
     flex: 1;
+    min-width: 0;
+    width: 100%;
+}
+
+.body--curator-shell .curator-shell__body > .footer {
+    flex-shrink: 0;
+    width: 100%;
+    margin-top: auto;
 }
 
 .curator-sidebar__mobile-head,

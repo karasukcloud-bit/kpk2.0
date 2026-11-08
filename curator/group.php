@@ -290,6 +290,7 @@ require __DIR__ . '/../includes/header.php';
                         <?php if (!empty($students)): ?>
                         <a href="group_export_word.php?group_id=<?= $groupId ?>" class="btn btn--ghost">Экспорт в Word</a>
                         <?php endif; ?>
+                        <a href="students_import.php?group_id=<?= $groupId ?>" class="btn btn--ghost">Импорт из Word</a>
                         <a href="student_create.php?group_id=<?= $groupId ?>" class="btn btn--primary">+ Добавить студента</a>
                     </div>
                 </div>

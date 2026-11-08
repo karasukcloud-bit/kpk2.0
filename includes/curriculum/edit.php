@@ -470,7 +470,15 @@ require __DIR__ . '/../header.php';
             </div>
         <?php endif; ?>
 
-        <h3 class="subsection-title">Добавить предмет</h3>
+        <div class="panel__header curriculum-add-subject-head">
+            <h3 class="subsection-title">Добавить предмет</h3>
+            <div class="panel__header-actions">
+                <a
+                    href="curriculum_import.php?group_id=<?= (int) $groupId ?>&year=<?= e(urlencode($academicYear)) ?>"
+                    class="btn btn--ghost btn--sm"
+                >Импорт из Word</a>
+            </div>
+        </div>
 
         <form method="post" class="form form--medium">
             <?= csrf_field() ?>
@@ -866,8 +874,6 @@ require __DIR__ . '/../header.php';
         </ul>
     </section>
     <?php endif; ?>
-</div>
-
 </div>
 
 <div

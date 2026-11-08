@@ -984,6 +984,101 @@ function delete_student(int $id): array
     return ['success' => true];
 }
 
+/**
+ * Безвозвратное удаление студентов (только администратор).
+ * Удаляет записи студента, учётную запись и связанные данные без сохранения истории.
+ *
+ * @param list<int> $studentIds
+ * @return array{success:bool,error?:string,deleted?:int}
+ */
+function purge_students_permanently(array $studentIds): array
+{
+    if (!is_admin()) {
+        return ['success' => false, 'error' => 'Удаление доступно только администратору.'];
+    }
+
+    $ids = [];
+    foreach ($studentIds as $id) {
+        $id = (int) $id;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+    $ids = array_values($ids);
+    if ($ids === []) {
+        return ['success' => false, 'error' => 'Не выбраны студенты для удаления.'];
+    }
+
+    require_once __DIR__ . '/activity_log.php';
+    require_once __DIR__ . '/migrations.php';
+    ensure_students_schema(db());
+    ensure_attendance_schema(db());
+
+    $placeholders = implode(',', array_fill(0, count($ids), '?'));
+    $stmt = db()->prepare(
+        "SELECT id, full_name, group_id, user_id
+         FROM students
+         WHERE id IN ($placeholders) AND removed_at IS NULL"
+    );
+    $stmt->execute($ids);
+    $rows = $stmt->fetchAll();
+    if ($rows === []) {
+        return ['success' => false, 'error' => 'Выбранные студенты не найдены.'];
+    }
+
+    $pdo = db();
+    $pdo->beginTransaction();
+    try {
+        $foundIds = array_map(static fn (array $row): int => (int) $row['id'], $rows);
+        $foundPlaceholders = implode(',', array_fill(0, count($foundIds), '?'));
+        $userIds = [];
+        foreach ($rows as $row) {
+            $userId = (int) ($row['user_id'] ?? 0);
+            if ($userId > 0) {
+                $userIds[] = $userId;
+            }
+            $group = get_group_by_id((int) $row['group_id']);
+            log_activity(
+                'student.purge',
+                'student',
+                (int) $row['id'],
+                (int) $row['group_id'],
+                [
+                    'student_name' => (string) $row['full_name'],
+                    'group_number' => $group ? (string) $group['number'] : '',
+                    'hard' => true,
+                ]
+            );
+        }
+
+        // Удаляем пропуски полностью — без сохранения ФИО в истории.
+        $pdo->prepare(
+            "DELETE FROM attendance_entries WHERE student_id IN ($foundPlaceholders)"
+        )->execute($foundIds);
+
+        $pdo->prepare(
+            "DELETE FROM students WHERE id IN ($foundPlaceholders)"
+        )->execute($foundIds);
+
+        if ($userIds !== []) {
+            $userPlaceholders = implode(',', array_fill(0, count($userIds), '?'));
+            $pdo->prepare(
+                "DELETE FROM users WHERE role = 'student' AND id IN ($userPlaceholders)"
+            )->execute($userIds);
+        }
+
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+
+        return ['success' => false, 'error' => 'Не удалось удалить студентов. Попробуйте снова.'];
+    }
+
+    return ['success' => true, 'deleted' => count($rows)];
+}
+
 function transfer_student(int $studentId, int $toGroupId, string $additionalInfo = ''): array
 {
     if (!is_admin()) {

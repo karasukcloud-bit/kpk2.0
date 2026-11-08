@@ -490,11 +490,25 @@ function add_curriculum_item_part(
     if (!$subjectResult['success']) {
         return $subjectResult;
     }
+    $subjectId = (int) $subjectResult['subject_id'];
     $teacherCheck = normalize_curriculum_teacher_id($teacherId);
     if (!$teacherCheck['success']) {
         return $teacherCheck;
     }
     $teacherId = $teacherCheck['teacher_id'];
+
+    $dup = db()->prepare(
+        'SELECT id FROM curriculum_items
+         WHERE curriculum_plan_id = ? AND subject_id = ?
+         LIMIT 1'
+    );
+    $dup->execute([$planId, $subjectId]);
+    if ($dup->fetch()) {
+        return [
+            'success' => false,
+            'error' => 'Предмет «' . trim($subjectName) . '» уже есть в учебном плане этой группы.',
+        ];
+    }
 
     $maxSort = db()->prepare(
         'SELECT COALESCE(MAX(sort_order), 0) + 1 FROM curriculum_items WHERE parent_item_id = ?'
@@ -502,23 +516,33 @@ function add_curriculum_item_part(
     $maxSort->execute([$parentItemId]);
     $sortOrder = (int) $maxSort->fetchColumn();
 
-    $stmt = db()->prepare(
-        'INSERT INTO curriculum_items
-         (curriculum_plan_id, subject_id, item_type, module_id, parent_item_id, teacher_id, semester, sort_order,
-          start_abs_semester, end_abs_semester)
-         VALUES (?, ?, \'subject\', ?, ?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
-        $planId,
-        (int) $subjectResult['subject_id'],
-        $parent['module_id'] !== null ? (int) $parent['module_id'] : null,
-        $parentItemId,
-        $teacherId,
-        $semester,
-        $sortOrder,
-        $parent['start_abs_semester'] !== null ? (int) $parent['start_abs_semester'] : null,
-        $parent['end_abs_semester'] !== null ? (int) $parent['end_abs_semester'] : null,
-    ]);
+    try {
+        $stmt = db()->prepare(
+            'INSERT INTO curriculum_items
+             (curriculum_plan_id, subject_id, item_type, module_id, parent_item_id, teacher_id, semester, sort_order,
+              start_abs_semester, end_abs_semester)
+             VALUES (?, ?, \'subject\', ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $planId,
+            $subjectId,
+            $parent['module_id'] !== null ? (int) $parent['module_id'] : null,
+            $parentItemId,
+            $teacherId,
+            $semester,
+            $sortOrder,
+            $parent['start_abs_semester'] !== null ? (int) $parent['start_abs_semester'] : null,
+            $parent['end_abs_semester'] !== null ? (int) $parent['end_abs_semester'] : null,
+        ]);
+    } catch (PDOException $e) {
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
+            return [
+                'success' => false,
+                'error' => 'Предмет «' . trim($subjectName) . '» уже есть в учебном плане этой группы.',
+            ];
+        }
+        throw $e;
+    }
 
     return [
         'success' => true,
@@ -554,17 +578,42 @@ function update_curriculum_item_part(
         return ['success' => false, 'error' => 'Некорректный семестр раздела.'];
     }
 
-    $stmt = db()->prepare(
-        'UPDATE curriculum_items
-         SET subject_id = ?, teacher_id = ?, semester = ?
-         WHERE id = ? AND parent_item_id IS NOT NULL'
+    $subjectId = (int) $subjectResult['subject_id'];
+    $planId = (int) $item['curriculum_plan_id'];
+    $dup = db()->prepare(
+        'SELECT id FROM curriculum_items
+         WHERE curriculum_plan_id = ? AND subject_id = ? AND id <> ?
+         LIMIT 1'
     );
-    $stmt->execute([
-        (int) $subjectResult['subject_id'],
-        $teacherCheck['teacher_id'],
-        $semester,
-        $partItemId,
-    ]);
+    $dup->execute([$planId, $subjectId, $partItemId]);
+    if ($dup->fetch()) {
+        return [
+            'success' => false,
+            'error' => 'Предмет «' . trim($subjectName) . '» уже есть в учебном плане этой группы.',
+        ];
+    }
+
+    try {
+        $stmt = db()->prepare(
+            'UPDATE curriculum_items
+             SET subject_id = ?, teacher_id = ?, semester = ?
+             WHERE id = ? AND parent_item_id IS NOT NULL'
+        );
+        $stmt->execute([
+            $subjectId,
+            $teacherCheck['teacher_id'],
+            $semester,
+            $partItemId,
+        ]);
+    } catch (PDOException $e) {
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
+            return [
+                'success' => false,
+                'error' => 'Предмет «' . trim($subjectName) . '» уже есть в учебном плане этой группы.',
+            ];
+        }
+        throw $e;
+    }
 
     return ['success' => true];
 }

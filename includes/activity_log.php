@@ -48,6 +48,7 @@ function activity_log_action_options(): array
         'auth.login' => 'Вход в систему',
         'student.create' => 'Добавление студента',
         'student.delete' => 'Удаление студента',
+        'student.purge' => 'Безвозвратное удаление студента',
         'journal.lesson_add' => 'Добавление даты в журнал',
         'journal.lesson_update' => 'Изменение даты в журнале',
         'journal.lesson_delete' => 'Удаление даты из журнала',

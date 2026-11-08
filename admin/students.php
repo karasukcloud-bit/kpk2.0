@@ -15,6 +15,29 @@ $error = null;
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
+    } elseif (($_POST['action'] ?? '') === 'purge') {
+        $groupId = (int) ($_POST['filter_group_id'] ?? $groupId);
+        $ack = !empty($_POST['confirm_ack']);
+        $confirmText = trim((string) ($_POST['confirm_text'] ?? ''));
+        $rawIds = $_POST['student_ids'] ?? [];
+        if (!is_array($rawIds)) {
+            $rawIds = [];
+        }
+        if (!$ack || mb_strtoupper($confirmText, 'UTF-8') !== 'УДАЛИТЬ') {
+            $error = 'Для удаления подтвердите действие и введите слово УДАЛИТЬ.';
+        } else {
+            $result = purge_students_permanently($rawIds);
+            if ($result['success']) {
+                $deleted = (int) ($result['deleted'] ?? 0);
+                flash_set(
+                    'success',
+                    'Безвозвратно удалено студентов: ' . $deleted . '.'
+                );
+                header('Location: students.php' . ($groupId > 0 ? '?group_id=' . $groupId : ''));
+                exit;
+            }
+            $error = $result['error'] ?? 'Не удалось удалить студентов.';
+        }
     } elseif (($_POST['action'] ?? '') === 'transfer') {
         $studentId = (int) ($_POST['student_id'] ?? 0);
         $toGroupId = (int) ($_POST['to_group_id'] ?? 0);
@@ -64,7 +87,7 @@ require __DIR__ . '/../includes/header.php';
         <div class="panel__header">
             <div>
                 <h1>Панель администратора</h1>
-                <p class="text-muted">Все студенты · фильтр по группам · перевод между группами</p>
+                <p class="text-muted">Все студенты · фильтр по группам · перевод · массовое удаление</p>
             </div>
         </div>
         <?php require __DIR__ . '/../includes/admin_nav.php'; ?>
@@ -94,6 +117,11 @@ require __DIR__ . '/../includes/header.php';
                             <?php endforeach; ?>
                         </select>
                     </div>
+                    <?php if ($groupId > 0): ?>
+                    <div class="form__group form__group--align-end">
+                        <a href="students_import.php?group_id=<?= $groupId ?>" class="btn btn--primary">Импорт из Word</a>
+                    </div>
+                    <?php endif; ?>
                 </div>
             </form>
 
@@ -106,59 +134,129 @@ require __DIR__ . '/../includes/header.php';
                     <?php endif; ?>
                 </p>
             <?php else: ?>
-                <p class="text-muted">
-                    <?php if ($showAllStudents): ?>
-                        Всего студентов: <strong><?= count($students) ?></strong>
-                    <?php else: ?>
-                        Группа <strong><?= e($group['number']) ?></strong>
-                        · <?= e($group['specialty_name']) ?>
-                        · студентов: <?= count($students) ?>
-                    <?php endif; ?>
-                </p>
-                <div class="table-wrap">
-                    <table class="table">
-                        <thead>
-                            <tr>
-                                <th>№</th>
-                                <th>ФИО</th>
-                                <?php if ($showAllStudents): ?>
-                                <th>Группа</th>
-                                <?php endif; ?>
-                                <th>Телефон</th>
-                                <th></th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($students as $index => $student): ?>
-                            <tr>
-                                <td><?= $index + 1 ?></td>
-                                <td><?= e($student['full_name']) ?></td>
-                                <?php if ($showAllStudents): ?>
-                                <td><?= e($student['group_number'] ?? '—') ?></td>
-                                <?php endif; ?>
-                                <td><?= e(($student['phone'] ?? '') !== '' ? $student['phone'] : '—') ?></td>
-                                <td>
-                                    <button
-                                        type="button"
-                                        class="btn btn--primary btn--sm"
-                                        data-transfer-open
-                                        data-student-id="<?= (int) $student['id'] ?>"
-                                        data-student-name="<?= e($student['full_name']) ?>"
-                                        data-from-group-id="<?= (int) $student['group_id'] ?>"
-                                        data-student-group="<?= e($student['group_number'] ?? '') ?>"
-                                    >Перевести студента</button>
-                                </td>
-                            </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                </div>
+                <form method="post" id="students-purge-form" data-students-purge-form>
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="action" value="purge">
+                    <input type="hidden" name="filter_group_id" value="<?= $groupId ?>">
+
+                    <div class="panel__header" style="margin-bottom: 0.75rem;">
+                        <p class="text-muted" style="margin: 0;">
+                            <?php if ($showAllStudents): ?>
+                                Всего студентов: <strong><?= count($students) ?></strong>
+                            <?php else: ?>
+                                Группа <strong><?= e($group['number']) ?></strong>
+                                · <?= e($group['specialty_name']) ?>
+                                · студентов: <?= count($students) ?>
+                            <?php endif; ?>
+                        </p>
+                        <div class="panel__header-actions">
+                            <button
+                                type="button"
+                                class="btn btn--danger btn--sm"
+                                data-purge-open
+                                disabled
+                            >Удалить выбранных</button>
+                        </div>
+                    </div>
+
+                    <div class="table-wrap">
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th style="width: 2.5rem;">
+                                        <label class="checkbox-label checkbox-label--table" title="Выбрать всех">
+                                            <input type="checkbox" data-purge-select-all>
+                                        </label>
+                                    </th>
+                                    <th>№</th>
+                                    <th>ФИО</th>
+                                    <?php if ($showAllStudents): ?>
+                                    <th>Группа</th>
+                                    <?php endif; ?>
+                                    <th>Телефон</th>
+                                    <th></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <?php foreach ($students as $index => $student): ?>
+                                <tr>
+                                    <td>
+                                        <label class="checkbox-label checkbox-label--table">
+                                            <input
+                                                type="checkbox"
+                                                name="student_ids[]"
+                                                value="<?= (int) $student['id'] ?>"
+                                                data-purge-item
+                                            >
+                                        </label>
+                                    </td>
+                                    <td><?= $index + 1 ?></td>
+                                    <td><?= e($student['full_name']) ?></td>
+                                    <?php if ($showAllStudents): ?>
+                                    <td><?= e($student['group_number'] ?? '—') ?></td>
+                                    <?php endif; ?>
+                                    <td><?= e(($student['phone'] ?? '') !== '' ? $student['phone'] : '—') ?></td>
+                                    <td>
+                                        <button
+                                            type="button"
+                                            class="btn btn--primary btn--sm"
+                                            data-transfer-open
+                                            data-student-id="<?= (int) $student['id'] ?>"
+                                            data-student-name="<?= e($student['full_name']) ?>"
+                                            data-from-group-id="<?= (int) $student['group_id'] ?>"
+                                            data-student-group="<?= e($student['group_number'] ?? '') ?>"
+                                        >Перевести</button>
+                                    </td>
+                                </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    </div>
+                </form>
             <?php endif; ?>
         <?php endif; ?>
     </section>
 </div>
 
 <?php if ($groups !== [] && $students !== []): ?>
+<div class="modal" id="students-purge-modal" hidden>
+    <div class="modal__backdrop" data-purge-close></div>
+    <div class="modal__dialog" role="dialog" aria-modal="true" aria-labelledby="students-purge-title">
+        <div class="modal__header">
+            <h2 id="students-purge-title">Безвозвратное удаление</h2>
+            <button type="button" class="modal__close" data-purge-close aria-label="Закрыть">×</button>
+        </div>
+        <p class="text-muted">
+            Будет удалено студентов: <strong data-purge-count>0</strong>.
+            Данные и история по ним не сохраняются.
+        </p>
+        <p>Действие необратимо. Отметьте согласие и введите слово <strong>УДАЛИТЬ</strong>.</p>
+        <div class="form__group form__group--checkbox">
+            <label class="checkbox-label">
+                <input type="checkbox" form="students-purge-form" name="confirm_ack" value="1" required data-purge-ack>
+                Я понимаю, что студенты будут удалены безвозвратно
+            </label>
+        </div>
+        <div class="form__group">
+            <label for="students_purge_confirm_text">Подтверждение</label>
+            <input
+                type="text"
+                id="students_purge_confirm_text"
+                form="students-purge-form"
+                name="confirm_text"
+                required
+                autocomplete="off"
+                placeholder="УДАЛИТЬ"
+                data-purge-text
+            >
+        </div>
+        <div class="form__actions">
+            <button type="submit" class="btn btn--danger" form="students-purge-form" data-purge-submit>Удалить</button>
+            <button type="button" class="btn btn--ghost" data-purge-close>Отмена</button>
+        </div>
+    </div>
+</div>
+
 <div class="modal" id="student-transfer-modal" hidden>
     <div class="modal__backdrop" data-transfer-close></div>
     <div class="modal__dialog modal__dialog--wide" role="dialog" aria-modal="true" aria-labelledby="student-transfer-title">
@@ -204,6 +302,81 @@ require __DIR__ . '/../includes/header.php';
 </div>
 <script>
 (() => {
+    const purgeForm = document.querySelector('[data-students-purge-form]');
+    const purgeModal = document.getElementById('students-purge-modal');
+    if (purgeForm && purgeModal) {
+        const selectAll = purgeForm.querySelector('[data-purge-select-all]');
+        const items = () => Array.from(purgeForm.querySelectorAll('[data-purge-item]'));
+        const openBtn = document.querySelector('[data-purge-open]');
+        const countNode = purgeModal.querySelector('[data-purge-count]');
+        const ack = purgeModal.querySelector('[data-purge-ack]');
+        const text = purgeModal.querySelector('[data-purge-text]');
+
+        const selectedCount = () => items().filter((el) => el.checked).length;
+
+        const sync = () => {
+            const list = items();
+            const checked = list.filter((el) => el.checked);
+            if (selectAll) {
+                selectAll.checked = list.length > 0 && checked.length === list.length;
+                selectAll.indeterminate = checked.length > 0 && checked.length < list.length;
+            }
+            if (openBtn) {
+                openBtn.disabled = checked.length === 0;
+            }
+            if (countNode) {
+                countNode.textContent = String(checked.length);
+            }
+        };
+
+        const openPurge = () => {
+            if (selectedCount() === 0) {
+                return;
+            }
+            if (ack) ack.checked = false;
+            if (text) text.value = '';
+            sync();
+            purgeModal.hidden = false;
+            document.body.classList.add('modal-open');
+            text?.focus();
+        };
+
+        const closePurge = () => {
+            purgeModal.hidden = true;
+            if (document.getElementById('student-transfer-modal')?.hidden !== false) {
+                document.body.classList.remove('modal-open');
+            }
+        };
+
+        selectAll?.addEventListener('change', () => {
+            items().forEach((el) => {
+                el.checked = !!selectAll.checked;
+            });
+            sync();
+        });
+        items().forEach((el) => el.addEventListener('change', sync));
+        openBtn?.addEventListener('click', openPurge);
+        purgeModal.querySelectorAll('[data-purge-close]').forEach((btn) => {
+            btn.addEventListener('click', closePurge);
+        });
+        purgeForm.addEventListener('submit', (event) => {
+            if (selectedCount() === 0) {
+                event.preventDefault();
+                return;
+            }
+            if (!ack?.checked || String(text?.value || '').trim().toUpperCase() !== 'УДАЛИТЬ') {
+                event.preventDefault();
+                window.alert('Отметьте согласие и введите слово УДАЛИТЬ.');
+            }
+        });
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && !purgeModal.hidden) {
+                closePurge();
+            }
+        });
+        sync();
+    }
+
     const modal = document.getElementById('student-transfer-modal');
     if (!modal) return;
     const idInput = document.getElementById('transfer_student_id');
