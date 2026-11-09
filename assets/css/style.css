@@ -2321,7 +2321,17 @@ body {
 
 .table-wrap {
     overflow-x: auto;
-    margin: 0 -0.5rem;
+    margin: 0;
+    max-width: 100%;
+}
+
+.table-wrap:has(.gradebook-table) {
+    overflow-x: hidden;
+    max-width: 100%;
+}
+
+.table-wrap.gradebook-wrap--scroll {
+    overflow-x: auto;
 }
 
 .attendance-table-wrap {
@@ -2448,15 +2458,23 @@ body {
 }
 
 .gradebook-table {
-    min-width: 720px;
+    width: 100%;
+    min-width: calc(13rem + var(--gradebook-cols, 0) * 2.75rem);
+    table-layout: fixed;
+    border-collapse: collapse;
 }
 
 .gradebook-table__student-col {
     position: sticky;
     left: 0;
-    min-width: 240px;
+    width: 13rem;
+    min-width: 13rem;
+    max-width: 16rem;
     background: var(--color-surface);
     z-index: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .gradebook-table th.gradebook-table__student-col {
@@ -2504,13 +2522,14 @@ body {
 }
 
 .gradebook-table__subject-col {
-    width: 42px;
-    min-width: 42px;
-    max-width: 42px;
+    width: 2.75rem;
+    min-width: 2.75rem;
+    max-width: 2.75rem;
     height: 200px;
-    padding: 0.5rem 0.25rem;
+    padding: 0.35rem 0.15rem;
     text-align: center;
     vertical-align: bottom;
+    overflow: hidden;
 }
 
 .gradebook-subject-title {
@@ -2529,9 +2548,9 @@ body {
 }
 
 .gradebook-table__subject-col--composite {
-    width: 58px;
-    min-width: 58px;
-    max-width: 58px;
+    width: 3.6rem;
+    min-width: 3.6rem;
+    max-width: 3.6rem;
     vertical-align: bottom;
 }
 
@@ -2661,15 +2680,17 @@ body {
 }
 
 .gradebook-table__grade-cell {
-    min-width: 42px;
-    width: 42px;
+    width: 2.75rem;
+    min-width: 0;
+    max-width: 2.75rem;
     height: 42px;
-    padding: 0.5rem 0.25rem;
+    padding: 0.35rem 0.1rem;
     text-align: center;
     vertical-align: middle;
     cursor: text;
     outline: none;
     background: #fff;
+    overflow: hidden;
 }
 
 .gradebook-table--readonly .gradebook-table__grade-cell {

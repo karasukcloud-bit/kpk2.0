@@ -9,6 +9,8 @@ declare(strict_types=1);
  */
 
 $sourceFilterCurrent = ($sourceFilterCurrent ?? 'journal') === 'manual_brs' ? 'manual_brs' : 'journal';
+$sourceFilterUrl = $sourceFilterUrl ?? 'grades.php';
+$sourceFilterQuery = is_array($sourceFilterQuery ?? null) ? $sourceFilterQuery : [];
 if (!is_manual_brs_gradebook_active()) {
     return;
 }
@@ -18,7 +20,7 @@ $buildSourceHref = static function (string $source) use ($sourceFilterUrl, $sour
         return (string) $sourceFilterUrl(['source' => $source]);
     }
     $page = (string) $sourceFilterUrl;
-    $params = array_merge($sourceFilterQuery ?? [], ['source' => $source]);
+    $params = array_merge($sourceFilterQuery, ['source' => $source]);
     $qs = http_build_query($params);
 
     return $page . ($qs !== '' ? '?' . $qs : '');

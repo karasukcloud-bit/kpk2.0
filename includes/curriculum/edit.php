@@ -13,10 +13,16 @@ require_once __DIR__ . '/../ktp.php';
 
 require_curriculum_manager();
 
-$groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
-$academicYear = normalize_academic_year($_GET['year'] ?? '') ?? get_default_academic_year();
-$activeTab = ($_GET['tab'] ?? 'subjects') === 'modules' ? 'modules' : 'subjects';
+$groupId = isset($_POST['group_id'])
+    ? (int) $_POST['group_id']
+    : (isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0);
+$academicYear = normalize_academic_year($_POST['year'] ?? $_GET['year'] ?? '')
+    ?? get_default_academic_year();
+$activeTab = ($_POST['tab'] ?? $_GET['tab'] ?? 'subjects') === 'modules' ? 'modules' : 'subjects';
 $group = get_group_by_id($groupId);
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
 if ($group === null) {
     flash_set('error', 'Группа не найдена.');
@@ -85,10 +91,24 @@ $redirectBase = 'curriculum_edit.php?group_id=' . $groupId
     . '&year=' . urlencode($academicYear);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $postedAction = (string) ($_POST['action'] ?? '');
+    if ($postedAction === 'add_item') {
+        $editFormData = [
+            'item_id' => 0,
+            'subject_name' => (string) ($_POST['subject_name'] ?? ''),
+            'semester' => (string) ($_POST['semester'] ?? '1'),
+            'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+            'has_parts' => !empty($_POST['has_parts']),
+        ];
+    }
+
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
+        if ($postedAction === 'add_item' || $postedAction === 'update_item') {
+            $activeTab = 'subjects';
+        }
     } else {
-        $action = $_POST['action'] ?? '';
+        $action = $postedAction;
         $tabAfter = 'subjects';
         $redirectManageParts = 0;
 
@@ -290,11 +310,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($redirectManageParts > 0 && $tabAfter === 'subjects') {
                 $location .= '&manage_parts=' . $redirectManageParts;
             }
-            header('Location: ' . $location);
+            if ($action === 'add_item' && !empty($result['id'])) {
+                $location .= '&added=' . (int) $result['id'];
+            }
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            header('Location: ' . $location, true, 303);
             exit;
         }
 
-        $error = $result['error'];
+        $error = $result['error'] ?? 'Не удалось сохранить изменения.';
         $activeTab = $tabAfter;
         if ($action === 'update_mdk') {
             $activeTab = 'modules';
@@ -480,17 +506,35 @@ require __DIR__ . '/../header.php';
             </div>
         </div>
 
-        <form method="post" class="form form--medium">
+        <form
+            method="post"
+            class="form form--medium"
+            action="<?= e($redirectBase) ?>&tab=subjects"
+            data-curriculum-add-form
+        >
             <?= csrf_field() ?>
             <input type="hidden" name="action" value="add_item">
+            <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
+            <input type="hidden" name="year" value="<?= e($academicYear) ?>">
+            <input type="hidden" name="tab" value="subjects">
+
+            <?php
+            $addFailed = !$openEditModal && $error !== null && ($_SERVER['REQUEST_METHOD'] === 'POST')
+                && (($_POST['action'] ?? '') === 'add_item');
+            $addName = $addFailed ? (string) ($editFormData['subject_name'] ?? '') : '';
+            $addSemester = $addFailed ? (string) ($editFormData['semester'] ?? '1') : '1';
+            $selectedTeacherId = $addFailed ? (int) ($editFormData['teacher_id'] ?? 0) : 0;
+            $addHasParts = $addFailed && !empty($editFormData['has_parts']);
+            ?>
 
             <div class="form__row">
                 <div class="form__group">
                     <label for="subject_name">Название предмета</label>
                     <input type="text" id="subject_name" name="subject_name" required
                            list="subject_catalog"
-                           value="<?= e((!$openEditModal && ($_POST['action'] ?? '') === 'add_item') ? ($_POST['subject_name'] ?? '') : '') ?>"
-                           placeholder="Математика">
+                           value="<?= e($addName) ?>"
+                           placeholder="Математика"
+                           autocomplete="off">
                     <datalist id="subject_catalog">
                         <?php foreach ($subjectNames as $name): ?>
                         <option value="<?= e($name) ?>">
@@ -501,9 +545,7 @@ require __DIR__ . '/../header.php';
                     <label for="semester">Семестр</label>
                     <select id="semester" name="semester" required>
                         <?= render_semester_options(
-                            (!$openEditModal && ($_POST['action'] ?? '') === 'add_item')
-                                ? (string) ($_POST['semester'] ?? '1')
-                                : '1'
+                            validate_semester($addSemester) ? $addSemester : '1'
                         ) ?>
                     </select>
                 </div>
@@ -514,9 +556,6 @@ require __DIR__ . '/../header.php';
                 <select id="teacher_id" name="teacher_id">
                     <option value="">— Не назначен —</option>
                     <?php
-                    $selectedTeacherId = (!$openEditModal && ($_POST['action'] ?? '') === 'add_item')
-                        ? (int) ($_POST['teacher_id'] ?? 0)
-                        : 0;
                     foreach ($teachers as $teacher):
                         if (!(int) $teacher['is_active'] && (int) $teacher['id'] !== $selectedTeacherId) {
                             continue;
@@ -532,16 +571,29 @@ require __DIR__ . '/../header.php';
             <div class="form__group form__group--checkbox">
                 <label class="checkbox-label">
                     <input type="checkbox" name="has_parts" value="1"
-                        <?= (!$openEditModal && ($_POST['action'] ?? '') === 'add_item' && !empty($_POST['has_parts'])) ? ' checked' : '' ?>>
+                        <?= $addHasParts ? ' checked' : '' ?>>
                     В предмет входят внутренние разделы
                 </label>
                 <p class="text-muted form-hint">После добавления откроется форма для разделов (отдельные журналы, одна колонка в ведомости).</p>
             </div>
 
             <div class="form__actions">
-                <button type="submit" class="btn btn--primary">Добавить предмет</button>
+                <button type="submit" class="btn btn--primary" data-curriculum-add-submit>Добавить предмет</button>
             </div>
         </form>
+        <script>
+        (() => {
+            const form = document.querySelector('[data-curriculum-add-form]');
+            if (!form) return;
+            form.addEventListener('submit', () => {
+                const btn = form.querySelector('[data-curriculum-add-submit]');
+                if (btn) {
+                    btn.disabled = true;
+                    btn.textContent = 'Добавление…';
+                }
+            });
+        })();
+        </script>
     </section>
     <?php else: ?>
     <section class="panel">

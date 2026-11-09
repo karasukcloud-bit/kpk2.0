@@ -169,6 +169,34 @@ function isKpkMobileAppClient() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
+    const syncGradebookWrap = (wrap) => {
+        const table = wrap.querySelector('table.gradebook-table');
+        if (!table) {
+            return;
+        }
+        const subjectCols = table.querySelectorAll('thead th.gradebook-table__subject-col').length;
+        table.style.setProperty('--gradebook-cols', String(subjectCols));
+        wrap.classList.remove('gradebook-wrap--scroll');
+        // После применения ширины решаем, нужен ли реальный горизонтальный скролл.
+        requestAnimationFrame(() => {
+            const needScroll = wrap.scrollWidth > wrap.clientWidth + 2;
+            wrap.classList.toggle('gradebook-wrap--scroll', needScroll);
+        });
+    };
+
+    const gradebookWraps = Array.from(document.querySelectorAll('.table-wrap')).filter((wrap) => (
+        wrap.querySelector('table.gradebook-table')
+    ));
+    gradebookWraps.forEach((wrap) => {
+        syncGradebookWrap(wrap);
+        if (typeof ResizeObserver !== 'undefined') {
+            new ResizeObserver(() => syncGradebookWrap(wrap)).observe(wrap);
+        }
+    });
+    window.addEventListener('resize', () => {
+        gradebookWraps.forEach(syncGradebookWrap);
+    });
+
     const rustoreLink = document.querySelector('[data-rustore-link]');
     if (rustoreLink && !isKpkMobileAppClient()) {
         rustoreLink.hidden = false;

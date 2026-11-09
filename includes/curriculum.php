@@ -117,7 +117,7 @@ function find_subject_by_name(string $name): ?array
 
 function get_or_create_subject(string $name): array
 {
-    $name = trim($name);
+    $name = trim(preg_replace('/\s+/u', ' ', str_replace("\xc2\xa0", ' ', $name)) ?? '');
 
     if ($name === '') {
         return ['success' => false, 'error' => 'Укажите название предмета.'];
@@ -128,10 +128,22 @@ function get_or_create_subject(string $name): array
         return ['success' => true, 'subject_id' => (int) $existing['id']];
     }
 
-    $stmt = db()->prepare('INSERT INTO subjects (name) VALUES (?)');
-    $stmt->execute([$name]);
+    try {
+        $stmt = db()->prepare('INSERT INTO subjects (name) VALUES (?)');
+        $stmt->execute([$name]);
+    } catch (PDOException $e) {
+        // Параллельная вставка с тем же названием — читаем уже созданную запись.
+        if ((int) ($e->errorInfo[1] ?? 0) !== 1062) {
+            throw $e;
+        }
+    }
 
-    return ['success' => true, 'subject_id' => (int) db()->lastInsertId()];
+    $created = find_subject_by_name($name);
+    if ($created === null) {
+        return ['success' => false, 'error' => 'Не удалось сохранить название предмета.'];
+    }
+
+    return ['success' => true, 'subject_id' => (int) $created['id']];
 }
 
 function get_all_subject_names(): array
@@ -486,7 +498,7 @@ function add_curriculum_item(int $planId, string $subjectName, string $semester,
     }
     $teacherId = $teacherCheck['teacher_id'];
 
-    $subjectId = $subjectResult['subject_id'];
+    $subjectId = (int) $subjectResult['subject_id'];
 
     $stmt = db()->prepare(
         'SELECT id FROM curriculum_items
@@ -500,22 +512,44 @@ function add_curriculum_item(int $planId, string $subjectName, string $semester,
 
     $sortOrder = get_next_curriculum_sort_order($planId);
 
-    $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
-    if ($typeCol) {
-        $stmt = db()->prepare(
-            'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, item_type, teacher_id, semester, sort_order)
-             VALUES (?, ?, \'subject\', ?, ?, ?)'
-        );
-        $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
-    } else {
-        $stmt = db()->prepare(
-            'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, teacher_id, semester, sort_order)
-             VALUES (?, ?, ?, ?, ?)'
-        );
-        $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+    try {
+        $typeCol = db()->query("SHOW COLUMNS FROM curriculum_items LIKE 'item_type'")->fetch();
+        if ($typeCol) {
+            $stmt = db()->prepare(
+                'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, item_type, teacher_id, semester, sort_order)
+                 VALUES (?, ?, \'subject\', ?, ?, ?)'
+            );
+            $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+        } else {
+            $stmt = db()->prepare(
+                'INSERT INTO curriculum_items (curriculum_plan_id, subject_id, teacher_id, semester, sort_order)
+                 VALUES (?, ?, ?, ?, ?)'
+            );
+            $stmt->execute([$planId, $subjectId, $teacherId, $semester, $sortOrder]);
+        }
+    } catch (PDOException $e) {
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
+            return ['success' => false, 'error' => 'Этот предмет уже есть в учебном плане группы.'];
+        }
+        throw $e;
     }
 
-    return ['success' => true, 'id' => (int) db()->lastInsertId()];
+    $newId = (int) db()->lastInsertId();
+    if ($newId <= 0) {
+        $lookup = db()->prepare(
+            'SELECT id FROM curriculum_items
+             WHERE curriculum_plan_id = ? AND subject_id = ?
+             ORDER BY id DESC
+             LIMIT 1'
+        );
+        $lookup->execute([$planId, $subjectId]);
+        $newId = (int) ($lookup->fetchColumn() ?: 0);
+    }
+    if ($newId <= 0) {
+        return ['success' => false, 'error' => 'Предмет не сохранился. Попробуйте ещё раз.'];
+    }
+
+    return ['success' => true, 'id' => $newId];
 }
 
 function update_curriculum_item(int $itemId, string $subjectName, string $semester, ?int $teacherId = null): array
