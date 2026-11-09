@@ -1,0 +1,17 @@
+{
+  "academic_year": "2025-2026",
+  "semester": "2",
+  "group": "401",
+  "alumni": false,
+  "specialty_name": "Физическая культура",
+  "specialty_code": "49.02.01",
+  "is_general_education": false,
+  "subjects": [
+    "Предмет 1",
+    "Предмет 2"
+  ],
+  "students": [
+    {"name": "Иванова Анна", "grades": [4, 5]},
+    {"name": "Петров Иван", "grades": [3, 4]}
+  ]
+}
