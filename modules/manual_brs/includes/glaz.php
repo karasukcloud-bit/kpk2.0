@@ -117,11 +117,32 @@ function get_all_manual_brs_academic_debts(): array
                     $suggestedCommissionIds = array_values(array_unique($suggestedCommissionIds));
                     $key = glaz_debt_key($studentId, $itemId, $year, $semester, 'manual_brs');
 
+                    $debtGroupNumber = (string) ($group['number'] ?? '');
+                    $liveStudent = get_student_by_id($studentId);
+                    $currentGroupId = null;
+                    $currentGroupNumber = '';
+                    if ($liveStudent !== null && empty($liveStudent['removed_at'])) {
+                        $currentGroupId = (int) ($liveStudent['group_id'] ?? 0) ?: null;
+                        if ($currentGroupId) {
+                            $curGroup = get_group_by_id($currentGroupId);
+                            $currentGroupNumber = (string) ($curGroup['number'] ?? '');
+                        }
+                    }
+                    $display = glaz_resolve_display_group(
+                        $groupId,
+                        $debtGroupNumber,
+                        $currentGroupId,
+                        $currentGroupNumber
+                    );
+
                     $debts[] = [
                         'student_id' => $studentId,
                         'curriculum_item_id' => $itemId,
-                        'group_id' => $groupId,
-                        'group_number' => (string) ($group['number'] ?? ''),
+                        'group_id' => $display['group_id'],
+                        'group_number' => $display['group_number'],
+                        'debt_group_number' => $display['debt_group_number'],
+                        'debt_group_differs' => $display['debt_group_differs'],
+                        'has_current_group' => $display['has_current_group'],
                         'student_name' => (string) ($student['full_name'] ?? ''),
                         'subject_name' => (string) ($subject['subject_name'] ?? ''),
                         'academic_year' => $year,

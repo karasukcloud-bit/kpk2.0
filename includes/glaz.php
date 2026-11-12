@@ -95,16 +95,172 @@ function get_student_ids_excluded_from_glaz(): array
     return $ids;
 }
 
+/** Ключ «Фамилия Имя» для сопоставления архивного ФИ с текущим ФИО. */
+function glaz_name_fi_key(string $fullName): string
+{
+    $normalized = preg_replace('/\s+/u', ' ', trim($fullName)) ?? '';
+    $fi = person_last_first_name($normalized);
+
+    return mb_strtolower($fi, 'UTF-8');
+}
+
+/**
+ * Активные студенты, проиндексированные по «фамилия имя».
+ *
+ * @return array<string, list<array<string, mixed>>>
+ */
+function glaz_active_students_fi_index(): array
+{
+    static $index = null;
+    if ($index !== null) {
+        return $index;
+    }
+
+    $index = [];
+    $stmt = db()->query(
+        'SELECT s.id, s.full_name, s.group_id, g.number AS group_number
+         FROM students s
+         INNER JOIN study_groups g ON g.id = s.group_id
+         WHERE s.removed_at IS NULL'
+    );
+    foreach ($stmt->fetchAll() as $row) {
+        $key = glaz_name_fi_key((string) $row['full_name']);
+        if ($key === '') {
+            continue;
+        }
+        $index[$key][] = [
+            'id' => (int) $row['id'],
+            'full_name' => (string) $row['full_name'],
+            'group_id' => (int) $row['group_id'],
+            'group_number' => (string) $row['group_number'],
+        ];
+    }
+
+    return $index;
+}
+
+/**
+ * Живой студент для долга из архива: по id, иначе уникальное совпадение ФИ
+ * (архив часто без отчества, в списках — полное ФИО / другой id после импорта).
+ *
+ * @return array{id:int,full_name:string,group_id:int,group_number:string}|null
+ */
+function glaz_resolve_live_student(int $archiveStudentId, string $archiveFullName): ?array
+{
+    $index = glaz_active_students_fi_index();
+    $fiKey = glaz_name_fi_key($archiveFullName);
+    $candidates = $fiKey !== '' ? ($index[$fiKey] ?? []) : [];
+
+    $direct = null;
+    foreach ($candidates as $row) {
+        if ((int) $row['id'] === $archiveStudentId) {
+            $direct = $row;
+            break;
+        }
+    }
+    if ($direct === null) {
+        $stmt = db()->prepare(
+            'SELECT s.id, s.full_name, s.group_id, g.number AS group_number
+             FROM students s
+             INNER JOIN study_groups g ON g.id = s.group_id
+             WHERE s.id = ? AND s.removed_at IS NULL
+             LIMIT 1'
+        );
+        $stmt->execute([$archiveStudentId]);
+        $row = $stmt->fetch();
+        if ($row) {
+            $direct = [
+                'id' => (int) $row['id'],
+                'full_name' => (string) $row['full_name'],
+                'group_id' => (int) $row['group_id'],
+                'group_number' => (string) $row['group_number'],
+            ];
+        }
+    }
+
+    $others = array_values(array_filter(
+        $candidates,
+        static fn (array $row): bool => (int) $row['id'] !== $archiveStudentId
+    ));
+
+    // Дубликат: архивный id ещё в старой группе, актуальная карточка с ФИО — в другой.
+    if ($direct !== null && count($others) === 1) {
+        $other = $others[0];
+        if ((int) $other['group_id'] !== (int) $direct['group_id']) {
+            return $other;
+        }
+        $directParts = split_person_full_name($direct['full_name']);
+        $otherParts = split_person_full_name($other['full_name']);
+        if ($directParts['middle_name'] === '' && $otherParts['middle_name'] !== '') {
+            return $other;
+        }
+    }
+
+    if ($direct !== null) {
+        return $direct;
+    }
+
+    if (count($candidates) === 1) {
+        return $candidates[0];
+    }
+
+    return null;
+}
+
+/**
+ * Группа для строки ГЛАЗ: текущая, если студент есть в списках; иначе группа долга.
+ *
+ * @return array{
+ *   group_id: int,
+ *   group_number: string,
+ *   debt_group_number: string,
+ *   debt_group_differs: bool,
+ *   has_current_group: bool
+ * }
+ */
+function glaz_resolve_display_group(
+    int $debtGroupId,
+    string $debtGroupNumber,
+    ?int $currentGroupId,
+    string $currentGroupNumber
+): array {
+    $debtGroupNumber = trim($debtGroupNumber);
+    $currentGroupNumber = trim($currentGroupNumber);
+    $hasCurrentGroup = $currentGroupId !== null
+        && $currentGroupId > 0
+        && $currentGroupNumber !== '';
+
+    if ($hasCurrentGroup) {
+        return [
+            'group_id' => $currentGroupId,
+            'group_number' => $currentGroupNumber,
+            'debt_group_number' => $debtGroupNumber,
+            'debt_group_differs' => $debtGroupNumber !== ''
+                && $debtGroupNumber !== $currentGroupNumber,
+            'has_current_group' => true,
+        ];
+    }
+
+    return [
+        'group_id' => $debtGroupId,
+        'group_number' => $debtGroupNumber,
+        'debt_group_number' => $debtGroupNumber,
+        'debt_group_differs' => false,
+        'has_current_group' => false,
+    ];
+}
+
 function get_all_academic_debts(): array
 {
     $excluded = get_student_ids_excluded_from_glaz();
 
     $stmt = db()->query(
         "SELECT g.student_id, g.curriculum_item_id,
-                COALESCE(st.group_id, g.group_id) AS group_id,
+                g.group_id AS debt_group_id,
+                st.group_id AS current_group_id,
                 ap.academic_year, ap.semester, ap.archived_at,
                 COALESCE(st.full_name, ags.full_name) AS student_name,
-                COALESCE(cur_g.number, agg.group_number) AS group_number,
+                cur_g.number AS current_group_number,
                 agg.group_number AS debt_group_number,
                 agsub.subject_name
          FROM archive_gradebook_grades g
@@ -175,19 +331,30 @@ function get_all_academic_debts(): array
             $suggestedCommissionIds = array_values(array_unique($suggestedCommissionIds));
         }
 
-        $debtGroupNumber = trim((string) ($row['debt_group_number'] ?? ''));
-        $currentGroupNumber = trim((string) ($row['group_number'] ?? ''));
+        $archiveName = (string) ($row['student_name'] ?? '');
+        $live = glaz_resolve_live_student($studentId, $archiveName);
+        $liveStudentId = $live['id'] ?? $studentId;
+        if (isset($excluded[$liveStudentId])) {
+            continue;
+        }
+
+        $display = glaz_resolve_display_group(
+            (int) $row['debt_group_id'],
+            (string) ($row['debt_group_number'] ?? ''),
+            $live['group_id'] ?? null,
+            (string) ($live['group_number'] ?? '')
+        );
 
         $debts[] = [
             'student_id' => $studentId,
+            'live_student_id' => $liveStudentId,
             'curriculum_item_id' => $itemId,
-            'group_id' => (int) $row['group_id'],
-            'group_number' => $currentGroupNumber,
-            'debt_group_number' => $debtGroupNumber,
-            'debt_group_differs' => $debtGroupNumber !== ''
-                && $currentGroupNumber !== ''
-                && $debtGroupNumber !== $currentGroupNumber,
-            'student_name' => (string) $row['student_name'],
+            'group_id' => $display['group_id'],
+            'group_number' => $display['group_number'],
+            'debt_group_number' => $display['debt_group_number'],
+            'debt_group_differs' => $display['debt_group_differs'],
+            'has_current_group' => $display['has_current_group'],
+            'student_name' => (string) ($live['full_name'] ?? $archiveName),
             'subject_name' => (string) $row['subject_name'],
             'academic_year' => $year,
             'semester' => $semester,
@@ -307,7 +474,8 @@ function build_glaz_table_groups(array $debts, array $schedules): array
 
     foreach ($debts as $debt) {
         $groupNumber = (string) $debt['group_number'];
-        $studentId = (int) $debt['student_id'];
+        $archiveStudentId = (int) $debt['student_id'];
+        $studentId = (int) ($debt['live_student_id'] ?? $archiveStudentId);
 
         if (!isset($groups[$groupNumber])) {
             $groups[$groupNumber] = [
@@ -320,7 +488,7 @@ function build_glaz_table_groups(array $debts, array $schedules): array
         if (!isset($groups[$groupNumber]['students'][$studentId])) {
             $groups[$groupNumber]['students'][$studentId] = [
                 'student_id' => $studentId,
-                'student_name' => person_last_first_name($debt['student_name']),
+                'student_name' => (string) $debt['student_name'],
                 'items' => [],
                 'has_expired_debt' => false,
             ];
@@ -434,7 +602,10 @@ function glaz_debt_origin_date(string $academicYear, string $semester, ?string $
 
 function glaz_is_debt_expired(string $academicYear, string $semester, ?string $archivedAt = null, ?DateTimeImmutable $now = null): bool
 {
-    $origin = glaz_debt_origin_date($academicYear, $semester, $archivedAt);
+    // Срок считаем от конца семестра возникновения долга, не от даты архивации
+    // (архив могли сохранить позже — иначе «год» сдвигается).
+    unset($archivedAt);
+    $origin = glaz_estimated_debt_origin_date($academicYear, $semester);
     if ($origin === null) {
         return false;
     }
