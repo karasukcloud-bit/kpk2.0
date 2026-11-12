@@ -1518,6 +1518,12 @@ function ensure_archive_schema(PDO $pdo): void
                  ADD is_general_education TINYINT(1) NOT NULL DEFAULT 0 AFTER specialty_code"
             );
         }
+        if (!$pdo->query("SHOW COLUMNS FROM archive_periods LIKE 'summary_stats'")->fetch()) {
+            $pdo->exec(
+                'ALTER TABLE archive_periods
+                 ADD summary_stats JSON NULL AFTER archived_at'
+            );
+        }
         return;
     }
 
@@ -1529,6 +1535,7 @@ function ensure_archive_schema(PDO $pdo): void
             semester       ENUM('1', '2') NOT NULL,
             archived_by    INT UNSIGNED NULL,
             archived_at    DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            summary_stats  JSON NULL,
             UNIQUE KEY uq_archive_period (archive_type, academic_year, semester)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
     ");

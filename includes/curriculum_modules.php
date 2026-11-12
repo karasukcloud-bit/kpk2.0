@@ -541,44 +541,103 @@ function add_curriculum_module_component(
     }
     $teacherId = $teacherCheck['teacher_id'];
 
-    $stmt = db()->prepare(
-        'SELECT id FROM curriculum_items
+    $subjectId = (int) $subjectResult['subject_id'];
+    $existingStmt = db()->prepare(
+        'SELECT id, item_type, module_id FROM curriculum_items
          WHERE curriculum_plan_id = ? AND subject_id = ?
          LIMIT 1'
     );
-    $stmt->execute([$planId, $subjectResult['subject_id']]);
-    if ($stmt->fetch()) {
+    $existingStmt->execute([$planId, $subjectId]);
+    $existing = $existingStmt->fetch();
+    if ($existing) {
+        $existingId = (int) $existing['id'];
+        if ((string) ($existing['item_type'] ?? '') === $itemType
+            && (int) ($existing['module_id'] ?? 0) === $moduleId
+        ) {
+            return ['success' => true, 'item_id' => $existingId, 'existing' => true];
+        }
         $label = $itemType === 'mdk' ? 'МДК' : 'Практика';
         return [
             'success' => false,
-            'error' => $label . ' «' . $fullName . '» уже привязан к плану этого учебного года.',
+            'error' => $label . ' «' . $fullName . '» уже есть в учебном плане этого года '
+                . '(другая запись). Измените название или откройте существующий элемент.',
         ];
     }
 
     $semester = semester_enum_from_abs_range($startAbs, $endAbs);
     $sortOrder = get_next_curriculum_sort_order($planId);
+    $pdo = db();
 
-    $stmt = db()->prepare(
-        'INSERT INTO curriculum_items
-         (curriculum_plan_id, subject_id, item_type, module_id, practice_kind, component_index,
-          start_abs_semester, end_abs_semester, teacher_id, semester, sort_order)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-    );
-    $stmt->execute([
-        $planId,
-        $subjectResult['subject_id'],
-        $itemType,
-        $moduleId,
-        $practiceKind,
-        $index,
-        $startAbs,
-        $endAbs,
-        $teacherId,
-        $semester,
-        $sortOrder,
-    ]);
+    try {
+        $pdo->beginTransaction();
+        $stmt = $pdo->prepare(
+            'INSERT INTO curriculum_items
+             (curriculum_plan_id, subject_id, item_type, module_id, practice_kind, component_index,
+              start_abs_semester, end_abs_semester, teacher_id, semester, sort_order)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+        );
+        $stmt->execute([
+            $planId,
+            $subjectId,
+            $itemType,
+            $moduleId,
+            $practiceKind,
+            $index,
+            $startAbs,
+            $endAbs,
+            $teacherId,
+            $semester,
+            $sortOrder,
+        ]);
 
-    return ['success' => true, 'item_id' => (int) db()->lastInsertId()];
+        $newId = (int) $pdo->lastInsertId();
+        if ($newId <= 0) {
+            $lookup = $pdo->prepare(
+                'SELECT id FROM curriculum_items
+                 WHERE curriculum_plan_id = ? AND subject_id = ?
+                 ORDER BY id DESC
+                 LIMIT 1'
+            );
+            $lookup->execute([$planId, $subjectId]);
+            $newId = (int) ($lookup->fetchColumn() ?: 0);
+        }
+
+        $verify = $pdo->prepare(
+            'SELECT id FROM curriculum_items
+             WHERE id = ? AND curriculum_plan_id = ? AND subject_id = ?
+               AND item_type = ? AND module_id = ?
+             LIMIT 1'
+        );
+        $verify->execute([$newId, $planId, $subjectId, $itemType, $moduleId]);
+        if (!$verify->fetch()) {
+            $pdo->rollBack();
+            return ['success' => false, 'error' => 'Элемент модуля не сохранился. Попробуйте ещё раз.'];
+        }
+
+        $pdo->commit();
+    } catch (PDOException $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        if ((int) ($e->errorInfo[1] ?? 0) === 1062) {
+            $existingStmt->execute([$planId, $subjectId]);
+            $existing = $existingStmt->fetch();
+            if ($existing
+                && (string) ($existing['item_type'] ?? '') === $itemType
+                && (int) ($existing['module_id'] ?? 0) === $moduleId
+            ) {
+                return ['success' => true, 'item_id' => (int) $existing['id'], 'existing' => true];
+            }
+            $label = $itemType === 'mdk' ? 'МДК' : 'Практика';
+            return [
+                'success' => false,
+                'error' => $label . ' «' . $fullName . '» уже есть в учебном плане этой группы.',
+            ];
+        }
+        throw $e;
+    }
+
+    return ['success' => true, 'item_id' => $newId];
 }
 
 function delete_curriculum_module_component(int $itemId): array

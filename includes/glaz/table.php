@@ -73,6 +73,7 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
                                     class="glaz-warning"
                                     title="<?= e(glaz_expiry_warning_title()) ?>"
                                     aria-label="<?= e(glaz_expiry_warning_title()) ?>"
+                                    role="img"
                                 >!</span>
                                 <?php endif; ?>
                                 <?= e($studentData['student_name']) ?>
@@ -102,6 +103,7 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
                                     class="glaz-warning glaz-warning--period"
                                     title="<?= e(glaz_expiry_warning_title()) ?>"
                                     aria-label="<?= e(glaz_expiry_warning_title()) ?>"
+                                    role="img"
                                 >!</span>
                                 <?php endif; ?>
                                 <?= e($item['period_label']) ?>
@@ -114,7 +116,7 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
                                 <div
                                     class="glaz-debt-group text-muted"
                                     title="Группа, в которой возникла академическая задолженность"
-                                >долг в гр. <?= e($debtGroupNumber) ?></div>
+                                >задолженность в гр. <?= e($debtGroupNumber) ?></div>
                                 <?php endif; ?>
                             </td>
                             <?php if ($glazShowSourceColumn): ?>

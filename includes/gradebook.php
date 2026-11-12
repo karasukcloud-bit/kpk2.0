@@ -1533,6 +1533,191 @@ function finalize_gradebook_aggregates(array $college, array $specialties): arra
     ];
 }
 
+/** Снимок успеваемости для архива: счётчики + проценты. */
+function build_gradebook_summary_stats_payload(array $college, array $specialties): array
+{
+    $specialtyResult = [];
+    foreach ($specialties as $key => $stat) {
+        $assessed = (int) $stat['assessed'];
+        $absolute = (int) $stat['absolute'];
+        $quality = (int) $stat['quality'];
+        $specialtyResult[$key] = [
+            'label' => (string) $stat['label'],
+            'assessed' => $assessed,
+            'absolute' => $absolute,
+            'quality' => $quality,
+            'absolute_percent' => gradebook_percent_from_counts($absolute, $assessed),
+            'quality_percent' => gradebook_percent_from_counts($quality, $assessed),
+        ];
+    }
+
+    $collegeAssessed = (int) $college['assessed'];
+    $collegeAbsolute = (int) $college['absolute'];
+    $collegeQuality = (int) $college['quality'];
+
+    return [
+        'version' => 1,
+        'computed_at' => date('c'),
+        'college' => [
+            'assessed' => $collegeAssessed,
+            'absolute' => $collegeAbsolute,
+            'quality' => $collegeQuality,
+            'absolute_percent' => gradebook_percent_from_counts($collegeAbsolute, $collegeAssessed),
+            'quality_percent' => gradebook_percent_from_counts($collegeQuality, $collegeAssessed),
+        ],
+        'specialties' => $specialtyResult,
+    ];
+}
+
+function parse_gradebook_summary_stats(mixed $raw): ?array
+{
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+    if (is_string($raw)) {
+        $decoded = json_decode($raw, true);
+        if (!is_array($decoded)) {
+            return null;
+        }
+        $raw = $decoded;
+    }
+    if (!is_array($raw) || !isset($raw['college'], $raw['specialties']) || !is_array($raw['specialties'])) {
+        return null;
+    }
+
+    return $raw;
+}
+
+/** Формат агрегатов для диаграмм сравнения лет. */
+function gradebook_aggregates_from_summary_stats(array $stats): array
+{
+    $college = $stats['college'] ?? [];
+    $assessed = (int) ($college['assessed'] ?? 0);
+    $absolute = (int) ($college['absolute'] ?? 0);
+    $quality = (int) ($college['quality'] ?? 0);
+
+    $specialtyResult = [];
+    foreach ($stats['specialties'] as $key => $stat) {
+        if (!is_array($stat)) {
+            continue;
+        }
+        $sAssessed = (int) ($stat['assessed'] ?? 0);
+        $sAbsolute = (int) ($stat['absolute'] ?? 0);
+        $sQuality = (int) ($stat['quality'] ?? 0);
+        $specialtyResult[(string) $key] = [
+            'label' => (string) ($stat['label'] ?? $key),
+            'assessed' => $sAssessed,
+            'absolute_percent' => isset($stat['absolute_percent'])
+                ? (float) $stat['absolute_percent']
+                : gradebook_percent_from_counts($sAbsolute, $sAssessed),
+            'quality_percent' => isset($stat['quality_percent'])
+                ? (float) $stat['quality_percent']
+                : gradebook_percent_from_counts($sQuality, $sAssessed),
+        ];
+    }
+
+    return [
+        'college' => [
+            'assessed' => $assessed,
+            'absolute_percent' => isset($college['absolute_percent'])
+                ? (float) $college['absolute_percent']
+                : gradebook_percent_from_counts($absolute, $assessed),
+            'quality_percent' => isset($college['quality_percent'])
+                ? (float) $college['quality_percent']
+                : gradebook_percent_from_counts($quality, $assessed),
+        ],
+        'specialties' => $specialtyResult,
+    ];
+}
+
+function merge_gradebook_summary_stats_payloads(array $parts): ?array
+{
+    if ($parts === []) {
+        return null;
+    }
+
+    $college = ['assessed' => 0, 'absolute' => 0, 'quality' => 0];
+    $specialties = [];
+
+    foreach ($parts as $stats) {
+        $parsed = parse_gradebook_summary_stats($stats);
+        if ($parsed === null) {
+            return null;
+        }
+        $c = $parsed['college'];
+        $college['assessed'] += (int) ($c['assessed'] ?? 0);
+        $college['absolute'] += (int) ($c['absolute'] ?? 0);
+        $college['quality'] += (int) ($c['quality'] ?? 0);
+
+        foreach ($parsed['specialties'] as $key => $stat) {
+            if (!is_array($stat)) {
+                continue;
+            }
+            $key = (string) $key;
+            if (!isset($specialties[$key])) {
+                $specialties[$key] = [
+                    'label' => (string) ($stat['label'] ?? $key),
+                    'assessed' => 0,
+                    'absolute' => 0,
+                    'quality' => 0,
+                ];
+            }
+            $specialties[$key]['assessed'] += (int) ($stat['assessed'] ?? 0);
+            $specialties[$key]['absolute'] += (int) ($stat['absolute'] ?? 0);
+            $specialties[$key]['quality'] += (int) ($stat['quality'] ?? 0);
+        }
+    }
+
+    return build_gradebook_summary_stats_payload($college, $specialties);
+}
+
+/** Пересчёт снимка из листов архива (для записи / backfill). */
+function compute_archive_gradebook_summary_stats(int $archiveId): array
+{
+    require_once __DIR__ . '/archive.php';
+
+    $college = ['assessed' => 0, 'absolute' => 0, 'quality' => 0];
+    $specialties = [];
+
+    foreach (get_archive_gradebook_groups($archiveId) as $archiveGroup) {
+        $groupId = (int) $archiveGroup['group_id'];
+        $sheet = get_archive_gradebook_sheet($archiveId, $groupId);
+        $students = [];
+        foreach ($sheet['students'] as $student) {
+            $students[] = [
+                'id' => (int) $student['student_id'],
+                'full_name' => (string) $student['full_name'],
+            ];
+        }
+        $subjects = [];
+        foreach ($sheet['subjects'] as $subject) {
+            $subjects[] = [
+                'curriculum_item_id' => (int) $subject['curriculum_item_id'],
+                'subject_name' => (string) $subject['subject_name'],
+            ];
+        }
+        $grades = [];
+        foreach ($sheet['grades'] as $studentId => $items) {
+            foreach ($items as $itemId => $grade) {
+                if ($grade !== null) {
+                    $grades[(int) $studentId][(int) $itemId] = (int) $grade;
+                }
+            }
+        }
+
+        $summary = build_gradebook_summary($students, $subjects, $grades);
+        merge_gradebook_summary_into_aggregates(
+            $college,
+            $specialties,
+            gradebook_specialty_key_from_archive_group($archiveGroup),
+            gradebook_specialty_label_from_archive_group($archiveGroup),
+            $summary
+        );
+    }
+
+    return build_gradebook_summary_stats_payload($college, $specialties);
+}
+
 /**
  * Какой период брать для сравнения лет.
  * $preferSemester: 1 | 2 | year | '' (авто: сначала 2, потом 1).
@@ -1615,6 +1800,14 @@ function aggregate_gradebook_college_and_specialties(
 
         require_once __DIR__ . '/archive.php';
 
+        $archive = get_archive_period_by_id($archiveId);
+        $snapshot = $archive
+            ? parse_gradebook_summary_stats($archive['summary_stats'] ?? null)
+            : null;
+        if ($snapshot !== null) {
+            return gradebook_aggregates_from_summary_stats($snapshot);
+        }
+
         foreach (get_archive_gradebook_groups($archiveId) as $archiveGroup) {
             $groupId = (int) $archiveGroup['group_id'];
             $sheet = get_archive_gradebook_sheet($archiveId, $groupId);
@@ -1671,6 +1864,32 @@ function aggregate_gradebook_college_and_specialties(
     return finalize_gradebook_aggregates($college, $specialties);
 }
 
+/** Свод за учебный год из снимков 1 и 2 семестра (оба обязательны). */
+function aggregate_gradebook_year_from_archive_snapshots(string $academicYear): ?array
+{
+    require_once __DIR__ . '/archive.php';
+
+    $parts = [];
+    foreach (['1', '2'] as $semester) {
+        $archive = get_archive_period('gradebook', $academicYear, $semester);
+        if (!$archive) {
+            return null;
+        }
+        $snapshot = parse_gradebook_summary_stats($archive['summary_stats'] ?? null);
+        if ($snapshot === null) {
+            return null;
+        }
+        $parts[] = $snapshot;
+    }
+
+    $merged = merge_gradebook_summary_stats_payloads($parts);
+    if ($merged === null) {
+        return null;
+    }
+
+    return gradebook_aggregates_from_summary_stats($merged);
+}
+
 /**
  * Сравнение успеваемости за 3 учебных года.
  * $periodMode: 1 | 2 | year | '' (автовыбор семестра).
@@ -1681,6 +1900,11 @@ function build_gradebook_three_years_comparison(
     string $periodMode = ''
 ): array {
     require_once __DIR__ . '/attendance.php';
+    require_once __DIR__ . '/archive.php';
+
+    if ($source === 'journal') {
+        backfill_archive_gradebook_summary_stats();
+    }
 
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     if ($periodMode === 'both') {
@@ -1696,8 +1920,16 @@ function build_gradebook_three_years_comparison(
 
     foreach ($years as $year) {
         if ($periodMode === 'year') {
-            $report = build_college_gradebook_report($year, 'year', $source);
             $yearLabels[] = $year . ' · оба семестра';
+            if ($source === 'journal') {
+                $fromSnapshots = aggregate_gradebook_year_from_archive_snapshots($year);
+                if ($fromSnapshots !== null) {
+                    $yearAggregates[] = $fromSnapshots;
+                    continue;
+                }
+            }
+
+            $report = build_college_gradebook_report($year, 'year', $source);
             $specialtyAgg = [];
             foreach ($report['specialty_stats'] as $key => $stat) {
                 $assessed = (int) $stat['assessed'];

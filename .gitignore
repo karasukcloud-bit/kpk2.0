@@ -1,3 +1,6 @@
+# Мобильное приложение (Capacitor/Android — слишком большой артефакт)
+mobile/
+
 # Локальный обходной node_modules (не коммитить)
 mobile_nm/
 
@@ -6,4 +9,12 @@ mobile_nm/
 .idea/
 *.iml
 .DS_Store
+
+# Локальный конфиг БД
 config/database.php
+
+# Локальные/секретные скрипты
+set_admin_once.php
+tools/set_admin_credentials.php
+.env
+.env.*

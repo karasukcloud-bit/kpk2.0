@@ -13,10 +13,16 @@ require_once __DIR__ . '/../ktp.php';
 
 require_curriculum_manager();
 
-$groupId = isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0;
-$academicYear = normalize_academic_year($_GET['year'] ?? '') ?? get_default_academic_year();
-$activeTab = ($_GET['tab'] ?? 'subjects') === 'modules' ? 'modules' : 'subjects';
+$groupId = isset($_POST['group_id'])
+    ? (int) $_POST['group_id']
+    : (isset($_GET['group_id']) ? (int) $_GET['group_id'] : 0);
+$academicYear = normalize_academic_year($_POST['year'] ?? $_GET['year'] ?? '')
+    ?? get_default_academic_year();
+$activeTab = ($_POST['tab'] ?? $_GET['tab'] ?? 'subjects') === 'modules' ? 'modules' : 'subjects';
 $group = get_group_by_id($groupId);
+
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Pragma: no-cache');
 
 if ($group === null) {
     flash_set('error', 'Группа не найдена.');
@@ -39,6 +45,8 @@ $openModuleModal = false;
 $openMdkModal = false;
 $openPartEditModal = false;
 $managePartsItemId = isset($_GET['manage_parts']) ? (int) $_GET['manage_parts'] : 0;
+$openModuleId = isset($_GET['open_module']) ? (int) $_GET['open_module'] : 0;
+$addedItemId = isset($_GET['added_item']) ? (int) $_GET['added_item'] : 0;
 $editFormData = [
     'item_id' => 0,
     'subject_name' => '',
@@ -85,10 +93,32 @@ $redirectBase = 'curriculum_edit.php?group_id=' . $groupId
     . '&year=' . urlencode($academicYear);
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // Поле curriculum_action, не action: иначе в браузере form.action = input и POST может уйти на 404.
+    $postedAction = (string) ($_POST['curriculum_action'] ?? $_POST['action'] ?? '');
+    if ($postedAction === 'add_item') {
+        $editFormData = [
+            'item_id' => 0,
+            'subject_name' => (string) ($_POST['subject_name'] ?? ''),
+            'semester' => (string) ($_POST['semester'] ?? '1'),
+            'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+            'has_parts' => !empty($_POST['has_parts']),
+        ];
+    }
+
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
         $error = 'Ошибка безопасности. Обновите страницу и попробуйте снова.';
+        if ($postedAction === 'add_item' || $postedAction === 'update_item') {
+            $activeTab = 'subjects';
+        }
+        if (in_array($postedAction, ['add_mdk', 'add_practice', 'add_module', 'update_module', 'delete_module', 'update_mdk', 'update_practice', 'delete_module_component', 'set_program_semesters'], true)) {
+            $activeTab = 'modules';
+            $postedModuleId = (int) ($_POST['module_id'] ?? 0);
+            if ($postedModuleId > 0) {
+                $openModuleId = $postedModuleId;
+            }
+        }
     } else {
-        $action = $_POST['action'] ?? '';
+        $action = $postedAction;
         $tabAfter = 'subjects';
         $redirectManageParts = 0;
 
@@ -153,9 +183,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($action === 'add_mdk' || $action === 'add_practice') {
             $tabAfter = 'modules';
             $itemType = $action === 'add_mdk' ? 'mdk' : 'practice';
+            $postedModuleId = (int) ($_POST['module_id'] ?? 0);
             $result = add_curriculum_module_component(
                 $planId,
-                (int) ($_POST['module_id'] ?? 0),
+                $postedModuleId,
                 $itemType,
                 (string) ($_POST['component_title'] ?? ''),
                 (int) ($_POST['start_abs_semester'] ?? 0),
@@ -163,6 +194,40 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 (int) ($_POST['teacher_id'] ?? 0) ?: null,
                 $itemType === 'practice' ? (string) ($_POST['practice_kind'] ?? '') : null
             );
+            if ($postedModuleId > 0) {
+                $openModuleId = $postedModuleId;
+            }
+            if ($result['success'] && !empty($result['item_id'])) {
+                $addedItemId = (int) $result['item_id'];
+            }
+            if (!$result['success']) {
+                if ($action === 'add_mdk') {
+                    $openMdkModal = true;
+                    $mdkFormData = [
+                        'item_id' => 0,
+                        'module_id' => $postedModuleId,
+                        'component_index' => 1,
+                        'component_title' => (string) ($_POST['component_title'] ?? ''),
+                        'start_abs_semester' => (int) ($_POST['start_abs_semester'] ?? 1),
+                        'end_abs_semester' => (int) ($_POST['end_abs_semester'] ?? 1),
+                        'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+                        'code' => '',
+                        'has_parts' => false,
+                    ];
+                } else {
+                    $openPracticeModal = true;
+                    $practiceFormData = [
+                        'item_id' => 0,
+                        'module_id' => $postedModuleId,
+                        'component_title' => (string) ($_POST['component_title'] ?? ''),
+                        'start_abs_semester' => (int) ($_POST['start_abs_semester'] ?? 1),
+                        'end_abs_semester' => (int) ($_POST['end_abs_semester'] ?? 1),
+                        'teacher_id' => (int) ($_POST['teacher_id'] ?? 0),
+                        'code' => '',
+                        'practice_kind' => (string) ($_POST['practice_kind'] ?? 'up'),
+                    ];
+                }
+            }
         } elseif ($action === 'update_mdk') {
             $tabAfter = (($_POST['redirect_tab'] ?? '') === 'subjects') ? 'subjects' : 'modules';
             $mdkItemId = (int) ($_POST['item_id'] ?? 0);
@@ -285,16 +350,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 'delete_module_component' => 'Элемент модуля удалён.',
                 'set_program_semesters' => 'Срок обучения группы обновлён.',
             ];
-            flash_set('success', $messages[$action] ?? 'Изменения сохранены.');
+            $successMessage = $messages[$action] ?? 'Изменения сохранены.';
+            if ($action === 'add_mdk') {
+                $addedTitle = trim((string) ($_POST['component_title'] ?? ''));
+                if ($addedTitle !== '') {
+                    $successMessage = 'МДК «' . $addedTitle . '» добавлен. Откройте модуль ниже — запись в списке МДК.';
+                }
+            }
+            flash_set('success', $successMessage);
             $location = $redirectBase . '&tab=' . $tabAfter;
             if ($redirectManageParts > 0 && $tabAfter === 'subjects') {
                 $location .= '&manage_parts=' . $redirectManageParts;
             }
-            header('Location: ' . $location);
+            if ($action === 'add_item' && !empty($result['id'])) {
+                $location .= '&added=' . (int) $result['id'];
+            }
+            if (in_array($action, ['add_mdk', 'add_practice'], true) && $openModuleId > 0) {
+                $location .= '&open_module=' . $openModuleId;
+                if ($addedItemId > 0) {
+                    $location .= '&added_item=' . $addedItemId;
+                }
+            }
+            if (session_status() === PHP_SESSION_ACTIVE) {
+                session_write_close();
+            }
+            header('Location: ' . $location, true, 303);
             exit;
         }
 
-        $error = $result['error'];
+        $error = $result['error'] ?? 'Не удалось сохранить изменения.';
         $activeTab = $tabAfter;
         if ($action === 'update_mdk') {
             $activeTab = 'modules';
@@ -480,17 +564,35 @@ require __DIR__ . '/../header.php';
             </div>
         </div>
 
-        <form method="post" class="form form--medium">
+        <form
+            method="post"
+            class="form form--medium"
+            action="<?= e($redirectBase) ?>&tab=subjects"
+            data-curriculum-add-form
+        >
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="add_item">
+            <input type="hidden" name="curriculum_action" value="add_item">
+            <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
+            <input type="hidden" name="year" value="<?= e($academicYear) ?>">
+            <input type="hidden" name="tab" value="subjects">
+
+            <?php
+            $addFailed = !$openEditModal && $error !== null && ($_SERVER['REQUEST_METHOD'] === 'POST')
+                && (($_POST['curriculum_action'] ?? $_POST['action'] ?? '') === 'add_item');
+            $addName = $addFailed ? (string) ($editFormData['subject_name'] ?? '') : '';
+            $addSemester = $addFailed ? (string) ($editFormData['semester'] ?? '1') : '1';
+            $selectedTeacherId = $addFailed ? (int) ($editFormData['teacher_id'] ?? 0) : 0;
+            $addHasParts = $addFailed && !empty($editFormData['has_parts']);
+            ?>
 
             <div class="form__row">
                 <div class="form__group">
                     <label for="subject_name">Название предмета</label>
                     <input type="text" id="subject_name" name="subject_name" required
                            list="subject_catalog"
-                           value="<?= e((!$openEditModal && ($_POST['action'] ?? '') === 'add_item') ? ($_POST['subject_name'] ?? '') : '') ?>"
-                           placeholder="Математика">
+                           value="<?= e($addName) ?>"
+                           placeholder="Математика"
+                           autocomplete="off">
                     <datalist id="subject_catalog">
                         <?php foreach ($subjectNames as $name): ?>
                         <option value="<?= e($name) ?>">
@@ -501,9 +603,7 @@ require __DIR__ . '/../header.php';
                     <label for="semester">Семестр</label>
                     <select id="semester" name="semester" required>
                         <?= render_semester_options(
-                            (!$openEditModal && ($_POST['action'] ?? '') === 'add_item')
-                                ? (string) ($_POST['semester'] ?? '1')
-                                : '1'
+                            validate_semester($addSemester) ? $addSemester : '1'
                         ) ?>
                     </select>
                 </div>
@@ -514,9 +614,6 @@ require __DIR__ . '/../header.php';
                 <select id="teacher_id" name="teacher_id">
                     <option value="">— Не назначен —</option>
                     <?php
-                    $selectedTeacherId = (!$openEditModal && ($_POST['action'] ?? '') === 'add_item')
-                        ? (int) ($_POST['teacher_id'] ?? 0)
-                        : 0;
                     foreach ($teachers as $teacher):
                         if (!(int) $teacher['is_active'] && (int) $teacher['id'] !== $selectedTeacherId) {
                             continue;
@@ -532,16 +629,34 @@ require __DIR__ . '/../header.php';
             <div class="form__group form__group--checkbox">
                 <label class="checkbox-label">
                     <input type="checkbox" name="has_parts" value="1"
-                        <?= (!$openEditModal && ($_POST['action'] ?? '') === 'add_item' && !empty($_POST['has_parts'])) ? ' checked' : '' ?>>
+                        <?= $addHasParts ? ' checked' : '' ?>>
                     В предмет входят внутренние разделы
                 </label>
                 <p class="text-muted form-hint">После добавления откроется форма для разделов (отдельные журналы, одна колонка в ведомости).</p>
             </div>
 
             <div class="form__actions">
-                <button type="submit" class="btn btn--primary">Добавить предмет</button>
+                <button type="submit" class="btn btn--primary" data-curriculum-add-submit>Добавить предмет</button>
             </div>
         </form>
+        <script>
+        (() => {
+            const form = document.querySelector('[data-curriculum-add-form]');
+            if (!form) return;
+            form.addEventListener('submit', (event) => {
+                if (form.dataset.submitting === '1') {
+                    event.preventDefault();
+                    return;
+                }
+                form.dataset.submitting = '1';
+                const btn = form.querySelector('[data-curriculum-add-submit]');
+                if (btn) {
+                    btn.textContent = 'Добавление…';
+                    btn.setAttribute('aria-busy', 'true');
+                }
+            });
+        })();
+        </script>
     </section>
     <?php else: ?>
     <section class="panel">
@@ -553,7 +668,7 @@ require __DIR__ . '/../header.php';
 
         <form method="post" class="form form--inline curriculum-program-form">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="set_program_semesters">
+            <input type="hidden" name="curriculum_action" value="set_program_semesters">
             <label for="program_semesters">Срок обучения группы</label>
             <select id="program_semesters" name="program_semesters">
                 <option value="6"<?= $programSemesters === 6 ? ' selected' : '' ?>>3 курса (6 семестров)</option>
@@ -584,12 +699,17 @@ require __DIR__ . '/../header.php';
                             return ($c['item_type'] ?? '') === 'practice';
                         }
                     ));
-                    $isOpen = ($openModuleModal && (int) $moduleFormData['module_id'] === $moduleId)
+                    $isOpen = $openModuleId === $moduleId
+                        || ($openModuleModal && (int) $moduleFormData['module_id'] === $moduleId)
                         || ($openMdkModal && (int) $mdkFormData['module_id'] === $moduleId)
                         || ($openPracticeModal && (int) $practiceFormData['module_id'] === $moduleId);
+                    $keepAddMdkOpen = $openMdkModal && (int) $mdkFormData['module_id'] === $moduleId && (int) $mdkFormData['item_id'] === 0;
+                    $keepAddPracticeOpen = $openPracticeModal && (int) $practiceFormData['module_id'] === $moduleId && (int) $practiceFormData['item_id'] === 0;
+                    $defaultStartAbs = curriculum_abs_semester(max(1, $groupCourse), 1);
+                    $defaultEndAbs = curriculum_abs_semester(max(1, $groupCourse), 2);
                     ?>
                     <li class="pm-tree__node">
-                        <details class="pm-tree__module"<?= $isOpen ? ' open' : '' ?>>
+                        <details class="pm-tree__module"<?= $isOpen ? ' open' : '' ?> id="pm-module-<?= $moduleId ?>">
                             <summary class="pm-tree__summary">
                                 <span class="pm-tree__toggle" aria-hidden="true"></span>
                                 <span class="pm-tree__code"><?= e($module['code']) ?></span>
@@ -609,7 +729,7 @@ require __DIR__ . '/../header.php';
                                     <?php if ($childCount === 0): ?>
                                     <form method="post" class="inline-form" onsubmit="return confirm('Удалить пустой модуль <?= e($module['code']) ?>?');">
                                         <?= csrf_field() ?>
-                                        <input type="hidden" name="action" value="delete_module">
+                                        <input type="hidden" name="curriculum_action" value="delete_module">
                                         <input type="hidden" name="module_id" value="<?= $moduleId ?>">
                                         <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
                                     </form>
@@ -641,7 +761,10 @@ require __DIR__ . '/../header.php';
                                             );
                                             $mdkHasParts = curriculum_item_has_children((int) $child['id']);
                                             ?>
-                                            <li class="pm-tree__item">
+                                            <li
+                                                class="pm-tree__item<?= $addedItemId === (int) $child['id'] ? ' pm-tree__item--added' : '' ?>"
+                                                id="pm-item-<?= (int) $child['id'] ?>"
+                                            >
                                                 <div class="pm-tree__item-main">
                                                     <strong><?= e($child['code']) ?></strong>
                                                     <span><?= e($mdkTitle) ?></span>
@@ -667,7 +790,7 @@ require __DIR__ . '/../header.php';
                                                     >Редактировать</button>
                                                     <form method="post" class="inline-form" onsubmit="return confirm('Удалить МДК?');">
                                                         <?= csrf_field() ?>
-                                                        <input type="hidden" name="action" value="delete_module_component">
+                                                        <input type="hidden" name="curriculum_action" value="delete_module_component">
                                                         <input type="hidden" name="item_id" value="<?= (int) $child['id'] ?>">
                                                         <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
                                                     </form>
@@ -677,47 +800,70 @@ require __DIR__ . '/../header.php';
                                         </ul>
                                     <?php endif; ?>
 
-                                    <details class="pm-tree__add">
-                                        <summary>Добавить МДК</summary>
-                                        <form method="post" class="form form--medium">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="action" value="add_mdk">
-                                            <input type="hidden" name="module_id" value="<?= $moduleId ?>">
-                                            <div class="form__group">
-                                                <label>Название МДК</label>
-                                                <input type="text" name="component_title" required
-                                                       placeholder="Выполнение работ по профессии…">
-                                                <p class="form__hint">Код <?= e(format_mdk_code($moduleNumber, next_module_component_index($moduleId, 'mdk'))) ?> присвоится автоматически.</p>
-                                            </div>
-                                            <div class="form__row">
+                                    <div class="pm-tree__add<?= $keepAddMdkOpen ? ' is-open' : '' ?>">
+                                        <button type="button" class="pm-tree__add-toggle" data-pm-add-toggle>
+                                            <?= $keepAddMdkOpen ? 'Скрыть форму МДК' : 'Добавить МДК' ?>
+                                        </button>
+                                        <div class="pm-tree__add-panel"<?= $keepAddMdkOpen ? '' : ' hidden' ?>>
+                                            <form
+                                                method="post"
+                                                class="form form--medium"
+                                                action="<?= e($redirectBase) ?>&tab=modules&open_module=<?= $moduleId ?>"
+                                                data-curriculum-mdk-add-form
+                                            >
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="curriculum_action" value="add_mdk">
+                                                <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
+                                                <input type="hidden" name="year" value="<?= e($academicYear) ?>">
+                                                <input type="hidden" name="tab" value="modules">
+                                                <input type="hidden" name="module_id" value="<?= $moduleId ?>">
                                                 <div class="form__group">
-                                                    <label>Начало</label>
-                                                    <select name="start_abs_semester" required>
-                                                        <?= render_abs_semester_options($programSemesters, 1) ?>
-                                                    </select>
+                                                    <label>Название МДК</label>
+                                                    <input type="text" name="component_title" required
+                                                           placeholder="Выполнение работ по профессии…"
+                                                           value="<?= e($keepAddMdkOpen ? (string) $mdkFormData['component_title'] : '') ?>"
+                                                           autocomplete="off">
+                                                    <p class="form__hint">Код <?= e(format_mdk_code($moduleNumber, next_module_component_index($moduleId, 'mdk'))) ?> присвоится автоматически.</p>
+                                                </div>
+                                                <div class="form__row">
+                                                    <div class="form__group">
+                                                        <label>Начало</label>
+                                                        <select name="start_abs_semester" required>
+                                                            <?= render_abs_semester_options(
+                                                                $programSemesters,
+                                                                $keepAddMdkOpen ? (int) $mdkFormData['start_abs_semester'] : $defaultStartAbs
+                                                            ) ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form__group">
+                                                        <label>Окончание</label>
+                                                        <select name="end_abs_semester" required>
+                                                            <?= render_abs_semester_options(
+                                                                $programSemesters,
+                                                                $keepAddMdkOpen ? (int) $mdkFormData['end_abs_semester'] : $defaultEndAbs
+                                                            ) ?>
+                                                        </select>
+                                                    </div>
                                                 </div>
                                                 <div class="form__group">
-                                                    <label>Окончание</label>
-                                                    <select name="end_abs_semester" required>
-                                                        <?= render_abs_semester_options($programSemesters, 1) ?>
+                                                    <label>Преподаватель</label>
+                                                    <select name="teacher_id">
+                                                        <option value="">— Не назначен —</option>
+                                                        <?php
+                                                        $mdkAddTeacherId = $keepAddMdkOpen ? (int) $mdkFormData['teacher_id'] : 0;
+                                                        foreach ($teachers as $teacher):
+                                                            if (!(int) $teacher['is_active'] && (int) $teacher['id'] !== $mdkAddTeacherId) {
+                                                                continue;
+                                                            }
+                                                        ?>
+                                                        <option value="<?= (int) $teacher['id'] ?>"<?= (int) $teacher['id'] === $mdkAddTeacherId ? ' selected' : '' ?>><?= e($teacher['full_name']) ?></option>
+                                                        <?php endforeach; ?>
                                                     </select>
                                                 </div>
-                                            </div>
-                                            <div class="form__group">
-                                                <label>Преподаватель</label>
-                                                <select name="teacher_id">
-                                                    <option value="">— Не назначен —</option>
-                                                    <?php foreach ($teachers as $teacher): ?>
-                                                        <?php if (!(int) $teacher['is_active']) {
-                                                            continue;
-                                                        } ?>
-                                                    <option value="<?= (int) $teacher['id'] ?>"><?= e($teacher['full_name']) ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
-                                            <button type="submit" class="btn btn--primary btn--sm">Добавить МДК</button>
-                                        </form>
-                                    </details>
+                                                <button type="submit" class="btn btn--primary btn--sm" data-curriculum-mdk-add-submit>Добавить МДК</button>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </div>
 
                                 <div class="pm-tree__branch">
@@ -758,7 +904,7 @@ require __DIR__ . '/../header.php';
                                                     >Редактировать</button>
                                                     <form method="post" class="inline-form" onsubmit="return confirm('Удалить практику?');">
                                                         <?= csrf_field() ?>
-                                                        <input type="hidden" name="action" value="delete_module_component">
+                                                        <input type="hidden" name="curriculum_action" value="delete_module_component">
                                                         <input type="hidden" name="item_id" value="<?= (int) $child['id'] ?>">
                                                         <button type="submit" class="btn btn--danger btn--sm">Удалить</button>
                                                     </form>
@@ -768,56 +914,84 @@ require __DIR__ . '/../header.php';
                                         </ul>
                                     <?php endif; ?>
 
-                                    <details class="pm-tree__add">
-                                        <summary>Добавить практику</summary>
-                                        <form method="post" class="form form--medium">
-                                            <?= csrf_field() ?>
-                                            <input type="hidden" name="action" value="add_practice">
-                                            <input type="hidden" name="module_id" value="<?= $moduleId ?>">
-                                            <div class="form__row">
+                                    <div class="pm-tree__add<?= $keepAddPracticeOpen ? ' is-open' : '' ?>">
+                                        <button type="button" class="pm-tree__add-toggle" data-pm-add-toggle>
+                                            <?= $keepAddPracticeOpen ? 'Скрыть форму практики' : 'Добавить практику' ?>
+                                        </button>
+                                        <div class="pm-tree__add-panel"<?= $keepAddPracticeOpen ? '' : ' hidden' ?>>
+                                            <form
+                                                method="post"
+                                                class="form form--medium"
+                                                action="<?= e($redirectBase) ?>&tab=modules&open_module=<?= $moduleId ?>"
+                                                data-curriculum-practice-add-form
+                                            >
+                                                <?= csrf_field() ?>
+                                                <input type="hidden" name="curriculum_action" value="add_practice">
+                                                <input type="hidden" name="group_id" value="<?= (int) $groupId ?>">
+                                                <input type="hidden" name="year" value="<?= e($academicYear) ?>">
+                                                <input type="hidden" name="tab" value="modules">
+                                                <input type="hidden" name="module_id" value="<?= $moduleId ?>">
+                                                <div class="form__row">
+                                                    <div class="form__group">
+                                                        <label>Вид</label>
+                                                        <?php $practiceKindSel = $keepAddPracticeOpen ? (string) $practiceFormData['practice_kind'] : 'up'; ?>
+                                                        <select name="practice_kind" required>
+                                                            <option value="up"<?= $practiceKindSel === 'up' ? ' selected' : '' ?>>УП — учебная</option>
+                                                            <option value="pp"<?= $practiceKindSel === 'pp' ? ' selected' : '' ?>>ПП — производственная</option>
+                                                            <option value="pdp"<?= $practiceKindSel === 'pdp' ? ' selected' : '' ?>>ПДП — преддипломная</option>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form__group">
+                                                        <label>Название <span class="text-muted">(необязательно)</span></label>
+                                                        <input type="text" name="component_title"
+                                                               placeholder="Практика по профилю специальности"
+                                                               value="<?= e($keepAddPracticeOpen ? (string) $practiceFormData['component_title'] : '') ?>"
+                                                               autocomplete="off">
+                                                    </div>
+                                                </div>
+                                                <div class="form__row">
+                                                    <div class="form__group">
+                                                        <label>Начало</label>
+                                                        <select name="start_abs_semester" required>
+                                                            <?= render_abs_semester_options(
+                                                                $programSemesters,
+                                                                $keepAddPracticeOpen
+                                                                    ? (int) $practiceFormData['start_abs_semester']
+                                                                    : $defaultStartAbs
+                                                            ) ?>
+                                                        </select>
+                                                    </div>
+                                                    <div class="form__group">
+                                                        <label>Окончание</label>
+                                                        <select name="end_abs_semester" required>
+                                                            <?= render_abs_semester_options(
+                                                                $programSemesters,
+                                                                $keepAddPracticeOpen
+                                                                    ? (int) $practiceFormData['end_abs_semester']
+                                                                    : $defaultEndAbs
+                                                            ) ?>
+                                                        </select>
+                                                    </div>
+                                                </div>
                                                 <div class="form__group">
-                                                    <label>Вид</label>
-                                                    <select name="practice_kind" required>
-                                                        <option value="up">УП — учебная</option>
-                                                        <option value="pp">ПП — производственная</option>
-                                                        <option value="pdp">ПДП — преддипломная</option>
+                                                    <label>Преподаватель / руководитель</label>
+                                                    <select name="teacher_id">
+                                                        <option value="">— Не назначен —</option>
+                                                        <?php
+                                                        $practiceAddTeacherId = $keepAddPracticeOpen ? (int) $practiceFormData['teacher_id'] : 0;
+                                                        foreach ($teachers as $teacher):
+                                                            if (!(int) $teacher['is_active'] && (int) $teacher['id'] !== $practiceAddTeacherId) {
+                                                                continue;
+                                                            }
+                                                        ?>
+                                                        <option value="<?= (int) $teacher['id'] ?>"<?= (int) $teacher['id'] === $practiceAddTeacherId ? ' selected' : '' ?>><?= e($teacher['full_name']) ?></option>
+                                                        <?php endforeach; ?>
                                                     </select>
                                                 </div>
-                                                <div class="form__group">
-                                                    <label>Название <span class="text-muted">(необязательно)</span></label>
-                                                    <input type="text" name="component_title"
-                                                           placeholder="Практика по профилю специальности">
-                                                </div>
-                                            </div>
-                                            <div class="form__row">
-                                                <div class="form__group">
-                                                    <label>Начало</label>
-                                                    <select name="start_abs_semester" required>
-                                                        <?= render_abs_semester_options($programSemesters, max(1, $programSemesters - 1)) ?>
-                                                    </select>
-                                                </div>
-                                                <div class="form__group">
-                                                    <label>Окончание</label>
-                                                    <select name="end_abs_semester" required>
-                                                        <?= render_abs_semester_options($programSemesters, $programSemesters) ?>
-                                                    </select>
-                                                </div>
-                                            </div>
-                                            <div class="form__group">
-                                                <label>Преподаватель / руководитель</label>
-                                                <select name="teacher_id">
-                                                    <option value="">— Не назначен —</option>
-                                                    <?php foreach ($teachers as $teacher): ?>
-                                                        <?php if (!(int) $teacher['is_active']) {
-                                                            continue;
-                                                        } ?>
-                                                    <option value="<?= (int) $teacher['id'] ?>"><?= e($teacher['full_name']) ?></option>
-                                                    <?php endforeach; ?>
-                                                </select>
-                                            </div>
-                                            <button type="submit" class="btn btn--primary btn--sm">Добавить практику</button>
-                                        </form>
-                                    </details>
+                                                <button type="submit" class="btn btn--primary btn--sm" data-curriculum-practice-add-submit>Добавить практику</button>
+                                            </form>
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         </details>
@@ -829,7 +1003,7 @@ require __DIR__ . '/../header.php';
         <h3 class="subsection-title">Добавить профессиональный модуль</h3>
         <form method="post" class="form form--medium">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="add_module">
+            <input type="hidden" name="curriculum_action" value="add_module">
             <div class="form__row">
                 <div class="form__group">
                     <label for="module_number">Номер ПМ</label>
@@ -889,7 +1063,7 @@ require __DIR__ . '/../header.php';
         </div>
         <form method="post" class="form">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="update_mdk">
+            <input type="hidden" name="curriculum_action" value="update_mdk">
             <input type="hidden" name="item_id" value="<?= (int) $mdkFormData['item_id'] ?>" data-curriculum-mdk-id>
             <input type="hidden" name="module_id" value="<?= (int) $mdkFormData['module_id'] ?>" data-curriculum-mdk-module-id>
             <input type="hidden" name="component_index" value="<?= (int) $mdkFormData['component_index'] ?>" data-curriculum-mdk-index>
@@ -985,7 +1159,7 @@ require __DIR__ . '/../header.php';
         </div>
         <form method="post" class="form">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="update_practice">
+            <input type="hidden" name="curriculum_action" value="update_practice">
             <input type="hidden" name="item_id" value="<?= (int) $practiceFormData['item_id'] ?>" data-curriculum-practice-id>
             <input type="hidden" name="module_id" value="<?= (int) $practiceFormData['module_id'] ?>" data-curriculum-practice-module-id>
             <input type="hidden" name="practice_code" value="<?= e($practiceFormData['code']) ?>" data-curriculum-practice-code>
@@ -1063,7 +1237,7 @@ require __DIR__ . '/../header.php';
         </div>
         <form method="post" class="form">
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="update_module">
+            <input type="hidden" name="curriculum_action" value="update_module">
             <input type="hidden" name="module_id" value="<?= (int) $moduleFormData['module_id'] ?>" data-curriculum-module-id>
 
             <div class="form__group">
@@ -1128,7 +1302,7 @@ require __DIR__ . '/../header.php';
         </div>
         <form method="post" class="form" data-curriculum-edit-form>
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="update_item">
+            <input type="hidden" name="curriculum_action" value="update_item">
             <input type="hidden" name="item_id" value="<?= (int) $editFormData['item_id'] ?>" data-curriculum-edit-id>
 
             <div class="form__group">
@@ -1213,7 +1387,7 @@ require __DIR__ . '/../header.php';
         </div>
         <form method="post" class="form" data-curriculum-part-edit-form>
             <?= csrf_field() ?>
-            <input type="hidden" name="action" value="update_part">
+            <input type="hidden" name="curriculum_action" value="update_part">
             <input type="hidden" name="item_id" value="<?= (int) $partFormData['item_id'] ?>" data-curriculum-part-edit-id>
             <input type="hidden" name="parent_item_id" value="<?= (int) $partFormData['parent_item_id'] ?>" data-curriculum-part-edit-parent>
 
@@ -1276,5 +1450,59 @@ require __DIR__ . '/../header.php';
 <?php if ($openEditModal || $openModuleModal || $openMdkModal || $openPracticeModal || $openPartEditModal): ?>
 <script>document.body.classList.add('modal-open');</script>
 <?php endif; ?>
+
+<script>
+(() => {
+    document.querySelectorAll('[data-pm-add-toggle]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const wrap = btn.closest('.pm-tree__add');
+            const panel = wrap && wrap.querySelector('.pm-tree__add-panel');
+            if (!wrap || !panel) return;
+            const open = wrap.classList.toggle('is-open');
+            panel.hidden = !open;
+            const isMdk = !!wrap.querySelector('[data-curriculum-mdk-add-form]');
+            btn.textContent = open
+                ? (isMdk ? 'Скрыть форму МДК' : 'Скрыть форму практики')
+                : (isMdk ? 'Добавить МДК' : 'Добавить практику');
+            if (open) {
+                const input = panel.querySelector('input[name="component_title"]');
+                if (input) input.focus();
+            }
+        });
+    });
+
+    // Не ставить btn.disabled в submit: Chrome может отменить отправку формы.
+    const lockSubmit = (form, btnSel, label) => {
+        form.addEventListener('submit', (event) => {
+            if (form.dataset.submitting === '1') {
+                event.preventDefault();
+                return;
+            }
+            form.dataset.submitting = '1';
+            const btn = form.querySelector(btnSel);
+            if (btn) {
+                btn.textContent = label;
+                btn.setAttribute('aria-busy', 'true');
+            }
+        });
+    };
+    document.querySelectorAll('[data-curriculum-mdk-add-form]').forEach((form) => {
+        lockSubmit(form, '[data-curriculum-mdk-add-submit]', 'Добавление…');
+    });
+    document.querySelectorAll('[data-curriculum-practice-add-form]').forEach((form) => {
+        lockSubmit(form, '[data-curriculum-practice-add-submit]', 'Добавление…');
+    });
+
+    const added = document.querySelector('.pm-tree__item--added');
+    if (added) {
+        added.scrollIntoView({ block: 'center', behavior: 'smooth' });
+    } else {
+        const openModule = document.querySelector('.pm-tree__module[open]');
+        if (openModule) {
+            openModule.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+        }
+    }
+})();
+</script>
 
 <?php require __DIR__ . '/../footer.php'; ?>

@@ -271,9 +271,59 @@ function archive_gradebooks_for_period(string $academicYear, string $semester, b
         return ['success' => false, 'error' => 'Не удалось сохранить архив ведомостей.'];
     }
 
+    save_archive_gradebook_summary_stats($archiveId);
     sync_record_book_from_gradebook_archive($archiveId, $academicYear, $semester);
 
     return ['success' => true];
+}
+
+function save_archive_gradebook_summary_stats(int $archiveId, ?array $stats = null): bool
+{
+    if ($archiveId <= 0) {
+        return false;
+    }
+
+    $stats = $stats ?? compute_archive_gradebook_summary_stats($archiveId);
+    $json = json_encode($stats, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if ($json === false) {
+        return false;
+    }
+
+    $stmt = db()->prepare(
+        'UPDATE archive_periods SET summary_stats = ? WHERE id = ? AND archive_type = \'gradebook\''
+    );
+    $stmt->execute([$json, $archiveId]);
+
+    return true;
+}
+
+/** Заполнить summary_stats для архивов ведомостей без снимка. */
+function backfill_archive_gradebook_summary_stats(): int
+{
+    static $done = false;
+    if ($done) {
+        return 0;
+    }
+    $done = true;
+
+    $col = db()->query("SHOW COLUMNS FROM archive_periods LIKE 'summary_stats'")->fetch();
+    if (!$col) {
+        return 0;
+    }
+
+    $rows = db()->query(
+        "SELECT id FROM archive_periods
+         WHERE archive_type = 'gradebook' AND summary_stats IS NULL"
+    )->fetchAll();
+
+    $count = 0;
+    foreach ($rows as $row) {
+        if (save_archive_gradebook_summary_stats((int) $row['id'])) {
+            $count++;
+        }
+    }
+
+    return $count;
 }
 
 function archive_journals_for_period(string $academicYear, string $semester, bool $replace = false): array
