@@ -235,6 +235,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                                 'current_period' => $period,
                                 'period_display' => $result['calc']['display'] ?? '',
                                 'pa_grade' => $paGrade,
+                                'stage1_quick_grade' => null,
                                 'semester_display' => $sem['display'] ?? '',
                                 'semester_grade' => $sem['grade'] ?? null,
                                 'semester_points' => $sem['points'] ?? null,
@@ -245,6 +246,50 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                         header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
                         exit;
                     }
+                }
+            } elseif ($action === 'save_stage1_quick') {
+                // TEMPORARY: быстрая оценка КН без формы
+                $studentId = (int) ($_POST['student_id'] ?? 0);
+                $quickRaw = $_POST['stage1_quick_grade'] ?? '';
+                $result = manual_brs_save_stage1_quick_grade(
+                    (int) $sheet['id'],
+                    $studentId,
+                    $quickRaw === '' ? null : $quickRaw
+                );
+                if (!$result['success']) {
+                    $error = $result['error'] ?? 'Не удалось сохранить оценку КН.';
+                    if ($isAjaxPost) {
+                        $manualBrsJsonExit(['success' => false, 'error' => $error]);
+                    }
+                } else {
+                    $paGrade = manual_brs_get_attestation(
+                        $academicYear,
+                        $semester,
+                        $itemId,
+                        $studentId
+                    );
+                    $periodPoints = isset($result['calc']['points'])
+                        ? (float) $result['calc']['points']
+                        : null;
+                    $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+                    if ($isAjaxPost) {
+                        $manualBrsJsonExit([
+                            'success' => true,
+                            'stage1_quick_grade' => $result['grade'],
+                            'calc' => $result['calc'],
+                            'period_display' => $result['calc']['display'] ?? '',
+                            'points' => $result['calc']['points'] ?? null,
+                            'grade' => $result['calc']['grade'] ?? null,
+                            'pa_grade' => $paGrade,
+                            'semester_display' => $sem['display'],
+                            'semester_grade' => $sem['grade'],
+                            'semester_points' => $sem['points'],
+                            'semester_html' => $sem['html'],
+                        ]);
+                    }
+                    flash_set('success', 'Оценка за контрольную неделю сохранена.');
+                    header('Location: ' . $url(['group_id' => $groupId, 'item_id' => $itemId, 'period' => $period]));
+                    exit;
                 }
             } elseif ($action === 'save_pa') {
                 $studentId = (int) ($_POST['student_id'] ?? 0);
@@ -459,6 +504,9 @@ require __DIR__ . '/../../../includes/header.php';
                             <tr>
                                 <th>№</th>
                                 <th>Студент</th>
+                                <?php if (!$isAttestationOnly): ?>
+                                <th title="Временно: оценка за контрольную неделю без формы">КН</th>
+                                <?php endif; ?>
                                 <th><?= $isAttestationOnly ? 'Разделы' : ('Баллы (' . e($periodMeta['label']) . ')') ?></th>
                                 <?php if (!$isJournalPart): ?>
                                 <th>ПА</th>
@@ -495,6 +543,23 @@ require __DIR__ . '/../../../includes/header.php';
                                 >
                                     <td><?= $index + 1 ?></td>
                                     <td><strong><?= e($st['full_name']) ?></strong></td>
+                                    <?php if (!$isAttestationOnly): ?>
+                                    <td class="manual-brs-pa-cell" onclick="event.stopPropagation();">
+                                        <?php $quickGrade = $row['stage1_quick_grade'] ?? null; ?>
+                                        <select
+                                            class="manual-brs-pa-select"
+                                            data-manual-brs-stage1-quick
+                                            data-student-id="<?= (int) $st['id'] ?>"
+                                            aria-label="Оценка за контрольную неделю"
+                                            title="Временно: без заполнения формы"
+                                        >
+                                            <option value=""<?= $quickGrade === null ? ' selected' : '' ?>>—</option>
+                                            <?php foreach ([2, 3, 4, 5] as $qOpt): ?>
+                                            <option value="<?= $qOpt ?>"<?= (int) $quickGrade === $qOpt ? ' selected' : '' ?>><?= $qOpt ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </td>
+                                    <?php endif; ?>
                                     <td data-manual-brs-period-cell><?= $row['display'] !== '' ? e($row['display']) : '—' ?></td>
                                     <?php if (!$isJournalPart): ?>
                                     <td class="manual-brs-pa-cell" onclick="event.stopPropagation();">
@@ -519,7 +584,8 @@ require __DIR__ . '/../../../includes/header.php';
                 </div>
                 <p class="text-muted">
                     Нажмите на строку студента, чтобы заполнить два этапа семестра.
-                    Итог считается сразу по данным обоих этапов. ПА — только на 2 этапе.
+                    Колонка «КН» — временно: оценка за контрольную неделю без формы (баллы = среднее диапазона шкалы).
+                    Сохранение полной формы сбрасывает быструю оценку КН.
                 </p>
             <?php endif; ?>
         </section>
@@ -653,6 +719,15 @@ require __DIR__ . '/../../../includes/header.php';
             <input type="hidden" name="pa_grade" value="" data-manual-brs-pa-value>
         </form>
 
+        <?php /* TEMPORARY: быстрая оценка КН — удалить вместе с колонкой stage1_quick_grade */ ?>
+        <form method="post" hidden data-manual-brs-stage1-quick-form>
+            <?= csrf_field() ?>
+            <input type="hidden" name="action" value="save_stage1_quick">
+            <input type="hidden" name="ajax" value="1">
+            <input type="hidden" name="student_id" value="" data-manual-brs-stage1-quick-student>
+            <input type="hidden" name="stage1_quick_grade" value="" data-manual-brs-stage1-quick-value>
+        </form>
+
         <script>
         window.MANUAL_BRS_CONFIG = <?= json_encode([
             'lessonsTotal' => (int) $sheet['lessons_total'],
@@ -660,7 +735,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261022a"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261109a"></script>
 
     <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
         <section class="panel">

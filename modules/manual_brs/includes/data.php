@@ -317,7 +317,8 @@ function manual_brs_save_entry(
                  stage2_current_marks = ?, stage2_control_marks = ?,
                  stage2_absent_count = ?, stage2_late_count = ?, stage2_activity_count = ?,
                  absent_count = ?, late_count = ?, activity_count = ?,
-                 current_avg = ?, control_avg = ?, points = ?, grade = ?
+                 current_avg = ?, control_avg = ?, points = ?, grade = ?,
+                 stage1_quick_grade = NULL
              WHERE id = ?'
         );
         $stmt->execute([
@@ -351,8 +352,8 @@ function manual_brs_save_entry(
               stage2_current_marks, stage2_control_marks,
               stage2_absent_count, stage2_late_count, stage2_activity_count,
               absent_count, late_count, activity_count,
-              current_avg, control_avg, points, grade)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+              current_avg, control_avg, points, grade, stage1_quick_grade)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)'
         );
         $stmt->execute([
             $sheetId,
@@ -400,6 +401,32 @@ function manual_brs_save_entry(
 /** Пересчёт баллов записи по актуальной формуле БРС из настроек. */
 function manual_brs_calc_from_entry(array $entry, int $lessonsTotal, ?array $brs = null): array
 {
+    $brs = $brs ?? manual_brs_weights();
+
+    // TEMPORARY: быстрая оценка КН без формы
+    $quick = isset($entry['stage1_quick_grade']) && $entry['stage1_quick_grade'] !== null && $entry['stage1_quick_grade'] !== ''
+        ? (int) $entry['stage1_quick_grade']
+        : null;
+    if ($quick !== null && $quick >= 2 && $quick <= 5) {
+        $points = manual_brs_grade_to_mid_points($quick, $brs);
+
+        return [
+            'current_marks' => [],
+            'control_marks' => [],
+            'current_avg' => null,
+            'control_avg' => null,
+            'absent_count' => 0,
+            'late_count' => 0,
+            'activity_count' => 0,
+            'lessons_total' => max(0, $lessonsTotal),
+            'attended' => 0,
+            'points' => $points,
+            'grade' => $quick,
+            'display' => manual_brs_format_number($points, 1) . ' → ' . $quick,
+            'stage1_quick_grade' => $quick,
+        ];
+    }
+
     $stages = manual_brs_entry_stages($entry);
     $merged = manual_brs_merge_stages_input([
         'stage1_current_marks' => $stages[1]['current_input'],
@@ -422,6 +449,120 @@ function manual_brs_calc_from_entry(array $entry, int $lessonsTotal, ?array $brs
         'activity_count' => $merged['activity_count'],
         'lessons_total' => max(0, $lessonsTotal),
     ], $brs);
+}
+
+/**
+ * TEMPORARY: быстрая оценка за 1 период (КН) без модалки.
+ * Баллы = среднее диапазона шкалы. Удалить при откате.
+ */
+function manual_brs_save_stage1_quick_grade(
+    int $sheetId,
+    int $studentId,
+    $grade
+): array {
+    $student = get_student_by_id($studentId);
+    if ($student === null) {
+        return ['success' => false, 'error' => 'Студент не найден.'];
+    }
+
+    $sheetStmt = db()->prepare('SELECT * FROM manual_brs_sheets WHERE id = ? LIMIT 1');
+    $sheetStmt->execute([$sheetId]);
+    $sheet = $sheetStmt->fetch();
+    if (!$sheet) {
+        return ['success' => false, 'error' => 'Ведомость периода не найдена.'];
+    }
+    if ((int) $student['group_id'] !== (int) $sheet['group_id']) {
+        return ['success' => false, 'error' => 'Студент не из этой группы.'];
+    }
+
+    require_once __DIR__ . '/../../../includes/curriculum_composites.php';
+    require_once __DIR__ . '/periods.php';
+    $sheetSemester = manual_brs_semester_from_period((int) ($sheet['period'] ?? 1));
+    if (curriculum_item_has_children((int) $sheet['curriculum_item_id'], $sheetSemester)) {
+        return [
+            'success' => false,
+            'error' => 'У составной дисциплины баллы БРС вносятся в разделы.',
+        ];
+    }
+
+    $existing = manual_brs_get_entry($sheetId, $studentId);
+
+    if ($grade === null || $grade === '') {
+        if ($existing) {
+            $stmt = db()->prepare(
+                'UPDATE manual_brs_entries
+                 SET stage1_quick_grade = NULL, points = NULL, grade = NULL,
+                     current_avg = NULL, control_avg = NULL
+                 WHERE id = ?'
+            );
+            $stmt->execute([(int) $existing['id']]);
+        }
+
+        return [
+            'success' => true,
+            'grade' => null,
+            'calc' => [
+                'points' => null,
+                'grade' => null,
+                'display' => '',
+            ],
+        ];
+    }
+
+    $grade = (int) $grade;
+    if ($grade < 2 || $grade > 5) {
+        return ['success' => false, 'error' => 'Оценка КН: 2–5 или пусто.'];
+    }
+
+    $brs = manual_brs_weights();
+    $points = manual_brs_grade_to_mid_points($grade, $brs);
+    $display = manual_brs_format_number($points, 1) . ' → ' . $grade;
+
+    if ($existing) {
+        $stmt = db()->prepare(
+            'UPDATE manual_brs_entries
+             SET stage1_quick_grade = ?, points = ?, grade = ?,
+                 current_avg = NULL, control_avg = NULL
+             WHERE id = ?'
+        );
+        $stmt->execute([$grade, $points, $grade, (int) $existing['id']]);
+    } else {
+        $stmt = db()->prepare(
+            'INSERT INTO manual_brs_entries
+             (sheet_id, student_id, current_marks, control_marks,
+              stage1_current_marks, stage1_control_marks,
+              stage1_absent_count, stage1_late_count, stage1_activity_count,
+              stage2_current_marks, stage2_control_marks,
+              stage2_absent_count, stage2_late_count, stage2_activity_count,
+              absent_count, late_count, activity_count,
+              current_avg, control_avg, points, grade, stage1_quick_grade)
+             VALUES (?, ?, ?, ?, ?, ?, 0, 0, 0, ?, ?, 0, 0, 0, 0, 0, 0, NULL, NULL, ?, ?, ?)'
+        );
+        $emptyMarks = '[]';
+        $stmt->execute([
+            $sheetId,
+            $studentId,
+            $emptyMarks,
+            $emptyMarks,
+            $emptyMarks,
+            $emptyMarks,
+            $emptyMarks,
+            $emptyMarks,
+            $points,
+            $grade,
+            $grade,
+        ]);
+    }
+
+    return [
+        'success' => true,
+        'grade' => $grade,
+        'calc' => [
+            'points' => $points,
+            'grade' => $grade,
+            'display' => $display,
+        ],
+    ];
 }
 
 /**
@@ -818,6 +959,7 @@ function manual_brs_build_student_rows(
                 'grade' => $sem['brs_grade'],
                 'display' => $display,
                 'pa_grade' => $paGrade,
+                'stage1_quick_grade' => null,
                 'semester_display' => $sem['display'],
                 'semester_grade' => $sem['grade'],
                 'semester_points' => null,
@@ -867,6 +1009,14 @@ function manual_brs_build_student_rows(
             $brs
         );
 
+        $quickGrade = null;
+        if ($entry && isset($entry['stage1_quick_grade']) && $entry['stage1_quick_grade'] !== null && $entry['stage1_quick_grade'] !== '') {
+            $quickGrade = (int) $entry['stage1_quick_grade'];
+            if ($quickGrade < 2 || $quickGrade > 5) {
+                $quickGrade = null;
+            }
+        }
+
         $rows[] = [
             'student' => $student,
             'entry' => $entry,
@@ -874,6 +1024,7 @@ function manual_brs_build_student_rows(
             'grade' => $periodGrade !== null ? (int) $periodGrade : null,
             'display' => $calc['display'] ?? '',
             'pa_grade' => $paGrade,
+            'stage1_quick_grade' => $quickGrade,
             'semester_display' => $sem['display'],
             'semester_grade' => $sem['grade'],
             'semester_points' => $sem['points'],

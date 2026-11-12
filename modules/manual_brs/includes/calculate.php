@@ -131,6 +131,32 @@ function manual_brs_points_to_grade(float $points, array $brs): int
     return 2;
 }
 
+/**
+ * TEMPORARY: оценка → среднее баллов диапазона шкалы БРС.
+ * Пример при порогах 50/65/75: 2→25, 3→57.5, 4→70, 5→87.5.
+ * Удалить вместе с stage1_quick_grade.
+ */
+function manual_brs_grade_to_mid_points(int $grade, ?array $brs = null): float
+{
+    $brs = $brs ?? manual_brs_weights();
+    $scale3 = (float) $brs['scale_3'];
+    $scale4 = (float) $brs['scale_4'];
+    $scale5 = (float) $brs['scale_5'];
+    $grade = max(2, min(5, $grade));
+
+    if ($grade === 5) {
+        return round(($scale5 + 100.0) / 2.0, 1);
+    }
+    if ($grade === 4) {
+        return round(($scale4 + $scale5) / 2.0, 1);
+    }
+    if ($grade === 3) {
+        return round(($scale3 + $scale4) / 2.0, 1);
+    }
+
+    return round((0.0 + $scale3) / 2.0, 1);
+}
+
 function manual_brs_format_number(?float $value, int $decimals = 1): string
 {
     if ($value === null) {

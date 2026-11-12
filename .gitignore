@@ -6,3 +6,4 @@ mobile_nm/
 .idea/
 *.iml
 .DS_Store
+config/database.php

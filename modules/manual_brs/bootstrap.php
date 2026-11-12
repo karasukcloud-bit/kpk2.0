@@ -118,6 +118,8 @@ function manual_brs_ensure_entry_stages_schema(PDO $pdo): void
         'stage2_absent_count' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER stage2_control_marks',
         'stage2_late_count' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER stage2_absent_count',
         'stage2_activity_count' => 'SMALLINT UNSIGNED NOT NULL DEFAULT 0 AFTER stage2_late_count',
+        // TEMPORARY: быстрая оценка за КН без формы — удалить колонку при откате
+        'stage1_quick_grade' => 'TINYINT UNSIGNED NULL AFTER stage2_activity_count',
     ];
 
     foreach ($columns as $name => $definition) {

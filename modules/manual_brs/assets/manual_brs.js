@@ -42,6 +42,13 @@
         return html + '</div>';
     }
 
+    function syncStage1QuickSelectInRow(row, quickGrade) {
+        const select = row.querySelector('[data-manual-brs-stage1-quick]');
+        if (select) {
+            select.value = quickGrade == null || quickGrade === '' ? '' : String(quickGrade);
+        }
+    }
+
     function updateRowSemester(row, data) {
         const periodCell = row.querySelector('[data-manual-brs-period-cell]');
         const semesterCell = row.querySelector('[data-manual-brs-semester-cell]');
@@ -68,6 +75,9 @@
         }
         if (data.pa_grade !== undefined) {
             syncPaSelectInRow(row, data.pa_grade);
+        }
+        if (data.stage1_quick_grade !== undefined) {
+            syncStage1QuickSelectInRow(row, data.stage1_quick_grade);
         }
     }
 
@@ -559,6 +569,45 @@
                 }
             } catch (err) {
                 alert(err.message || 'Не удалось сохранить ПА');
+            } finally {
+                select.disabled = false;
+            }
+        });
+    });
+
+    // TEMPORARY: быстрая оценка КН без формы
+    const quickForm = document.querySelector('[data-manual-brs-stage1-quick-form]');
+    const quickStudentInput = quickForm
+        ? quickForm.querySelector('[data-manual-brs-stage1-quick-student]')
+        : null;
+    const quickValueInput = quickForm
+        ? quickForm.querySelector('[data-manual-brs-stage1-quick-value]')
+        : null;
+
+    document.querySelectorAll('[data-manual-brs-stage1-quick]').forEach((select) => {
+        select.addEventListener('change', async () => {
+            if (!quickForm || !quickStudentInput || !quickValueInput) {
+                return;
+            }
+            const row = select.closest('tr');
+            quickStudentInput.value = select.getAttribute('data-student-id') || '';
+            quickValueInput.value = select.value;
+            select.disabled = true;
+            try {
+                const response = await fetch(window.location.href, {
+                    method: 'POST',
+                    headers: { 'X-Requested-With': 'XMLHttpRequest' },
+                    body: new FormData(quickForm),
+                });
+                const data = await response.json();
+                if (!data.success) {
+                    throw new Error(data.error || 'Ошибка сохранения оценки КН');
+                }
+                if (row) {
+                    updateRowSemester(row, data);
+                }
+            } catch (err) {
+                alert(err.message || 'Не удалось сохранить оценку КН');
             } finally {
                 select.disabled = false;
             }
