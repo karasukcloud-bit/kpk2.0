@@ -815,7 +815,7 @@ function render_curriculum_semester_table(
                 . '" class="btn btn--ghost btn--sm">КТП</a>'
                 . '<form method="post" class="inline-form" onsubmit="return confirm(\'Удалить МДК из модуля?\');">'
                 . csrf_field()
-                . '<input type="hidden" name="action" value="delete_module_component">'
+                . '<input type="hidden" name="curriculum_action" value="delete_module_component">'
                 . '<input type="hidden" name="item_id" value="' . $id . '">'
                 . '<input type="hidden" name="redirect_tab" value="subjects">'
                 . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
@@ -833,7 +833,7 @@ function render_curriculum_semester_table(
                 . '" class="btn btn--ghost btn--sm">КТП</a>'
                 . '<form method="post" class="inline-form" onsubmit="return confirm(\'Удалить предмет из учебного плана?\');">'
                 . csrf_field()
-                . '<input type="hidden" name="action" value="delete_item">'
+                . '<input type="hidden" name="curriculum_action" value="delete_item">'
                 . '<input type="hidden" name="item_id" value="' . $id . '">'
                 . '<button type="submit" class="btn btn--danger btn--sm">Удалить</button>'
                 . '</form>';
@@ -871,7 +871,7 @@ function render_curriculum_semester_table(
                 . '" class="btn btn--ghost btn--sm">КТП</a>'
                 . '<form method="post" class="inline-form" onsubmit="return confirm(\'Убрать раздел из этого семестра?\');">'
                 . csrf_field()
-                . '<input type="hidden" name="action" value="delete_part">'
+                . '<input type="hidden" name="curriculum_action" value="delete_part">'
                 . '<input type="hidden" name="item_id" value="' . $partId . '">'
                 . '<input type="hidden" name="parent_item_id" value="' . $id . '">'
                 . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'
@@ -899,7 +899,7 @@ function render_curriculum_semester_table(
                 . ' data-curriculum-part-panel>'
                 . '<form method="post" class="form curriculum-part-add__form">'
                 . csrf_field()
-                . '<input type="hidden" name="action" value="add_part">'
+                . '<input type="hidden" name="curriculum_action" value="add_part">'
                 . '<input type="hidden" name="parent_item_id" value="' . $id . '">'
                 . '<div class="form__row form__row--4 curriculum-part-add__row">'
                 . '<div class="form__group">'
@@ -945,7 +945,7 @@ function render_curriculum_order_buttons(
     if ($index > 0) {
         $html .= '<form method="post" class="inline-form curriculum-order__form">'
             . csrf_field()
-            . '<input type="hidden" name="action" value="move_item">'
+            . '<input type="hidden" name="curriculum_action" value="move_item">'
             . '<input type="hidden" name="item_id" value="' . $itemId . '">'
             . '<input type="hidden" name="direction" value="up">'
             . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'
@@ -958,7 +958,7 @@ function render_curriculum_order_buttons(
     if ($index < $total - 1) {
         $html .= '<form method="post" class="inline-form curriculum-order__form">'
             . csrf_field()
-            . '<input type="hidden" name="action" value="move_item">'
+            . '<input type="hidden" name="curriculum_action" value="move_item">'
             . '<input type="hidden" name="item_id" value="' . $itemId . '">'
             . '<input type="hidden" name="direction" value="down">'
             . '<input type="hidden" name="list_semester" value="' . e($listSemester) . '">'

@@ -599,6 +599,9 @@ function archive_import_gradebook_sheet(
 
         $pdo->commit();
 
+        require_once __DIR__ . '/archive.php';
+        save_archive_gradebook_summary_stats($archiveId);
+
         return [
             'archive_id' => $archiveId,
             'group_id' => $groupId,
