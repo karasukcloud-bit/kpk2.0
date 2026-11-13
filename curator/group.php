@@ -6,6 +6,8 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/curriculum.php';
 require_once __DIR__ . '/../includes/group_report.php';
+require_once __DIR__ . '/../includes/gradebook.php';
+require_once __DIR__ . '/../includes/attendance.php';
 
 require_curator_panel();
 
@@ -33,11 +35,18 @@ if ($group !== null && $students !== []) {
         $semester = (string) ($period['semester'] ?? '1');
         if ($year !== '') {
             $academicYear = $year;
-            $overview = get_group_gradebook_overview($groupId, $year, $semester);
+        }
+
+        if ($year !== '' && is_manual_brs_gradebook_active()) {
+            $overview = get_group_gradebook_overview($groupId, $year, $semester, 'manual_brs');
             $summary = $overview['summary'] ?? [];
             if ((int) ($summary['assessed_students'] ?? 0) > 0) {
                 $avgGrade = round((float) ($summary['average_grade'] ?? 0), 1);
             }
+        }
+
+        if ($year !== '') {
+            $attendancePercent = compute_group_average_attendance_percent($groupId, $year);
         }
     } catch (Throwable $e) {
         // оставляем «—»

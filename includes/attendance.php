@@ -210,6 +210,82 @@ function build_attendance_month_summary(array $students, array $monthTotals): ar
     ];
 }
 
+/**
+ * Средняя посещаемость группы: только предыдущие месяцы учебного года и текущий.
+ * Считаем по журналу пропусков куратора: доля непропущенных занятий.
+ */
+function compute_group_average_attendance_percent(
+    int $groupId,
+    string $academicYear,
+    int $defaultLessonsPerDay = 4
+): ?float {
+    if ($groupId <= 0 || $academicYear === '') {
+        return null;
+    }
+    if (!db()->query("SHOW TABLES LIKE 'attendance_days'")->fetch()) {
+        return null;
+    }
+
+    $throughMonth = resolve_attendance_month($academicYear, date('Y-m'));
+    $defaultLessonsPerDay = max(1, $defaultLessonsPerDay);
+    $stmt = db()->prepare(
+        'SELECT ad.id AS day_id,
+                ae.excused_lessons,
+                ae.unexcused_lessons
+         FROM attendance_days ad
+         INNER JOIN attendance_entries ae ON ae.attendance_day_id = ad.id
+         WHERE ad.group_id = ?
+           AND ad.academic_year = ?
+           AND DATE_FORMAT(ad.attendance_date, \'%Y-%m\') <= ?
+         ORDER BY ad.attendance_date ASC, ad.id ASC'
+    );
+    $stmt->execute([$groupId, $academicYear, $throughMonth]);
+    $rows = $stmt->fetchAll();
+    if ($rows === []) {
+        return null;
+    }
+
+    $byDay = [];
+    foreach ($rows as $row) {
+        $dayId = (int) $row['day_id'];
+        $missed = (int) $row['excused_lessons'] + (int) $row['unexcused_lessons'];
+        if (!isset($byDay[$dayId])) {
+            $byDay[$dayId] = [
+                'students' => 0,
+                'missed' => 0,
+                'max_missed' => 0,
+            ];
+        }
+        $byDay[$dayId]['students']++;
+        $byDay[$dayId]['missed'] += $missed;
+        if ($missed > $byDay[$dayId]['max_missed']) {
+            $byDay[$dayId]['max_missed'] = $missed;
+        }
+    }
+
+    $possible = 0;
+    $missedTotal = 0;
+    foreach ($byDay as $day) {
+        $students = (int) $day['students'];
+        if ($students <= 0) {
+            continue;
+        }
+        $lessons = (int) $day['max_missed'] > 0
+            ? (int) $day['max_missed']
+            : $defaultLessonsPerDay;
+        $possible += $lessons * $students;
+        $missedTotal += (int) $day['missed'];
+    }
+
+    if ($possible <= 0) {
+        return null;
+    }
+
+    $attended = max(0, $possible - $missedTotal);
+
+    return round($attended / $possible * 100, 1);
+}
+
 function normalize_attendance_month(string $month): ?string
 {
     $month = trim($month);
