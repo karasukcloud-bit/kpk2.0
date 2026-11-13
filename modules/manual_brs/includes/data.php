@@ -62,6 +62,15 @@ function manual_brs_update_lessons_total(int $sheetId, int $lessonsTotal): array
 
     $entries = manual_brs_get_entries_map($sheetId);
     foreach ($entries as $entry) {
+        // Оценка из строки (КН) не зависит от числа занятий — не пересчитываем и не сбрасываем.
+        $quick = isset($entry['stage1_quick_grade']) && $entry['stage1_quick_grade'] !== null
+            && $entry['stage1_quick_grade'] !== ''
+            ? (int) $entry['stage1_quick_grade']
+            : null;
+        if ($quick !== null && $quick >= 2 && $quick <= 5) {
+            continue;
+        }
+
         $stages = manual_brs_entry_stages($entry);
         manual_brs_save_entry(
             $sheetId,
@@ -489,12 +498,60 @@ function manual_brs_save_stage1_quick_grade(
 
     if ($grade === null || $grade === '') {
         if ($existing) {
-            $stmt = db()->prepare(
-                'UPDATE manual_brs_entries
-                 SET stage1_quick_grade = NULL, points = NULL, grade = NULL,
-                     current_avg = NULL, control_avg = NULL
-                 WHERE id = ?'
-            );
+            $stages = manual_brs_entry_stages($existing);
+            $hasOtherData = false;
+            foreach ([1, 2] as $stageNo) {
+                $st = $stages[$stageNo];
+                if (trim((string) ($st['current_input'] ?? '')) !== ''
+                    || trim((string) ($st['control_input'] ?? '')) !== ''
+                    || (int) ($st['absent_count'] ?? 0) > 0
+                    || (int) ($st['late_count'] ?? 0) > 0
+                    || (int) ($st['activity_count'] ?? 0) > 0
+                ) {
+                    $hasOtherData = true;
+                    break;
+                }
+            }
+
+            if ($hasOtherData) {
+                // Есть данные формы — только снимаем быструю оценку и пересчитываем БРС.
+                $lessonsTotal = (int) ($sheet['lessons_total'] ?? 0);
+                manual_brs_save_entry(
+                    $sheetId,
+                    $studentId,
+                    [
+                        'stage1_current_marks' => $stages[1]['current_input'],
+                        'stage1_control_marks' => $stages[1]['control_input'],
+                        'stage1_absent_count' => $stages[1]['absent_count'],
+                        'stage1_late_count' => $stages[1]['late_count'],
+                        'stage1_activity_count' => $stages[1]['activity_count'],
+                        'stage2_current_marks' => $stages[2]['current_input'],
+                        'stage2_control_marks' => $stages[2]['control_input'],
+                        'stage2_absent_count' => $stages[2]['absent_count'],
+                        'stage2_late_count' => $stages[2]['late_count'],
+                        'stage2_activity_count' => $stages[2]['activity_count'],
+                    ],
+                    $lessonsTotal
+                );
+                $recalc = manual_brs_calc_from_entry(
+                    manual_brs_get_entry($sheetId, $studentId) ?? [],
+                    $lessonsTotal
+                );
+
+                return [
+                    'success' => true,
+                    'grade' => null,
+                    'calc' => [
+                        'points' => $recalc['points'] ?? null,
+                        'grade' => $recalc['grade'] ?? null,
+                        'display' => (string) ($recalc['display'] ?? ''),
+                    ],
+                ];
+            }
+
+            // Только оценка из строки — удаляем запись, иначе пустая ячейка
+            // при lessons_total > 0 снова пересчитается в «2».
+            $stmt = db()->prepare('DELETE FROM manual_brs_entries WHERE id = ?');
             $stmt->execute([(int) $existing['id']]);
         }
 

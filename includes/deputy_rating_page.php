@@ -29,7 +29,7 @@ $rating = build_student_performance_rating($year, $semester, $ratingSource);
 
 if ($scope === 'specialty') {
     $validIds = array_map(static fn (array $row): int => (int) $row['id'], $rating['specialties']);
-    if ($scopeId <= 0 || !in_array($scopeId, $validIds, true)) {
+    if ($scopeId === 0 || !in_array($scopeId, $validIds, true)) {
         $scopeId = $rating['specialties'] !== [] ? (int) $rating['specialties'][0]['id'] : 0;
     }
 } elseif ($scope === 'group') {
@@ -146,8 +146,8 @@ require __DIR__ . '/header.php';
                             <?php foreach ($rating['specialties'] as $specialty): ?>
                             <option value="<?= (int) $specialty['id'] ?>"<?= $scopeId === (int) $specialty['id'] ? ' selected' : '' ?>>
                                 <?= e($specialty['name']) ?>
-                                <?php if ($specialty['code'] !== ''): ?>
-                                    (<?= e($specialty['code']) ?>)
+                                <?php if (!empty($specialty['code'])): ?>
+                                    (<?= e((string) $specialty['code']) ?>)
                                 <?php endif; ?>
                             </option>
                             <?php endforeach; ?>

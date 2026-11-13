@@ -71,7 +71,7 @@ $query = static function (array $overrides = []) use ($year, $viewSem, $source, 
 $chartLabels = array_map(static fn (array $s): string => (string) $s['name'], $subjects);
 $chartAbsolute = array_map(static fn (array $s): float => (float) $s['absolute_percent'], $subjects);
 $chartQuality = array_map(static fn (array $s): float => (float) $s['quality_percent'], $subjects);
-$chartHeight = max(280, count($subjects) * 34 + 80);
+$chartHeight = max(280, count($subjects) * 48 + 90);
 
 $pageTitle = 'Успеваемость по предметам — Панель завуча';
 $currentDeputyTab = 'subject_performance';
@@ -384,6 +384,27 @@ require __DIR__ . '/../includes/header.php';
         },
     };
 
+    const wrapSubjectLabel = (text, maxLen = 44) => {
+        const s = String(text || '').trim();
+        if (s.length <= maxLen) {
+            return s;
+        }
+        const mid = Math.ceil(s.length / 2);
+        let breakAt = s.lastIndexOf(' ', mid);
+        if (breakAt < Math.floor(maxLen * 0.35)) {
+            breakAt = s.indexOf(' ', mid);
+        }
+        if (breakAt <= 0) {
+            breakAt = maxLen;
+        }
+        const line1 = s.slice(0, breakAt).trim();
+        let line2 = s.slice(breakAt).trim();
+        if (line2.length > maxLen) {
+            line2 = line2.slice(0, Math.max(1, maxLen - 1)) + '…';
+        }
+        return [line1, line2];
+    };
+
     const renderHorizontal = (canvasId, chartLabels, values, average, barLabel, color) => {
         const node = document.getElementById(canvasId);
         if (!node || typeof Chart === 'undefined') {
@@ -417,11 +438,18 @@ require __DIR__ . '/../includes/header.php';
                 responsive: true,
                 maintainAspectRatio: false,
                 animation: { duration: 550, easing: 'easeOutQuart' },
-                layout: { padding: { right: 36 } },
+                layout: { padding: { right: 36, left: 8 } },
                 plugins: {
                     legend: { position: 'bottom' },
                     tooltip: {
                         callbacks: {
+                            title(items) {
+                                const item = items[0];
+                                if (!item) {
+                                    return '';
+                                }
+                                return String(item.chart.data.labels[item.dataIndex] ?? '');
+                            },
                             label(ctx) {
                                 return ctx.dataset.label + ': ' + ctx.parsed.x + '%';
                             },
@@ -436,9 +464,14 @@ require __DIR__ . '/../includes/header.php';
                     },
                     y: {
                         ticks: {
-                            font: { size: 12, weight: '600' },
+                            font: { size: 11, weight: '600' },
                             color: '#243041',
                             autoSkip: false,
+                            crossAlign: 'far',
+                            callback(value) {
+                                const label = this.getLabelForValue(value);
+                                return wrapSubjectLabel(label);
+                            },
                         },
                     },
                 },

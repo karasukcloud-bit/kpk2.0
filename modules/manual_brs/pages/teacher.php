@@ -157,6 +157,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                                 'period_display' => $row['display'],
                                 'points' => $row['points'],
                                 'grade' => $row['grade'],
+                                'stage1_quick_grade' => $row['stage1_quick_grade'] ?? null,
                                 'pa_grade' => $row['pa_grade'],
                                 'semester_html' => $row['semester_html'],
                                 'semester_grade' => $row['semester_grade'],

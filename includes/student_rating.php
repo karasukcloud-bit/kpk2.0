@@ -6,6 +6,12 @@ require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/organization.php';
 require_once __DIR__ . '/students.php';
 
+/** Виртуальный id специальности для групп «Общеобразовательный цикл». */
+function student_rating_general_education_specialty_id(): int
+{
+    return -1;
+}
+
 /**
  * Рейтинг студентов по успеваемости за период.
  * $source: journal | manual_brs
@@ -37,26 +43,38 @@ function build_student_performance_rating(
     $items = [];
     $specialtyMap = [];
     $groupMap = [];
+    $geSpecialtyId = student_rating_general_education_specialty_id();
+    $geLabel = gradebook_general_education_label();
+    $hasGeneralEducationItems = false;
 
     foreach ($groups as $group) {
         $groupId = (int) $group['id'];
-        $specialtyId = (int) ($group['specialty_id'] ?? 0);
+        $isGeneralEducation = gradebook_group_is_general_education($group);
+        $specialtyId = $isGeneralEducation
+            ? $geSpecialtyId
+            : (int) ($group['specialty_id'] ?? 0);
         $groupNumber = (string) $group['number'];
-        $specialtyName = (string) ($group['specialty_name'] ?? '');
-        $specialtyCode = (string) ($group['specialty_code'] ?? '');
+        $specialtyName = $isGeneralEducation
+            ? $geLabel
+            : (string) ($group['specialty_name'] ?? '');
+        $specialtyCode = $isGeneralEducation
+            ? ''
+            : (string) ($group['specialty_code'] ?? '');
 
         $groupMap[$groupId] = [
             'id' => $groupId,
             'number' => $groupNumber,
             'specialty_id' => $specialtyId,
             'specialty_name' => $specialtyName,
+            'is_general_education' => $isGeneralEducation,
         ];
 
-        if ($specialtyId > 0 && !isset($specialtyMap[$specialtyId])) {
+        if (!$isGeneralEducation && $specialtyId > 0 && !isset($specialtyMap[$specialtyId])) {
             $specialtyMap[$specialtyId] = [
                 'id' => $specialtyId,
                 'name' => $specialtyName,
                 'code' => $specialtyCode,
+                'is_general_education' => false,
             ];
         }
 
@@ -96,6 +114,10 @@ function build_student_performance_rating(
             $min = min($values);
             $max = max($values);
 
+            if ($isGeneralEducation) {
+                $hasGeneralEducationItems = true;
+            }
+
             $items[] = [
                 'student_id' => $studentId,
                 'full_name' => (string) $student['full_name'],
@@ -104,6 +126,7 @@ function build_student_performance_rating(
                 'specialty_id' => $specialtyId,
                 'specialty_name' => $specialtyName,
                 'specialty_code' => $specialtyCode,
+                'is_general_education' => $isGeneralEducation,
                 'average' => $average,
                 'grades_count' => $graded,
                 'subjects_count' => $subjectCount,
@@ -132,6 +155,14 @@ function build_student_performance_rating(
 
     $specialties = array_values($specialtyMap);
     usort($specialties, static fn (array $a, array $b): int => strcmp($a['name'], $b['name']));
+    if ($hasGeneralEducationItems) {
+        $specialties[] = [
+            'id' => $geSpecialtyId,
+            'name' => $geLabel,
+            'code' => '',
+            'is_general_education' => true,
+        ];
+    }
 
     $groupList = array_values($groupMap);
     usort($groupList, static fn (array $a, array $b): int => strnatcasecmp($a['number'], $b['number']));
@@ -199,7 +230,7 @@ function assign_student_rating_places(array $items): array
  */
 function filter_student_rating_items(array $items, string $scope, int $scopeId): array
 {
-    if ($scope === 'specialty' && $scopeId > 0) {
+    if ($scope === 'specialty' && $scopeId !== 0) {
         $items = array_values(array_filter(
             $items,
             static fn (array $row): bool => (int) $row['specialty_id'] === $scopeId

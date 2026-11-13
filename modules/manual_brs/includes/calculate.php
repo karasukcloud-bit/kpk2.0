@@ -241,7 +241,10 @@ function manual_brs_calculate(array $input, ?array $brs = null): array
     $controlAvg = manual_brs_average($controlMarks);
 
     $points = 0.0;
-    $hasData = $currentMarks !== [] || $controlMarks !== [] || $lessonsTotal > 0;
+    // lessons_total само по себе не данные студента — иначе пустая строка
+    // после снятия оценки КН снова превращается в «2».
+    $hasData = $currentMarks !== [] || $controlMarks !== []
+        || $absent > 0 || $late > 0 || $activity > 0;
 
     // Нет контрольных = не писал работу → считаем как «2».
     if ($controlAvg === null && $hasData) {
