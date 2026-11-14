@@ -26,6 +26,8 @@ $appSidebarIcon = static function (string $name): string {
         'rating' => '<path d="M12 2l2.4 7.2H22l-6 4.8 2.3 7L12 16.8 5.7 21l2.3-7-6-4.8h7.6z"/>',
         'glaz' => '<path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7S1 12 1 12z"/><circle cx="12" cy="12" r="3"/>',
         'expelled' => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5M22 8l-5 5"/>',
+        'igo' => '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M16 11h6"/>',
+        'testoria' => '<path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>',
         'notify' => '<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>',
         'phone' => '<rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/>',
         'logs' => '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
@@ -117,6 +119,10 @@ if (function_exists('is_logged_in') && is_logged_in()) {
                 href="<?= e((string) ($item['href'] ?? '#')) ?>"
                 class="curator-sidebar__link<?= $active ?>"
                 title="<?= e($itemLabel) ?>"
+                <?php if (!empty($item['external'])): ?>
+                    target="_blank"
+                    rel="noopener noreferrer"
+                <?php endif; ?>
             >
                 <?= $appSidebarIcon((string) ($item['icon'] ?? 'grades')) ?>
                 <span class="curator-sidebar__label"><?= e($itemLabel) ?></span>

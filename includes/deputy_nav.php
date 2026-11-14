@@ -36,6 +36,10 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
        class="admin-tabs__item<?= $currentDeputyTab === 'glaz' ? ' admin-tabs__item--active' : '' ?>">
         ГЛАЗ
     </a>
+    <a href="igo.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'igo' ? ' admin-tabs__item--active' : '' ?>">
+        ИГО
+    </a>
     <a href="expelled.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'expelled' ? ' admin-tabs__item--active' : '' ?>">
         Отчисленные

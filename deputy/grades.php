@@ -91,7 +91,7 @@ require __DIR__ . '/../includes/header.php';
                         $groupId = (int) $group['id'];
                         $status = get_gradebook_completion_status($groupId, $year, $semester, $source);
                         $studentCount = $status['students'];
-                        $incompleteSections = group_has_incomplete_composite_sections(
+                        $compositeGaps = group_composite_gap_flags(
                             $groupId,
                             $year,
                             $semester,
@@ -115,8 +115,11 @@ require __DIR__ . '/../includes/header.php';
                                         <?= (int) $status['filled'] ?>/<?= (int) $status['expected'] ?>
                                     </span>
                                 <?php endif; ?>
-                                <?php if ($incompleteSections): ?>
+                                <?php if (!empty($compositeGaps['sections'])): ?>
                                     <span class="badge badge--gradebook-sections">Есть незаполненные разделы</span>
+                                <?php endif; ?>
+                                <?php if (!empty($compositeGaps['pa'])): ?>
+                                    <span class="badge badge--gradebook-pa">Не выставлена ПА</span>
                                 <?php endif; ?>
                             </td>
                             <td class="table__actions">

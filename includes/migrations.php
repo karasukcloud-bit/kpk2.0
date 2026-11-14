@@ -91,6 +91,8 @@ function run_migrations(PDO $pdo): void
     ensure_organization_schema($pdo);
     ensure_curriculum_schema($pdo);
     ensure_students_schema($pdo);
+    require_once __DIR__ . '/individual_schedule.php';
+    ensure_student_individual_schedules_schema($pdo);
     ensure_gradebook_schema($pdo);
     ensure_attendance_schema($pdo);
     ensure_journal_schema($pdo);

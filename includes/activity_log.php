@@ -49,12 +49,15 @@ function activity_log_action_options(): array
         'student.create' => 'Добавление студента',
         'student.delete' => 'Удаление студента',
         'student.purge' => 'Безвозвратное удаление студента',
+        'student.igo_enable' => 'Включение ИГО студента',
+        'student.igo_disable' => 'Снятие ИГО студента',
         'journal.lesson_add' => 'Добавление даты в журнал',
         'journal.lesson_update' => 'Изменение даты в журнале',
         'journal.lesson_delete' => 'Удаление даты из журнала',
         'journal.grade_save' => 'Изменение оценки в журнале',
         'manual_brs.entry_save' => 'Изменение оценки в ручном БРС',
         'manual_brs.pa_save' => 'Изменение ПА в ручном БРС',
+        'manual_brs.kn_quick_save' => 'Изменение оценки КН (быстрый ввод) в ручном БРС',
         'archive.import_json' => 'Импорт архивных ведомостей (JSON)',
     ];
 }
@@ -588,6 +591,51 @@ function activity_log_manual_brs_pa(
         'manual_brs_pa',
         $curriculumItemId,
         (int) ($student['group_id'] ?? ($ctx['group_id'] ?? 0)) ?: null,
+        $details
+    );
+}
+
+/**
+ * Лог быстрой оценки КН (ввод в строке ведомости ручного БРС).
+ *
+ * @param array<string, mixed> $sheet
+ * @param array<string, mixed> $student
+ */
+function activity_log_manual_brs_kn_quick(
+    array $sheet,
+    array $student,
+    ?int $oldGrade,
+    ?int $newGrade,
+    ?int $entryId = null
+): void {
+    if ($oldGrade === $newGrade) {
+        return;
+    }
+
+    require_once __DIR__ . '/../modules/manual_brs/includes/periods.php';
+
+    $itemId = (int) ($sheet['curriculum_item_id'] ?? 0);
+    $ctx = activity_log_journal_context($itemId);
+    $periodMeta = manual_brs_period_meta((int) ($sheet['period'] ?? 1));
+
+    $details = array_merge($ctx, [
+        'module' => 'Ручное БРС',
+        'period_label' => (string) ($periodMeta['label'] ?? ''),
+        'academic_year' => (string) ($sheet['academic_year'] ?? ($ctx['academic_year'] ?? '')),
+        'student_name' => person_last_first_name((string) ($student['full_name'] ?? '')),
+        'input_mode' => 'kn_quick',
+        'old_kn_grade' => $oldGrade,
+        'kn_grade' => $newGrade,
+        'old_mark' => $oldGrade !== null ? (string) $oldGrade : '—',
+        'mark' => $newGrade !== null ? (string) $newGrade : '—',
+        'extra' => 'КН (быстрый ввод)',
+    ]);
+
+    log_activity(
+        'manual_brs.kn_quick_save',
+        'manual_brs_entry',
+        $entryId,
+        (int) ($sheet['group_id'] ?? ($student['group_id'] ?? ($ctx['group_id'] ?? 0))) ?: null,
         $details
     );
 }

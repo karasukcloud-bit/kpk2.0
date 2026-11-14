@@ -72,7 +72,7 @@ $showPageLoader = !empty($showPageLoader) || in_array($scriptBase, $heavyPageScr
     <link rel="apple-touch-icon" href="<?= e($basePath) ?>assets/img/apple-touch-icon.png" sizes="180x180">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-192.png" type="image/png" sizes="192x192">
     <link rel="icon" href="<?= e($basePath) ?>assets/img/icon-512.png" type="image/png" sizes="512x512">
-    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261112glaz">
+    <link rel="stylesheet" href="<?= e($basePath) ?>assets/css/style.css?v=20261114igo2">
     <style>
         .page-loader{position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:1rem;background:rgba(247,248,252,.88);backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);opacity:0;visibility:hidden;pointer-events:none;transition:opacity .15s ease,visibility .15s ease}
         html.page-loader-on .page-loader{opacity:1;visibility:visible;pointer-events:auto}

@@ -3716,4 +3716,57 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    document.querySelectorAll('[data-igo-root]').forEach((root) => {
+        const url = root.getAttribute('data-igo-url') || '';
+        const csrfToken = root.getAttribute('data-csrf') || '';
+        if (!url) {
+            return;
+        }
+
+        root.addEventListener('click', async (event) => {
+            const btn = event.target.closest('[data-igo-toggle]');
+            if (!btn || !root.contains(btn) || btn.disabled) {
+                return;
+            }
+
+            const studentId = btn.getAttribute('data-student-id') || '';
+            const year = btn.getAttribute('data-year') || '';
+            const semester = btn.getAttribute('data-semester') || '';
+            const enabledNow = btn.getAttribute('data-enabled') === '1';
+            const nextEnabled = enabledNow ? '0' : '1';
+            const confirmMsg = enabledNow
+                ? 'Снять отметку ИГО у студента?'
+                : 'Отметить студента как ИГО на этот семестр? Пустые оценки не будут требоваться.';
+            if (!window.confirm(confirmMsg)) {
+                return;
+            }
+
+            btn.disabled = true;
+            const formData = new FormData();
+            formData.append('csrf_token', csrfToken);
+            formData.append('student_id', studentId);
+            formData.append('academic_year', year);
+            formData.append('semester', semester);
+            formData.append('enabled', nextEnabled);
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                });
+                const data = await response.json();
+                if (!data || !data.success) {
+                    window.alert((data && data.error) || 'Не удалось сохранить ИГО.');
+                    btn.disabled = false;
+                    return;
+                }
+                window.location.reload();
+            } catch (err) {
+                window.alert('Ошибка сети при сохранении ИГО.');
+                btn.disabled = false;
+            }
+        });
+    });
 });

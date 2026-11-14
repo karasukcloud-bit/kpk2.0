@@ -23,8 +23,10 @@ function manual_brs_gradebook_pdf_build_document(
         return null;
     }
 
+    require_once __DIR__ . '/../../../includes/individual_schedule.php';
     $grades = manual_brs_get_gradebook_grades($groupId, $academicYear, $semester);
-    $summary = build_gradebook_summary($students, $subjects, $grades);
+    $igoIds = get_group_individual_schedule_ids($groupId, $academicYear, $semester);
+    $summary = build_gradebook_summary($students, $subjects, $grades, $igoIds);
     $isControlWeek = manual_brs_is_control_week($groupId, $academicYear, $semester, $subjects);
 
     return [
@@ -35,6 +37,7 @@ function manual_brs_gradebook_pdf_build_document(
         'students' => $students,
         'subjects' => $subjects,
         'grades' => $grades,
+        'igo_ids' => $igoIds,
         'summary' => $summary,
         'is_control_week' => $isControlWeek,
         'title' => manual_brs_gradebook_title(
@@ -166,6 +169,17 @@ body {
     padding-left: 3px;
     padding-right: 3px;
 }
+
+.pdf-igo {
+    font-size: 7px;
+    font-weight: 700;
+    color: #1e3a5f;
+}
+
+.pdf-table__grade--igo {
+    color: #1e3a5f;
+    font-size: 8px;
+}
 CSS
         . gradebook_pdf_subject_styles($headerMetrics);
 }
@@ -253,14 +267,20 @@ function manual_brs_gradebook_pdf_render_html(array $document): string
         }
         $html .= '</tr></thead><tbody>';
 
+        $igoIds = $document['igo_ids'] ?? [];
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
+            $isIgo = isset($igoIds[$studentId]);
             $html .= '<tr><td class="pdf-table__student">'
-                . e(person_last_first_name((string) $student['full_name'])) . '</td>';
+                . e(person_last_first_name((string) $student['full_name']));
+            if ($isIgo) {
+                $html .= ' <span class="pdf-igo">ИГО</span>';
+            }
+            $html .= '</td>';
             foreach ($subjectChunk as $subject) {
                 $itemId = (int) $subject['curriculum_item_id'];
                 $value = $grades[$studentId][$itemId] ?? null;
-                $html .= gradebook_pdf_grade_td($value);
+                $html .= gradebook_pdf_grade_td($value, $isIgo);
             }
             $html .= '</tr>';
         }

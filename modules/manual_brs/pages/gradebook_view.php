@@ -14,6 +14,7 @@ require_once __DIR__ . '/../../../includes/gradebook.php';
 require_once __DIR__ . '/../../../includes/curriculum.php';
 require_once __DIR__ . '/../../../includes/gradebook_composites.php';
 require_once __DIR__ . '/../../../includes/gradebook_composite_ui.php';
+require_once __DIR__ . '/../../../includes/individual_schedule.php';
 require_once __DIR__ . '/../bootstrap.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 
@@ -78,11 +79,15 @@ $sheetTitle = '';
 $orgName = '';
 $compositeMap = [];
 
+$igoIds = [];
+$canToggleIgo = false;
 if ($group !== null) {
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $year, $semester);
     $grades = manual_brs_get_gradebook_grades($groupId, $year, $semester);
-    $summary = build_gradebook_summary($students, $subjects, $grades);
+    $igoIds = get_group_individual_schedule_ids($groupId, $year, $semester);
+    $canToggleIgo = can_manage_individual_schedule();
+    $summary = build_gradebook_summary($students, $subjects, $grades, $igoIds);
     $studentLists = manual_brs_build_gradebook_student_lists(
         $groupId,
         $year,
@@ -197,7 +202,7 @@ require __DIR__ . '/../../../includes/header.php';
                                     'manual_brs'
                                 );
                                 $studentCount = (int) ($status['students'] ?? 0);
-                                $incompleteSections = group_has_incomplete_composite_sections(
+                                $compositeGaps = group_composite_gap_flags(
                                     $gId,
                                     $year,
                                     $semester,
@@ -226,8 +231,11 @@ require __DIR__ . '/../../../includes/header.php';
                                                 <?= (int) $status['filled'] ?>/<?= (int) $status['expected'] ?>
                                             </span>
                                         <?php endif; ?>
-                                        <?php if ($incompleteSections): ?>
+                                        <?php if (!empty($compositeGaps['sections'])): ?>
                                             <span class="badge badge--gradebook-sections">Есть незаполненные разделы</span>
+                                        <?php endif; ?>
+                                        <?php if (!empty($compositeGaps['pa'])): ?>
+                                            <span class="badge badge--gradebook-pa">Не выставлена ПА</span>
                                         <?php endif; ?>
                                     </td>
                                     <td class="table__actions">
@@ -315,7 +323,12 @@ require __DIR__ . '/../../../includes/header.php';
                     <?php endif; ?>
                 </header>
 
-                <div class="table-wrap">
+                <div
+                    class="table-wrap"
+                    data-igo-root
+                    data-igo-url="<?= e(app_base_path()) ?>deputy/individual_schedule_toggle.php"
+                    data-csrf="<?= e(csrf_token()) ?>"
+                >
                     <table class="table gradebook-table gradebook-table--readonly">
                         <thead>
                             <tr>
@@ -330,6 +343,7 @@ require __DIR__ . '/../../../includes/header.php';
                             <?php
                             $studentId = (int) $student['id'];
                             $studentGrades = $grades[$studentId] ?? [];
+                            $isIgo = isset($igoIds[$studentId]);
                             $hasTwo = false;
                             foreach ($studentGrades as $g) {
                                 if ((int) $g === 2) {
@@ -337,19 +351,24 @@ require __DIR__ . '/../../../includes/header.php';
                                     break;
                                 }
                             }
+                            $rowClasses = [];
+                            if ($hasTwo) {
+                                $rowClasses[] = 'gradebook-row--has-two';
+                            }
+                            if ($isIgo) {
+                                $rowClasses[] = 'gradebook-row--igo';
+                            }
                             ?>
-                            <tr<?= $hasTwo ? ' class="gradebook-row--has-two"' : '' ?>>
-                                <td class="gradebook-table__student-col">
-                                    <?= e(person_last_first_name((string) $student['full_name'])) ?>
-                                </td>
+                            <tr<?= $rowClasses !== [] ? ' class="' . e(implode(' ', $rowClasses)) . '"' : '' ?>>
+                                <?php render_gradebook_igo_student_cell($student, $isIgo, $canToggleIgo, $year, $semester); ?>
                                 <?php foreach ($subjects as $subject): ?>
                                 <?php
                                 $itemId = (int) $subject['curriculum_item_id'];
                                 $value = $studentGrades[$itemId] ?? null;
                                 $isTwo = $value !== null && (int) $value === 2;
                                 ?>
-                                <td class="gradebook-table__cell gradebook-table__grade-cell<?= $isTwo ? ' gradebook-grade--two' : '' ?>">
-                                    <?= $value !== null ? e((string) $value) : '—' ?>
+                                <td class="gradebook-table__cell gradebook-table__grade-cell<?= $isTwo ? ' gradebook-grade--two' : '' ?><?= $value === null && $isIgo ? ' gradebook-grade--igo' : '' ?>">
+                                    <?= $value !== null ? e((string) $value) : e(gradebook_empty_cell_label($isIgo)) ?>
                                 </td>
                                 <?php endforeach; ?>
                             </tr>

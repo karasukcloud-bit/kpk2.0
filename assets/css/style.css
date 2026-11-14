@@ -2613,6 +2613,13 @@ body {
     color: #9a3412;
 }
 
+.badge--gradebook-pa {
+    display: inline-block;
+    margin-top: 0.25rem;
+    background: #e0e7ff;
+    color: #3730a3;
+}
+
 #gradebook-composite-table-wrap {
     max-height: min(60vh, 520px);
     overflow: auto;
@@ -4385,6 +4392,55 @@ body.modal-open {
 .badge--gradebook-incomplete {
     background: #fee2e2;
     color: #991b1b;
+}
+
+.badge--igo {
+    background: #e0e7ff;
+    color: #1e3a8a;
+    text-transform: none;
+    letter-spacing: 0;
+    vertical-align: middle;
+}
+
+.gradebook-igo-name {
+    margin-right: 0.25rem;
+}
+
+.gradebook-igo-toggle {
+    margin-left: 0.35rem;
+    padding: 0.1rem 0.4rem;
+    font-size: 0.72rem;
+    line-height: 1.2;
+    vertical-align: middle;
+}
+
+.gradebook-row--igo .gradebook-table__student-col {
+    background: #f8fafc;
+}
+
+.gradebook-grade--igo {
+    color: #1e3a8a;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.igo-filters__search {
+    display: flex;
+    gap: 0.4rem;
+    align-items: center;
+}
+
+.igo-filters__search .form__input {
+    min-width: 12rem;
+}
+
+.igo-summary {
+    margin: 0.75rem 0 1rem;
+}
+
+.igo-disable-form {
+    display: inline-flex;
+    margin-left: 0.35rem;
 }
 
 .badge--student-complete {

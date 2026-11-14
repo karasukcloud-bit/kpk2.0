@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/db.php';
 require_once __DIR__ . '/curriculum.php';
 require_once __DIR__ . '/students.php';
+require_once __DIR__ . '/individual_schedule.php';
 
 const GRADE_VALUES = [2, 3, 4, 5];
 
@@ -315,14 +316,15 @@ function get_gradebook_completion_status(
     string $semester,
     string $source = 'journal'
 ): array {
+    require_once __DIR__ . '/individual_schedule.php';
+
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     $studentCount = count($students);
     $subjectCount = count($subjects);
-    $expected = $studentCount * $subjectCount;
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
 
-    if ($expected === 0) {
+    if ($studentCount === 0 || $subjectCount === 0) {
         return [
             'complete' => false,
             'empty' => true,
@@ -335,17 +337,10 @@ function get_gradebook_completion_status(
     }
 
     $grades = get_gradebook_grades_by_source($groupId, $academicYear, $semester, $source);
-    $filled = 0;
-
-    foreach ($students as $student) {
-        $studentId = (int) $student['id'];
-        foreach ($subjects as $subject) {
-            $itemId = (int) $subject['curriculum_item_id'];
-            if (isset($grades[$studentId][$itemId])) {
-                $filled++;
-            }
-        }
-    }
+    $igoIds = get_group_individual_schedule_ids($groupId, $academicYear, $semester);
+    $counts = gradebook_count_filled_expected($students, $subjects, $grades, $igoIds);
+    $filled = $counts['filled'];
+    $expected = $counts['expected'];
 
     return [
         'complete' => $filled === $expected,
@@ -368,16 +363,18 @@ function get_group_gradebook_overview(
     string $semester,
     string $source = 'journal'
 ): array {
+    require_once __DIR__ . '/individual_schedule.php';
+
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     $studentCount = count($students);
     $subjectCount = count($subjects);
-    $expected = $studentCount * $subjectCount;
     $manualBrsBatch = null;
     $grades = [];
+    $igoIds = get_group_individual_schedule_ids($groupId, $academicYear, $semester);
 
-    if ($expected > 0) {
+    if ($studentCount > 0 && $subjectCount > 0) {
         if ($source === 'manual_brs' && is_manual_brs_gradebook_active()) {
             require_once __DIR__ . '/../modules/manual_brs/bootstrap.php';
             require_once __DIR__ . '/../modules/manual_brs/includes/data.php';
@@ -395,20 +392,11 @@ function get_group_gradebook_overview(
         }
     }
 
-    $filled = 0;
-    if ($expected > 0) {
-        foreach ($students as $student) {
-            $studentId = (int) $student['id'];
-            foreach ($subjects as $subject) {
-                $itemId = (int) $subject['curriculum_item_id'];
-                if (isset($grades[$studentId][$itemId])) {
-                    $filled++;
-                }
-            }
-        }
-    }
+    $counts = gradebook_count_filled_expected($students, $subjects, $grades, $igoIds);
+    $filled = $counts['filled'];
+    $expected = $counts['expected'];
 
-    $summary = build_gradebook_summary($students, $subjects, $grades);
+    $summary = build_gradebook_summary($students, $subjects, $grades, $igoIds);
     if ($source === 'manual_brs' && is_manual_brs_gradebook_active()) {
         require_once __DIR__ . '/../modules/manual_brs/includes/gradebook.php';
         $lists = manual_brs_build_gradebook_student_lists(
@@ -421,16 +409,18 @@ function get_group_gradebook_overview(
             $manualBrsBatch
         );
     } else {
-        $lists = build_gradebook_student_lists($students, $subjects, $grades);
+        $lists = build_gradebook_student_lists($students, $subjects, $grades, $igoIds);
     }
+
+    $structurallyEmpty = $studentCount === 0 || $subjectCount === 0;
 
     return [
         'students' => $studentCount,
         'subjects' => $subjectCount,
         'filled' => $filled,
         'expected' => $expected,
-        'complete' => $expected > 0 && $filled === $expected,
-        'empty' => $expected === 0,
+        'complete' => !$structurallyEmpty && $filled === $expected,
+        'empty' => $structurallyEmpty,
         'summary' => $summary,
         'with_twos' => count($lists['with_twos']),
         'only_good' => count($lists['only_good']),
@@ -485,6 +475,8 @@ function get_group_gradebook_year_overview(
     string $academicYear,
     string $source = 'journal'
 ): array {
+    require_once __DIR__ . '/individual_schedule.php';
+
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     $students = get_students_by_group($groupId);
     $subjects1 = get_group_curriculum_subjects($groupId, $academicYear, '1');
@@ -492,38 +484,43 @@ function get_group_gradebook_year_overview(
     $subjects = merge_gradebook_subjects($subjects1, $subjects2);
     $studentCount = count($students);
     $subjectCount = count($subjects);
-    $expected = $studentCount * $subjectCount;
     $grades = [];
+    $igo1 = get_group_individual_schedule_ids($groupId, $academicYear, '1');
+    $igo2 = get_group_individual_schedule_ids($groupId, $academicYear, '2');
+    $igoIds = $igo1 + $igo2;
 
-    if ($expected > 0) {
+    if ($studentCount > 0 && $subjectCount > 0) {
         $grades1 = get_gradebook_grades_by_source($groupId, $academicYear, '1', $source);
         $grades2 = get_gradebook_grades_by_source($groupId, $academicYear, '2', $source);
         $grades = merge_gradebook_grades($grades1, $grades2);
     }
 
-    $filled = 0;
-    if ($expected > 0) {
-        foreach ($students as $student) {
-            $studentId = (int) $student['id'];
-            foreach ($subjects as $subject) {
-                $itemId = (int) $subject['curriculum_item_id'];
-                if (isset($grades[$studentId][$itemId])) {
-                    $filled++;
-                }
-            }
-        }
-    }
+    $counts = gradebook_count_filled_expected_year(
+        $students,
+        $subjects,
+        $grades,
+        $subjects1,
+        $subjects2,
+        $igo1,
+        $igo2
+    );
+    $filled = $counts['filled'];
+    $expected = $counts['expected'];
 
-    $summary = build_gradebook_summary($students, $subjects, $grades);
-    $lists = build_gradebook_student_lists($students, $subjects, $grades);
+    $summary = build_gradebook_summary($students, $subjects, $grades, $igoIds);
+    $summary['expected_grades'] = $expected;
+    $summary['filled_grades'] = $filled;
+    $lists = build_gradebook_student_lists($students, $subjects, $grades, $igoIds);
+
+    $structurallyEmpty = $studentCount === 0 || $subjectCount === 0;
 
     return [
         'students' => $studentCount,
         'subjects' => $subjectCount,
         'filled' => $filled,
         'expected' => $expected,
-        'complete' => $expected > 0 && $filled === $expected,
-        'empty' => $expected === 0,
+        'complete' => !$structurallyEmpty && $filled === $expected,
+        'empty' => $structurallyEmpty,
         'summary' => $summary,
         'with_twos' => count($lists['with_twos']),
         'only_good' => count($lists['only_good']),
@@ -987,10 +984,13 @@ function gradebook_pdf_subject_th(string $name): string
     return $html;
 }
 
-function gradebook_pdf_grade_td(mixed $value): string
+function gradebook_pdf_grade_td(mixed $value, bool $isIgo = false): string
 {
     if ($value === null || $value === '') {
-        return '<td class="pdf-table__grade">—</td>';
+        $label = gradebook_empty_cell_label($isIgo);
+
+        return '<td class="pdf-table__grade' . ($isIgo ? ' pdf-table__grade--igo' : '') . '">'
+            . e($label) . '</td>';
     }
 
     $grade = (int) $value;
@@ -1111,11 +1111,18 @@ function render_gradebook_sheet_header(
     <?php
 }
 
-function build_gradebook_summary(array $students, array $subjects, array $grades): array
-{
+/**
+ * @param array<int, true> $igoIds
+ */
+function build_gradebook_summary(
+    array $students,
+    array $subjects,
+    array $grades,
+    array $igoIds = []
+): array {
     $totalStudents = count($students);
-    $subjectCount = count($subjects);
-    $expectedGrades = $totalStudents * $subjectCount;
+    $counts = gradebook_count_filled_expected($students, $subjects, $grades, $igoIds);
+    $expectedGrades = $counts['expected'];
 
     $emptyMetrics = [
         'grade_counts' => [2 => 0, 3 => 0, 4 => 0, 5 => 0],
@@ -1249,8 +1256,15 @@ function build_gradebook_summary(array $students, array $subjects, array $grades
     ];
 }
 
-function build_gradebook_student_lists(array $students, array $subjects, array $grades): array
-{
+/**
+ * @param array<int, true> $igoIds
+ */
+function build_gradebook_student_lists(
+    array $students,
+    array $subjects,
+    array $grades,
+    array $igoIds = []
+): array {
     $withTwos = [];
     $onlyGood = [];
     $excellent = [];
@@ -1286,6 +1300,9 @@ function build_gradebook_student_lists(array $students, array $subjects, array $
         }
 
         if ($values === []) {
+            if (isset($igoIds[$studentId])) {
+                continue;
+            }
             $unassessed[] = [
                 'student_id' => $studentId,
                 'full_name' => (string) $student['full_name'],

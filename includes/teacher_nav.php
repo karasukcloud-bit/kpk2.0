@@ -30,4 +30,10 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
         Ручное БРС
     </a>
     <?php endif; ?>
+    <a href="<?= e(app_base_path()) ?>teacher/testoria.php"
+       class="admin-tabs__item<?= $currentTeacherTab === 'testoria' ? ' admin-tabs__item--active' : '' ?>"
+       target="_blank"
+       rel="noopener noreferrer">
+        Тестория
+    </a>
 </nav>

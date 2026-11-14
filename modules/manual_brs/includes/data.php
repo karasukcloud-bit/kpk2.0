@@ -495,6 +495,19 @@ function manual_brs_save_stage1_quick_grade(
     }
 
     $existing = manual_brs_get_entry($sheetId, $studentId);
+    $oldQuick = null;
+    if ($existing !== null
+        && isset($existing['stage1_quick_grade'])
+        && $existing['stage1_quick_grade'] !== null
+        && $existing['stage1_quick_grade'] !== ''
+    ) {
+        $oldQuick = (int) $existing['stage1_quick_grade'];
+        if ($oldQuick < 2 || $oldQuick > 5) {
+            $oldQuick = null;
+        }
+    }
+
+    require_once __DIR__ . '/../../../includes/activity_log.php';
 
     if ($grade === null || $grade === '') {
         if ($existing) {
@@ -533,9 +546,14 @@ function manual_brs_save_stage1_quick_grade(
                     ],
                     $lessonsTotal
                 );
-                $recalc = manual_brs_calc_from_entry(
-                    manual_brs_get_entry($sheetId, $studentId) ?? [],
-                    $lessonsTotal
+                $saved = manual_brs_get_entry($sheetId, $studentId);
+                $recalc = manual_brs_calc_from_entry($saved ?? [], $lessonsTotal);
+                activity_log_manual_brs_kn_quick(
+                    $sheet,
+                    $student,
+                    $oldQuick,
+                    null,
+                    $saved ? (int) $saved['id'] : null
                 );
 
                 return [
@@ -551,8 +569,10 @@ function manual_brs_save_stage1_quick_grade(
 
             // Только оценка из строки — удаляем запись, иначе пустая ячейка
             // при lessons_total > 0 снова пересчитается в «2».
+            $entryId = (int) $existing['id'];
             $stmt = db()->prepare('DELETE FROM manual_brs_entries WHERE id = ?');
-            $stmt->execute([(int) $existing['id']]);
+            $stmt->execute([$entryId]);
+            activity_log_manual_brs_kn_quick($sheet, $student, $oldQuick, null, $entryId);
         }
 
         return [
@@ -583,6 +603,7 @@ function manual_brs_save_stage1_quick_grade(
              WHERE id = ?'
         );
         $stmt->execute([$grade, $points, $grade, (int) $existing['id']]);
+        $entryId = (int) $existing['id'];
     } else {
         $stmt = db()->prepare(
             'INSERT INTO manual_brs_entries
@@ -609,7 +630,10 @@ function manual_brs_save_stage1_quick_grade(
             $grade,
             $grade,
         ]);
+        $entryId = (int) db()->lastInsertId();
     }
+
+    activity_log_manual_brs_kn_quick($sheet, $student, $oldQuick, $grade, $entryId);
 
     return [
         'success' => true,

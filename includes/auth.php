@@ -295,6 +295,16 @@ function is_student_user(): bool
 function require_login(): void
 {
     if (!is_logged_in()) {
+        $return = (string) ($_SERVER['REQUEST_URI'] ?? '');
+        $path = parse_url($return, PHP_URL_PATH) ?: '';
+        $query = parse_url($return, PHP_URL_QUERY);
+        $relative = ltrim($path, '/');
+        if ($query) {
+            $relative .= '?' . $query;
+        }
+        if ($relative !== '' && !str_contains($relative, '..') && !preg_match('#^[a-z]+://#i', $relative)) {
+            redirect_to('login.php?return=' . rawurlencode($relative));
+        }
         redirect_to('login.php');
     }
 }

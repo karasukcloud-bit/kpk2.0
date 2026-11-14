@@ -119,6 +119,7 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
                 [
                     'title' => 'Документы',
                     'items' => [
+                        ['tab' => 'igo', 'href' => $base . 'igo.php', 'icon' => 'igo', 'label' => 'ИГО'],
                         ['tab' => 'expelled', 'href' => $base . 'expelled.php', 'icon' => 'expelled', 'label' => 'Отчисленные'],
                         ['tab' => 'archive', 'href' => $base . 'archive.php', 'icon' => 'archive', 'label' => 'Архив'],
                         ['tab' => 'notifications', 'href' => $base . 'notifications.php', 'icon' => 'notify', 'label' => 'Уведомления'],
@@ -139,6 +140,13 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
         if ($manualBrs) {
             $items[] = ['tab' => 'manual_brs', 'href' => $base . 'manual_brs.php', 'icon' => 'grades', 'label' => 'Ручное БРС'];
         }
+        $items[] = [
+            'tab' => 'testoria',
+            'href' => $base . 'testoria.php',
+            'icon' => 'testoria',
+            'label' => 'Тестория',
+            'external' => true,
+        ];
 
         return [
             'role' => 'teacher',

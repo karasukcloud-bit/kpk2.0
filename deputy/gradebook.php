@@ -9,6 +9,7 @@ require_once __DIR__ . '/../includes/gradebook.php';
 require_once __DIR__ . '/../includes/grading.php';
 require_once __DIR__ . '/../includes/gradebook_composites.php';
 require_once __DIR__ . '/../includes/gradebook_composite_ui.php';
+require_once __DIR__ . '/../includes/individual_schedule.php';
 
 require_login();
 if (!can_use_deputy_panel()) {
@@ -31,8 +32,10 @@ $year = $period['academic_year'];
 $semester = $period['semester'];
 $subjects = get_group_curriculum_subjects($groupId, $year, $semester);
 $grades = get_gradebook_grades_from_journal($groupId, $year, $semester);
-$summary = build_gradebook_summary($students, $subjects, $grades);
-$studentLists = build_gradebook_student_lists($students, $subjects, $grades);
+$igoIds = get_group_individual_schedule_ids($groupId, $year, $semester);
+$canToggleIgo = can_manage_individual_schedule();
+$summary = build_gradebook_summary($students, $subjects, $grades, $igoIds);
+$studentLists = build_gradebook_student_lists($students, $subjects, $grades, $igoIds);
 $compositeMap = build_gradebook_composite_fill_map(
     $students,
     $subjects,
@@ -87,7 +90,12 @@ require __DIR__ . '/../includes/header.php';
             );
             ?>
 
-            <div class="table-wrap">
+            <div
+                class="table-wrap"
+                data-igo-root
+                data-igo-url="<?= e(app_base_path()) ?>deputy/individual_schedule_toggle.php"
+                data-csrf="<?= e(csrf_token()) ?>"
+            >
                 <table class="table gradebook-table gradebook-table--readonly">
                     <thead>
                         <tr>
@@ -99,18 +107,19 @@ require __DIR__ . '/../includes/header.php';
                     </thead>
                     <tbody>
                         <?php foreach ($students as $student): ?>
-                        <tr>
-                            <td class="gradebook-table__student-col">
-                                <?= e(person_last_first_name((string) $student['full_name'])) ?>
-                            </td>
+                        <?php
+                        $studentId = (int) $student['id'];
+                        $isIgo = isset($igoIds[$studentId]);
+                        ?>
+                        <tr<?= $isIgo ? ' class="gradebook-row--igo"' : '' ?>>
+                            <?php render_gradebook_igo_student_cell($student, $isIgo, $canToggleIgo, $year, $semester); ?>
                             <?php foreach ($subjects as $subject): ?>
                             <?php
-                            $studentId = (int) $student['id'];
                             $itemId = (int) $subject['curriculum_item_id'];
                             $value = $grades[$studentId][$itemId] ?? null;
                             ?>
-                            <td class="gradebook-table__cell gradebook-table__grade-cell">
-                                <?= $value !== null ? e((string) $value) : '—' ?>
+                            <td class="gradebook-table__cell gradebook-table__grade-cell<?= $value === null && $isIgo ? ' gradebook-grade--igo' : '' ?>">
+                                <?= $value !== null ? e((string) $value) : e(gradebook_empty_cell_label($isIgo)) ?>
                             </td>
                             <?php endforeach; ?>
                         </tr>

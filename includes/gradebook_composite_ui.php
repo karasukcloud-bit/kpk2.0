@@ -158,8 +158,17 @@ function render_gradebook_composite_modals(array $compositeMap): void
                 return;
             }
             title.textContent = item.subject_name || 'Дисциплина';
+            const gapParts = [];
+            if (item.has_section_gaps) {
+                gapParts.push('незаполненные разделы');
+            }
+            if (item.has_pa_gaps) {
+                gapParts.push('не выставлена ПА');
+            }
             meta.textContent = (item.status_label || '')
-                + (item.has_gaps ? ' · есть незаполненные разделы или ПА' : ' · разделы и ПА заполнены');
+                + (gapParts.length
+                    ? (' · ' + gapParts.join(', '))
+                    : ' · разделы и ПА заполнены');
 
             let html = '<table class="table gradebook-composite-detail-table"><thead><tr>';
             html += '<th>Студент</th>';

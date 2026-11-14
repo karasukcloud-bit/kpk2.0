@@ -195,7 +195,7 @@ function student_rating_category_label(string $category): string
     return match ($category) {
         'excellent' => 'Отличник',
         'good' => 'Хорошист',
-        'satisfactory' => 'Удовлетворительно',
+        'satisfactory' => 'Есть 3',
         'failing' => 'Есть «2»',
         default => '—',
     };

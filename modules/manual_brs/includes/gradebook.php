@@ -227,7 +227,9 @@ function manual_brs_build_gradebook_student_lists(
 ): array {
     require_once __DIR__ . '/data.php';
 
-    $lists = build_gradebook_student_lists($students, $subjects, $grades);
+    require_once __DIR__ . '/../../../includes/individual_schedule.php';
+    $igoIds = get_group_individual_schedule_ids($groupId, $academicYear, $semester);
+    $lists = build_gradebook_student_lists($students, $subjects, $grades, $igoIds);
     $withTwos = [];
     $ctx = $batchContext ?? manual_brs_build_grade_batch_context($academicYear, $semester, $subjects);
 

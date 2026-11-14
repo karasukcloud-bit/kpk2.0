@@ -19,15 +19,22 @@ function build_gradebook_composite_fill_map(
     string $semester,
     string $source = 'journal'
 ): array {
+    require_once __DIR__ . '/individual_schedule.php';
+
     $source = $source === 'manual_brs' ? 'manual_brs' : 'journal';
     $semester = $semester === '2' ? '2' : '1';
     if ($students === [] || $subjects === []) {
         return [];
     }
 
+    $groupId = (int) ($students[0]['group_id'] ?? 0);
+    $igoIds = $groupId > 0
+        ? get_group_individual_schedule_ids($groupId, $academicYear, $semester)
+        : [];
+
     return $source === 'manual_brs'
-        ? build_gradebook_composite_fill_map_manual_brs($students, $subjects, $academicYear, $semester)
-        : build_gradebook_composite_fill_map_journal($students, $subjects, $semester);
+        ? build_gradebook_composite_fill_map_manual_brs($students, $subjects, $academicYear, $semester, $igoIds)
+        : build_gradebook_composite_fill_map_journal($students, $subjects, $semester, $igoIds);
 }
 
 /**
@@ -35,10 +42,14 @@ function build_gradebook_composite_fill_map(
  * @param list<array<string,mixed>> $subjects
  * @return array<int, array<string,mixed>>
  */
+/**
+ * @param array<int, true> $igoIds
+ */
 function build_gradebook_composite_fill_map_journal(
     array $students,
     array $subjects,
-    string $semester
+    string $semester,
+    array $igoIds = []
 ): array {
     require_once __DIR__ . '/journal.php';
     require_once __DIR__ . '/grading.php';
@@ -94,7 +105,8 @@ function build_gradebook_composite_fill_map_journal(
             $students,
             $partGradesByChild,
             $paByStudent,
-            $studentCount
+            $studentCount,
+            $igoIds
         );
     }
 
@@ -106,11 +118,15 @@ function build_gradebook_composite_fill_map_journal(
  * @param list<array<string,mixed>> $subjects
  * @return array<int, array<string,mixed>>
  */
+/**
+ * @param array<int, true> $igoIds
+ */
 function build_gradebook_composite_fill_map_manual_brs(
     array $students,
     array $subjects,
     string $academicYear,
-    string $semester
+    string $semester,
+    array $igoIds = []
 ): array {
     if (!is_manual_brs_gradebook_active()) {
         return [];
@@ -170,7 +186,8 @@ function build_gradebook_composite_fill_map_manual_brs(
             $students,
             $partGradesByChild,
             $paByStudent,
-            $studentCount
+            $studentCount,
+            $igoIds
         );
     }
 
@@ -205,6 +222,9 @@ function gradebook_composite_pa_from_marks(array $marks): ?int
  * @param array<int, ?int> $paByStudent
  * @return array<string,mixed>
  */
+/**
+ * @param array<int, true> $igoIds
+ */
 function gradebook_composite_fill_pack(
     int $itemId,
     string $subjectName,
@@ -212,7 +232,8 @@ function gradebook_composite_fill_pack(
     array $students,
     array $partGradesByChild,
     array $paByStudent,
-    int $studentCount
+    int $studentCount,
+    array $igoIds = []
 ): array {
     $sectionsTotal = count($childMeta);
     $sectionsComplete = 0;
@@ -221,19 +242,27 @@ function gradebook_composite_fill_pack(
     foreach ($childMeta as $child) {
         $childId = (int) $child['curriculum_item_id'];
         $filled = 0;
+        $required = 0;
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
-            if (($partGradesByChild[$childId][$studentId] ?? null) !== null) {
+            $grade = $partGradesByChild[$childId][$studentId] ?? null;
+            $isIgo = isset($igoIds[$studentId]);
+            if ($isIgo && $grade === null) {
+                continue;
+            }
+            $required++;
+            if ($grade !== null) {
                 $filled++;
             }
         }
         $sectionFilledCounts[$childId] = $filled;
-        if ($studentCount > 0 && $filled === $studentCount) {
+        if ($required === 0 || $filled === $required) {
             $sectionsComplete++;
         }
     }
 
     $paFilled = 0;
+    $paRequired = 0;
     $rows = [];
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
@@ -252,8 +281,12 @@ function gradebook_composite_fill_pack(
             }
         }
         $paGrade = $paByStudent[$studentId] ?? null;
-        if ($paGrade !== null) {
-            $paFilled++;
+        $isIgo = isset($igoIds[$studentId]);
+        if (!($isIgo && $paGrade === null)) {
+            $paRequired++;
+            if ($paGrade !== null) {
+                $paFilled++;
+            }
         }
         $base = aggregate_composite_part_grades($partGrades);
         $rows[] = [
@@ -267,8 +300,9 @@ function gradebook_composite_fill_pack(
         ];
     }
 
-    $hasGaps = $sectionsComplete < $sectionsTotal
-        || ($studentCount > 0 && $paFilled < $studentCount);
+    $hasSectionGaps = $sectionsComplete < $sectionsTotal;
+    $hasPaGaps = $paRequired > 0 && $paFilled < $paRequired;
+    $hasGaps = $hasSectionGaps || $hasPaGaps;
 
     return [
         'curriculum_item_id' => $itemId,
@@ -278,7 +312,9 @@ function gradebook_composite_fill_pack(
         'sections_total' => $sectionsTotal,
         'section_filled_counts' => $sectionFilledCounts,
         'pa_filled' => $paFilled,
-        'pa_total' => $studentCount,
+        'pa_total' => $paRequired,
+        'has_section_gaps' => $hasSectionGaps,
+        'has_pa_gaps' => $hasPaGaps,
         'has_gaps' => $hasGaps,
         'rows' => $rows,
         'status_label' => sprintf(
@@ -286,21 +322,25 @@ function gradebook_composite_fill_pack(
             $sectionsComplete,
             $sectionsTotal,
             $paFilled,
-            $studentCount
+            $paRequired
         ),
     ];
 }
 
-function group_has_incomplete_composite_sections(
+/**
+ * @return array{sections: bool, pa: bool}
+ */
+function group_composite_gap_flags(
     int $groupId,
     string $academicYear,
     string $semester,
     string $source = 'journal'
-): bool {
+): array {
+    $flags = ['sections' => false, 'pa' => false];
     $students = get_students_by_group($groupId);
     $subjects = get_group_curriculum_subjects($groupId, $academicYear, $semester);
     if ($students === [] || $subjects === []) {
-        return false;
+        return $flags;
     }
 
     $map = build_gradebook_composite_fill_map(
@@ -311,10 +351,34 @@ function group_has_incomplete_composite_sections(
         $source
     );
     foreach ($map as $item) {
-        if (!empty($item['has_gaps'])) {
-            return true;
+        if (!empty($item['has_section_gaps'])) {
+            $flags['sections'] = true;
+        }
+        if (!empty($item['has_pa_gaps'])) {
+            $flags['pa'] = true;
+        }
+        if ($flags['sections'] && $flags['pa']) {
+            break;
         }
     }
 
-    return false;
+    return $flags;
+}
+
+function group_has_incomplete_composite_sections(
+    int $groupId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): bool {
+    return group_composite_gap_flags($groupId, $academicYear, $semester, $source)['sections'];
+}
+
+function group_has_incomplete_composite_pa(
+    int $groupId,
+    string $academicYear,
+    string $semester,
+    string $source = 'journal'
+): bool {
+    return group_composite_gap_flags($groupId, $academicYear, $semester, $source)['pa'];
 }

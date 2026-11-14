@@ -4,8 +4,14 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/includes/auth.php';
 
+$returnPath = trim((string) ($_GET['return'] ?? $_POST['return'] ?? ''));
+$returnPath = ltrim(str_replace(["\0", '\\'], '', $returnPath), '/');
+if ($returnPath === '' || str_contains($returnPath, '..') || preg_match('#^[a-z]+://#i', $returnPath)) {
+    $returnPath = '';
+}
+
 if (is_logged_in()) {
-    redirect_to(resolve_post_login_path());
+    redirect_to($returnPath !== '' ? $returnPath : resolve_post_login_path());
 }
 
 $error = flash_get('error');
@@ -26,7 +32,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         );
 
         if ($result['success']) {
-            redirect_to(resolve_post_login_path());
+            redirect_to($returnPath !== '' ? $returnPath : resolve_post_login_path());
         }
 
         $error = $result['error'];
@@ -66,6 +72,9 @@ require __DIR__ . '/includes/header.php';
 
     <form method="post" class="form" novalidate data-login-form>
         <?= csrf_field() ?>
+        <?php if ($returnPath !== ''): ?>
+            <input type="hidden" name="return" value="<?= e($returnPath) ?>">
+        <?php endif; ?>
 
         <div class="auth-login-switch" role="radiogroup" aria-label="Способ входа">
             <label class="auth-login-switch__item">
