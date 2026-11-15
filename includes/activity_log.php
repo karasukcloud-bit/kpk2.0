@@ -55,6 +55,10 @@ function activity_log_action_options(): array
         'journal.lesson_update' => 'Изменение даты в журнале',
         'journal.lesson_delete' => 'Удаление даты из журнала',
         'journal.grade_save' => 'Изменение оценки в журнале',
+        'journal.absence_mark' => 'Отметка пропуска (Н) в журнале',
+        'attendance.day_save' => 'Отметка пропусков (журнал куратора)',
+        'attendance.day_delete' => 'Удаление записи пропусков',
+        'testoria.open' => 'Переход в Тесторию',
         'manual_brs.entry_save' => 'Изменение оценки в ручном БРС',
         'manual_brs.pa_save' => 'Изменение ПА в ручном БРС',
         'manual_brs.kn_quick_save' => 'Изменение оценки КН (быстрый ввод) в ручном БРС',
@@ -271,6 +275,13 @@ function activity_log_format_details(array $log): string
     if (!empty($details['topic_title'])) {
         $parts[] = 'тема «' . $details['topic_title'] . '»';
     }
+    if (array_key_exists('excused_total', $details) || array_key_exists('unexcused_total', $details)) {
+        $parts[] = 'уваж. ' . (int) ($details['excused_total'] ?? 0)
+            . ', неуваж. ' . (int) ($details['unexcused_total'] ?? 0);
+    }
+    if (!empty($details['students_count'])) {
+        $parts[] = 'записей: ' . (int) $details['students_count'];
+    }
     if (!empty($details['extra'])) {
         $parts[] = (string) $details['extra'];
     }
@@ -447,12 +458,93 @@ function activity_log_journal_grade(
         $details['extra'] = implode(', ', $flags);
     }
 
+    $isAbsence = $oldMark === 'Н' || $newMark === 'Н';
     log_activity(
-        'journal.grade_save',
+        $isAbsence ? 'journal.absence_mark' : 'journal.grade_save',
         'journal_grade',
         (int) $lesson['id'],
         (int) $lesson['group_id'],
         $details
+    );
+}
+
+/**
+ * Лог сохранения дня пропусков куратором.
+ *
+ * @param array<int, array{excused_lessons:int,unexcused_lessons:int,reason_id:?int}> $normalized
+ */
+function activity_log_attendance_day_save(
+    int $groupId,
+    string $date,
+    string $academicYear,
+    array $normalized,
+    int $dayId,
+    bool $isUpdate
+): void {
+    require_once __DIR__ . '/organization.php';
+
+    $group = get_group_by_id($groupId);
+    $excusedTotal = 0;
+    $unexcusedTotal = 0;
+    foreach ($normalized as $entry) {
+        $excusedTotal += (int) ($entry['excused_lessons'] ?? 0);
+        $unexcusedTotal += (int) ($entry['unexcused_lessons'] ?? 0);
+    }
+
+    $details = [
+        'module' => 'Пропуски',
+        'group_number' => (string) ($group['number'] ?? ''),
+        'academic_year' => $academicYear,
+        'lesson_date' => $date,
+        'students_count' => count($normalized),
+        'excused_total' => $excusedTotal,
+        'unexcused_total' => $unexcusedTotal,
+        'extra' => $isUpdate ? 'изменение' : 'создание',
+    ];
+
+    log_activity(
+        'attendance.day_save',
+        'attendance_day',
+        $dayId,
+        $groupId,
+        $details
+    );
+}
+
+function activity_log_attendance_day_delete(
+    int $groupId,
+    string $date,
+    string $academicYear,
+    int $dayId
+): void {
+    require_once __DIR__ . '/organization.php';
+
+    $group = get_group_by_id($groupId);
+    log_activity(
+        'attendance.day_delete',
+        'attendance_day',
+        $dayId,
+        $groupId,
+        [
+            'module' => 'Пропуски',
+            'group_number' => (string) ($group['number'] ?? ''),
+            'academic_year' => $academicYear,
+            'lesson_date' => $date,
+        ]
+    );
+}
+
+function activity_log_testoria_open(array $user): void
+{
+    log_activity(
+        'testoria.open',
+        'testoria',
+        (int) ($user['id'] ?? 0) ?: null,
+        null,
+        [
+            'module' => 'Тестория',
+            'extra' => 'SSO-переход',
+        ]
     );
 }
 

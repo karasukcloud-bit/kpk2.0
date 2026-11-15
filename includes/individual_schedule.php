@@ -275,6 +275,43 @@ function list_individual_schedule_students(
  * @param array<int, true> $igoIds
  * @return array{filled:int, expected:int}
  */
+/**
+ * Все оценки студента выставлены по каждому предмету ведомости.
+ * Для списков показателей/категорий пустые ячейки ИГО не считаются заполненными.
+ *
+ * @param list<array<string,mixed>> $subjects
+ * @param array<int, array<int, int>> $grades
+ * @param array<int, true> $igoIds параметр сохранён для совместимости вызовов
+ */
+function gradebook_student_is_fully_graded(
+    int $studentId,
+    array $subjects,
+    array $grades,
+    array $igoIds = []
+): bool {
+    unset($igoIds);
+    if ($subjects === []) {
+        return false;
+    }
+
+    $studentGrades = $grades[$studentId] ?? [];
+    $expected = 0;
+    $filled = 0;
+
+    foreach ($subjects as $subject) {
+        $itemId = (int) ($subject['curriculum_item_id'] ?? 0);
+        if ($itemId <= 0) {
+            continue;
+        }
+        $expected++;
+        if (isset($studentGrades[$itemId])) {
+            $filled++;
+        }
+    }
+
+    return $expected > 0 && $filled === $expected;
+}
+
 function gradebook_count_filled_expected(
     array $students,
     array $subjects,

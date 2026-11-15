@@ -24,6 +24,10 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
        class="admin-tabs__item<?= $currentDeputyTab === 'summary' ? ' admin-tabs__item--active' : '' ?>">
         Сводная ведомость
     </a>
+    <a href="performance_indicators.php"
+       class="admin-tabs__item<?= $currentDeputyTab === 'performance_indicators' ? ' admin-tabs__item--active' : '' ?>">
+        Показатели успеваемости
+    </a>
     <a href="subject_performance.php"
        class="admin-tabs__item<?= $currentDeputyTab === 'subject_performance' ? ' admin-tabs__item--active' : '' ?>">
         Успеваемость по предметам

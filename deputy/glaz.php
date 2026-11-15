@@ -203,11 +203,18 @@ require __DIR__ . '/../includes/header.php';
 </script>
 <?php endif; ?>
 
-<template id="glaz-commission-row-template">
-    <?php
-    $selectedId = 0;
-    require __DIR__ . '/../includes/glaz_commission_row.php';
-    ?>
+<template id="glaz-commission-chip-template">
+    <div class="glaz-commission__chip" data-teacher-id="">
+        <input type="hidden" name="commission[]" value="">
+        <span class="glaz-commission__chip-name"></span>
+        <button
+            type="button"
+            class="glaz-commission__chip-remove"
+            data-glaz-commission-remove
+            title="Убрать из комиссии"
+            aria-label="Убрать из комиссии"
+        >×</button>
+    </div>
 </template>
 
 <?php require __DIR__ . '/../includes/footer.php'; ?>

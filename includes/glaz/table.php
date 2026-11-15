@@ -173,40 +173,42 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
 
                                     <div class="glaz-commission" data-glaz-commission data-max="3">
                                         <span class="glaz-schedule-form__label">Состав комиссии</span>
-                                        <div class="glaz-commission__list" data-glaz-commission-list>
-                                            <?php
-                                            $commissionIds = glaz_commission_teacher_ids(
+                                        <?php
+                                        $commissionIds = array_values(array_filter(
+                                            glaz_commission_teacher_ids(
                                                 $schedule,
                                                 $item['suggested_commission_ids'] ?? []
-                                            );
-                                            $rowTeachers = $teachers;
-                                            $knownTeacherIds = [];
-                                            foreach ($rowTeachers as $t) {
-                                                $knownTeacherIds[(int) $t['id']] = true;
+                                            ),
+                                            static fn (int $id): bool => $id > 0
+                                        ));
+                                        $teacherNameById = [];
+                                        foreach ($teachers as $t) {
+                                            $teacherNameById[(int) $t['id']] = (string) $t['full_name'];
+                                        }
+                                        foreach ($schedule['commission'] ?? [] as $member) {
+                                            $mid = (int) ($member['teacher_id'] ?? 0);
+                                            if ($mid > 0 && !isset($teacherNameById[$mid])) {
+                                                $teacherNameById[$mid] = (string) ($member['full_name'] ?? '');
                                             }
-                                            foreach ($schedule['commission'] ?? [] as $member) {
-                                                $mid = (int) ($member['teacher_id'] ?? 0);
-                                                if ($mid > 0 && !isset($knownTeacherIds[$mid])) {
-                                                    $rowTeachers[] = [
-                                                        'id' => $mid,
-                                                        'full_name' => (string) ($member['full_name'] ?? ''),
-                                                    ];
-                                                    $knownTeacherIds[$mid] = true;
-                                                }
-                                            }
-                                            foreach ($commissionIds as $teacherId):
+                                        }
+                                        ?>
+                                        <div class="glaz-commission__chips" data-glaz-commission-list>
+                                            <?php foreach ($commissionIds as $teacherId):
                                                 $selectedId = (int) $teacherId;
-                                                $teachersForRow = $rowTeachers;
-                                                require __DIR__ . '/../glaz_commission_row.php';
-                                            endforeach;
-                                            ?>
+                                                $teacherName = $teacherNameById[$selectedId] ?? '';
+                                                require __DIR__ . '/../glaz_commission_chip.php';
+                                            endforeach; ?>
                                         </div>
-                                        <button
-                                            type="button"
-                                            class="glaz-commission__add"
-                                            data-glaz-commission-add
-                                            title="Добавить преподавателя"
-                                        >+ Добавить</button>
+                                        <div class="glaz-commission__picker">
+                                            <select data-glaz-commission-picker>
+                                                <option value="">— Добавить преподавателя —</option>
+                                                <?php foreach ($teachers as $teacher): ?>
+                                                <option value="<?= (int) $teacher['id'] ?>">
+                                                    <?= e((string) $teacher['full_name']) ?>
+                                                </option>
+                                                <?php endforeach; ?>
+                                            </select>
+                                        </div>
                                     </div>
 
                                     <div class="glaz-schedule-form__actions">

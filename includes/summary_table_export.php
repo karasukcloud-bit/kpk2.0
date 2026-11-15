@@ -45,6 +45,7 @@ function summary_export_sort_label(string $sort, string $dir): string
     $labels = [
         'absolute' => 'Абс. усп.',
         'quality' => 'Кач. усп.',
+        'group' => 'Группа',
     ];
     if (!isset($labels[$sort])) {
         return 'без сортировки';

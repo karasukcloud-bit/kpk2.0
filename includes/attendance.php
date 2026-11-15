@@ -413,12 +413,15 @@ function get_attendance_day(int $dayId, int $groupId): ?array
 function save_attendance_day(int $groupId, string $date, string $academicYear, array $entries, ?int $dayId = null): array
 {
     require_once __DIR__ . '/migrations.php';
+    require_once __DIR__ . '/activity_log.php';
     ensure_attendance_schema(db());
     ensure_attendance_entries_history_schema(db());
 
     if (!can_manage_group($groupId)) {
         return ['success' => false, 'error' => 'Нет доступа к группе.'];
     }
+
+    $isUpdate = $dayId !== null;
 
     $date = trim($date);
     if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $date) || strtotime($date) === false) {
@@ -543,11 +546,22 @@ function save_attendance_day(int $groupId, string $date, string $academicYear, a
         ]);
     }
 
+    activity_log_attendance_day_save(
+        $groupId,
+        $date,
+        $academicYear,
+        $normalized,
+        (int) $dayId,
+        $isUpdate
+    );
+
     return ['success' => true, 'day_id' => $dayId, 'month' => $dateMonth];
 }
 
 function delete_attendance_day(int $dayId, int $groupId): array
 {
+    require_once __DIR__ . '/activity_log.php';
+
     if (!can_manage_group($groupId)) {
         return ['success' => false, 'error' => 'Нет доступа к группе.'];
     }
@@ -556,6 +570,13 @@ function delete_attendance_day(int $dayId, int $groupId): array
     if ($day === null) {
         return ['success' => false, 'error' => 'Запись не найдена.'];
     }
+
+    activity_log_attendance_day_delete(
+        $groupId,
+        (string) ($day['attendance_date'] ?? ''),
+        (string) ($day['academic_year'] ?? ''),
+        $dayId
+    );
 
     db()->prepare('DELETE FROM attendance_days WHERE id = ?')->execute([$dayId]);
 

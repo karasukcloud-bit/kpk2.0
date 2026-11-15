@@ -111,6 +111,7 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
                     'title' => 'Аналитика',
                     'items' => [
                         ['tab' => 'summary', 'href' => $base . 'summary.php', 'icon' => 'stats', 'label' => 'Сводная ведомость'],
+                        ['tab' => 'performance_indicators', 'href' => $base . 'performance_indicators.php', 'icon' => 'stats', 'label' => 'Показатели успеваемости'],
                         ['tab' => 'subject_performance', 'href' => $base . 'subject_performance.php', 'icon' => 'stats', 'label' => 'Успеваемость по предметам'],
                         ['tab' => 'rating', 'href' => $base . 'rating.php', 'icon' => 'rating', 'label' => 'Рейтинг студентов'],
                         ['tab' => 'glaz', 'href' => $base . 'glaz.php', 'icon' => 'glaz', 'label' => 'ГЛАЗ'],

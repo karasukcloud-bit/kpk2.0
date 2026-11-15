@@ -235,6 +235,9 @@ function manual_brs_build_gradebook_student_lists(
 
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
+        if (!gradebook_student_is_fully_graded($studentId, $subjects, $grades, $igoIds)) {
+            continue;
+        }
         $studentGrades = $grades[$studentId] ?? [];
         $hasTwo = false;
         foreach ($studentGrades as $grade) {

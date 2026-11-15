@@ -1162,6 +1162,7 @@ function build_gradebook_summary(
         $values = [];
         $twos = 0;
         $threes = 0;
+        $fullyGraded = gradebook_student_is_fully_graded($studentId, $subjects, $grades, $igoIds);
 
         foreach ($subjects as $subject) {
             $itemId = (int) $subject['curriculum_item_id'];
@@ -1181,15 +1182,16 @@ function build_gradebook_summary(
             }
         }
 
+        // Абс./кач. успеваемость и связанные доли — только при полном наборе оценок.
+        if (!$fullyGraded || $values === []) {
+            continue;
+        }
+
         if ($twos === 1) {
             $oneTwoCount++;
         }
         if ($threes === 1) {
             $oneThreeCount++;
-        }
-
-        if ($values === []) {
-            continue;
         }
 
         $assessedStudents++;
@@ -1276,6 +1278,7 @@ function build_gradebook_student_lists(
         $studentGrades = $grades[$studentId] ?? [];
         $values = [];
         $twoSubjects = [];
+        $fullyGraded = gradebook_student_is_fully_graded($studentId, $subjects, $grades, $igoIds);
 
         foreach ($subjects as $subject) {
             $itemId = (int) $subject['curriculum_item_id'];
@@ -1291,24 +1294,28 @@ function build_gradebook_student_lists(
             }
         }
 
+        if (!$fullyGraded) {
+            if (!$hasSubjects) {
+                $reason = 'no_subjects';
+            } elseif ($values === []) {
+                $reason = 'no_grades';
+            } else {
+                $reason = 'incomplete';
+            }
+            $unassessed[] = [
+                'student_id' => $studentId,
+                'full_name' => (string) $student['full_name'],
+                'reason' => $reason,
+            ];
+            continue;
+        }
+
         if ($twoSubjects !== []) {
             $withTwos[] = [
                 'student_id' => $studentId,
                 'full_name' => (string) $student['full_name'],
                 'subjects' => $twoSubjects,
             ];
-        }
-
-        if ($values === []) {
-            if (isset($igoIds[$studentId])) {
-                continue;
-            }
-            $unassessed[] = [
-                'student_id' => $studentId,
-                'full_name' => (string) $student['full_name'],
-                'reason' => $hasSubjects ? 'no_grades' : 'no_subjects',
-            ];
-            continue;
         }
 
         $min = min($values);

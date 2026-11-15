@@ -1,6 +1,6 @@
 (function () {
     const PAGE_LOADER_KEY = 'kpk_page_loader';
-    const HEAVY_PAGE_RE = /\/(glaz|summary|rating|subject_performance|gradebook|grades|record_books?|manual_brs_gradebook|report|parent_reports|monthly_report|characteristics|activities|attendance|absence_rating|group_attendance|daily_attendance|all_students|stats|logs|students|teachers)\.php(?:$|\?)/i;
+    const HEAVY_PAGE_RE = /\/(glaz|summary|performance_indicators|rating|subject_performance|gradebook|grades|record_books?|manual_brs_gradebook|report|parent_reports|monthly_report|characteristics|activities|attendance|absence_rating|group_attendance|daily_attendance|all_students|stats|logs|students|teachers)\.php(?:$|\?)/i;
 
     const showPageLoader = (message) => {
         try {
@@ -3371,7 +3371,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const glazPage = document.querySelector('.glaz-page');
     if (glazPage) {
         const printBtn = glazPage.querySelector('[data-glaz-print]');
-        const commissionTemplate = document.getElementById('glaz-commission-row-template');
+        const commissionChipTemplate = document.getElementById('glaz-commission-chip-template');
 
         const formatGlazDate = (value) => {
             if (!value) {
@@ -3384,6 +3384,14 @@ document.addEventListener('DOMContentLoaded', () => {
             return `${parts[2]}.${parts[1]}.${parts[0]}`;
         };
 
+        const markGlazFormDirty = (form) => {
+            const statusNode = form?.querySelector('[data-glaz-status]');
+            if (statusNode) {
+                statusNode.textContent = 'Не сохранено — нажмите «Сохранить»';
+                statusNode.dataset.state = '';
+            }
+        };
+
         const syncGlazFormDisplay = (form) => {
             const displayNode = glazPage.querySelector(
                 `[data-glaz-display="${form.dataset.debtKey}"]`
@@ -3394,14 +3402,8 @@ document.addEventListener('DOMContentLoaded', () => {
 
             const dateValue = form.querySelector('[name="liquidation_date"]')?.value || '';
             const timeValue = form.querySelector('[name="liquidation_time"]')?.value || '';
-            const names = Array.from(form.querySelectorAll('select[name="commission[]"]'))
-                .map((select) => {
-                    const option = select.options[select.selectedIndex];
-                    if (!option || !option.value) {
-                        return '';
-                    }
-                    return option.textContent.trim();
-                })
+            const names = Array.from(form.querySelectorAll('.glaz-commission__chip-name'))
+                .map((node) => node.textContent.trim())
                 .filter(Boolean);
 
             const lineParts = [];
@@ -3428,82 +3430,112 @@ document.addEventListener('DOMContentLoaded', () => {
 
         const updateCommissionControls = (commissionBlock) => {
             const list = commissionBlock.querySelector('[data-glaz-commission-list]');
-            const addBtn = commissionBlock.querySelector('[data-glaz-commission-add]');
+            const pickerWrap = commissionBlock.querySelector('.glaz-commission__picker');
+            const picker = commissionBlock.querySelector('[data-glaz-commission-picker]');
             const max = parseInt(commissionBlock.dataset.max || '3', 10);
-            const rows = list ? list.querySelectorAll('.glaz-commission__row') : [];
+            const chips = list ? list.querySelectorAll('.glaz-commission__chip') : [];
+            const selected = new Set(
+                Array.from(chips).map((chip) => chip.dataset.teacherId || '')
+            );
 
-            if (addBtn) {
-                addBtn.hidden = rows.length >= max;
+            if (picker) {
+                Array.from(picker.options).forEach((option) => {
+                    if (!option.value) {
+                        option.hidden = false;
+                        option.disabled = false;
+                        return;
+                    }
+                    const taken = selected.has(option.value);
+                    option.hidden = taken;
+                    option.disabled = taken;
+                });
+                picker.selectedIndex = 0;
             }
 
-            rows.forEach((row) => {
-                const removeBtn = row.querySelector('[data-glaz-commission-remove]');
-                if (removeBtn) {
-                    removeBtn.hidden = false;
-                }
-            });
+            if (pickerWrap) {
+                pickerWrap.hidden = chips.length >= max;
+            }
+        };
+
+        const createCommissionChip = (teacherId, teacherName) => {
+            if (!commissionChipTemplate) {
+                return null;
+            }
+            const chip = commissionChipTemplate.content.firstElementChild.cloneNode(true);
+            chip.dataset.teacherId = String(teacherId);
+            const input = chip.querySelector('input[name="commission[]"]');
+            const nameNode = chip.querySelector('.glaz-commission__chip-name');
+            const removeBtn = chip.querySelector('[data-glaz-commission-remove]');
+            if (input) {
+                input.value = String(teacherId);
+            }
+            if (nameNode) {
+                nameNode.textContent = teacherName;
+            }
+            if (removeBtn) {
+                removeBtn.setAttribute('aria-label', `Убрать ${teacherName} из комиссии`);
+            }
+            return chip;
         };
 
         glazPage.querySelectorAll('[data-glaz-commission]').forEach(updateCommissionControls);
 
-        glazPage.addEventListener('click', (event) => {
-            const addBtn = event.target.closest('[data-glaz-commission-add]');
-            if (addBtn) {
-                const form = addBtn.closest('[data-glaz-form]');
-                const commissionBlock = addBtn.closest('[data-glaz-commission]');
-                const list = commissionBlock?.querySelector('[data-glaz-commission-list]');
-                const max = parseInt(commissionBlock?.dataset.max || '3', 10);
-
-                if (!list || !commissionTemplate || list.children.length >= max) {
-                    return;
-                }
-
-                const row = commissionTemplate.content.firstElementChild.cloneNode(true);
-                const select = row.querySelector('select');
-                if (select) {
-                    select.selectedIndex = 0;
-                }
-                list.appendChild(row);
-                updateCommissionControls(commissionBlock);
-                if (form) {
-                    syncGlazFormDisplay(form);
-                    const statusNode = form.querySelector('[data-glaz-status]');
-                    if (statusNode) {
-                        statusNode.textContent = 'Не сохранено — нажмите «Сохранить»';
-                        statusNode.dataset.state = '';
-                    }
-                }
+        glazPage.addEventListener('change', (event) => {
+            const picker = event.target.closest('[data-glaz-commission-picker]');
+            if (!picker) {
                 return;
             }
 
+            const form = picker.closest('[data-glaz-form]');
+            const commissionBlock = picker.closest('[data-glaz-commission]');
+            const list = commissionBlock?.querySelector('[data-glaz-commission-list]');
+            const max = parseInt(commissionBlock?.dataset.max || '3', 10);
+            const option = picker.options[picker.selectedIndex];
+            const teacherId = option?.value || '';
+            const teacherName = option?.textContent.trim() || '';
+
+            if (!list || !teacherId || !teacherName || list.children.length >= max) {
+                picker.selectedIndex = 0;
+                return;
+            }
+
+            if (list.querySelector(`.glaz-commission__chip[data-teacher-id="${teacherId}"]`)) {
+                picker.selectedIndex = 0;
+                return;
+            }
+
+            const chip = createCommissionChip(teacherId, teacherName);
+            if (!chip) {
+                return;
+            }
+            list.appendChild(chip);
+            updateCommissionControls(commissionBlock);
+            if (form) {
+                syncGlazFormDisplay(form);
+                markGlazFormDirty(form);
+            }
+        });
+
+        glazPage.addEventListener('click', (event) => {
             const removeBtn = event.target.closest('[data-glaz-commission-remove]');
-            if (removeBtn) {
-                const form = removeBtn.closest('[data-glaz-form]');
-                const commissionBlock = removeBtn.closest('[data-glaz-commission]');
-                const row = removeBtn.closest('.glaz-commission__row');
-                const list = commissionBlock?.querySelector('[data-glaz-commission-list]');
+            if (!removeBtn) {
+                return;
+            }
 
-                if (!row || !list) {
-                    return;
-                }
+            const form = removeBtn.closest('[data-glaz-form]');
+            const commissionBlock = removeBtn.closest('[data-glaz-commission]');
+            const chip = removeBtn.closest('.glaz-commission__chip');
+            if (!chip) {
+                return;
+            }
 
-                if (list.children.length > 1) {
-                    row.remove();
-                } else {
-                    const select = row.querySelector('select');
-                    if (select) {
-                        select.selectedIndex = 0;
-                    }
-                }
+            chip.remove();
+            if (commissionBlock) {
                 updateCommissionControls(commissionBlock);
-                if (form) {
-                    syncGlazFormDisplay(form);
-                    const statusNode = form.querySelector('[data-glaz-status]');
-                    if (statusNode) {
-                        statusNode.textContent = 'Не сохранено — нажмите «Сохранить»';
-                        statusNode.dataset.state = '';
-                    }
-                }
+            }
+            if (form) {
+                syncGlazFormDisplay(form);
+                markGlazFormDirty(form);
             }
         });
 
@@ -3529,7 +3561,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (
                     event.target.matches('[name="liquidation_date"]')
                     || event.target.matches('[name="liquidation_time"]')
-                    || event.target.matches('select[name="commission[]"]')
                 ) {
                     syncGlazFormDisplay(form);
                     setStatus('Не сохранено — нажмите «Сохранить»', '');
@@ -3577,10 +3608,17 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         const buttons = table.querySelectorAll('[data-summary-sort]');
-        let activeKey = '';
-        let activeDir = 'desc';
-        table.dataset.sortKey = '';
-        table.dataset.sortDir = '';
+        let activeKey = table.dataset.sortKey || '';
+        let activeDir = table.dataset.sortDir === 'asc' ? 'asc' : 'desc';
+        if (!activeKey) {
+            const preset = table.querySelector('[data-summary-sort].is-active');
+            if (preset?.dataset.summarySort) {
+                activeKey = preset.dataset.summarySort;
+                activeDir = preset.dataset.dir === 'asc' ? 'asc' : 'desc';
+                table.dataset.sortKey = activeKey;
+                table.dataset.sortDir = activeDir;
+            }
+        }
 
         const renumber = () => {
             Array.from(body.rows).forEach((row, index) => {
@@ -3594,6 +3632,14 @@ document.addEventListener('DOMContentLoaded', () => {
         const applySort = (key, dir) => {
             const rows = Array.from(body.rows);
             rows.sort((a, b) => {
+                if (key === 'group') {
+                    const cmp = String(a.dataset.group || '').localeCompare(
+                        String(b.dataset.group || ''),
+                        'ru',
+                        { numeric: true, sensitivity: 'base' }
+                    );
+                    return dir === 'asc' ? cmp : -cmp;
+                }
                 const av = parseFloat(a.dataset[key] || '0') || 0;
                 const bv = parseFloat(b.dataset[key] || '0') || 0;
                 return dir === 'asc' ? av - bv : bv - av;
@@ -3625,12 +3671,33 @@ document.addEventListener('DOMContentLoaded', () => {
                     activeDir = activeDir === 'desc' ? 'asc' : 'desc';
                 } else {
                     activeKey = key;
-                    activeDir = 'desc';
+                    activeDir = key === 'group' ? 'asc' : 'desc';
                 }
                 applySort(key, activeDir);
             });
         });
     });
+
+    const submitExportForm = (url, fields) => {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = url;
+        form.style.display = 'none';
+        Object.entries(fields).forEach(([name, value]) => {
+            const input = document.createElement('input');
+            input.type = 'hidden';
+            input.name = name;
+            input.value = value;
+            form.appendChild(input);
+        });
+        document.body.appendChild(form);
+        form.submit();
+    };
+
+    const tableGroupOrder = (table) => Array.from(table?.tBodies[0]?.rows || [])
+        .map((row) => row.dataset.groupId || '')
+        .filter(Boolean)
+        .join(',');
 
     document.querySelectorAll('[data-summary-export]').forEach((box) => {
         box.addEventListener('click', (event) => {
@@ -3644,37 +3711,77 @@ document.addEventListener('DOMContentLoaded', () => {
                 return;
             }
 
-            const order = Array.from(table.tBodies[0]?.rows || [])
-                .map((row) => row.dataset.groupId || '')
-                .filter(Boolean)
-                .join(',');
-
-            const form = document.createElement('form');
-            form.method = 'POST';
-            form.action = box.dataset.exportUrl;
-            form.style.display = 'none';
-
-            const fields = {
+            submitExportForm(box.dataset.exportUrl, {
                 csrf_token: box.dataset.csrf || '',
                 format,
                 year: box.dataset.year || '',
                 sem: box.dataset.sem || '',
                 source: box.dataset.source || 'journal',
+                order: tableGroupOrder(table),
+                sort: table.dataset.sortKey || '',
+                dir: table.dataset.sortDir || 'desc',
+            });
+        });
+    });
+
+    document.querySelectorAll('[data-perf-export]').forEach((box) => {
+        box.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-export-format]');
+            if (!btn || !box.dataset.exportUrl) {
+                return;
+            }
+            const format = btn.dataset.exportFormat;
+            if (!format) {
+                return;
+            }
+
+            const qualityTable = document.querySelector('[data-perf-table="quality"]');
+            const absoluteTable = document.querySelector('[data-perf-table="absolute"]');
+
+            submitExportForm(box.dataset.exportUrl, {
+                csrf_token: box.dataset.csrf || '',
+                format,
+                year: box.dataset.year || '',
+                sem: box.dataset.sem || '',
+                source: box.dataset.source || 'journal',
+                quality_order: tableGroupOrder(qualityTable),
+                absolute_order: tableGroupOrder(absoluteTable),
+                quality_sort: qualityTable?.dataset.sortKey || 'quality',
+                quality_dir: qualityTable?.dataset.sortDir || 'desc',
+                absolute_sort: absoluteTable?.dataset.sortKey || '',
+                absolute_dir: absoluteTable?.dataset.sortDir || 'desc',
+            });
+        });
+    });
+
+    document.querySelectorAll('[data-subject-perf-export]').forEach((box) => {
+        box.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-export-format]');
+            if (!btn || !box.dataset.exportUrl) {
+                return;
+            }
+            const format = btn.dataset.exportFormat;
+            const table = document.querySelector('[data-subject-perf-table]');
+            if (!format || !table) {
+                return;
+            }
+
+            const order = Array.from(table.tBodies[0]?.rows || [])
+                .map((row) => row.dataset.subjectKey || '')
+                .filter(Boolean)
+                .join('|');
+
+            submitExportForm(box.dataset.exportUrl, {
+                csrf_token: box.dataset.csrf || '',
+                format,
+                year: box.dataset.year || '',
+                sem: box.dataset.sem || '',
+                source: box.dataset.source || 'journal',
+                specialty: box.dataset.specialty || '',
                 order,
                 sort: table.dataset.sortKey || '',
                 dir: table.dataset.sortDir || 'desc',
-            };
-
-            Object.entries(fields).forEach(([name, value]) => {
-                const input = document.createElement('input');
-                input.type = 'hidden';
-                input.name = name;
-                input.value = value;
-                form.appendChild(input);
             });
-
-            document.body.appendChild(form);
-            form.submit();
         });
     });
 

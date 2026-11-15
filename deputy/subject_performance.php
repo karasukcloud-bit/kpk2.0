@@ -255,22 +255,56 @@ require __DIR__ . '/../includes/header.php';
 
     <section class="panel">
         <h2>Таблица по предметам</h2>
+        <div class="summary-table-toolbar">
+            <p class="text-muted summary-sort-hint">Нажмите «Абс. усп.» или «Кач. усп.» для сортировки. Экспорт учитывает текущий порядок.</p>
+            <div
+                class="summary-export-actions"
+                data-subject-perf-export
+                data-export-url="subject_performance_export.php"
+                data-year="<?= e($year) ?>"
+                data-sem="<?= e($viewSem) ?>"
+                data-source="<?= e($source) ?>"
+                data-specialty="<?= e($selectedSpecialty) ?>"
+                data-csrf="<?= e(csrf_token()) ?>"
+            >
+                <button type="button" class="btn btn--secondary btn--sm" data-export-format="pdf">Скачать PDF</button>
+                <button type="button" class="btn btn--secondary btn--sm" data-export-format="excel">Скачать Excel</button>
+            </div>
+        </div>
         <div class="table-wrap">
-            <table class="table">
+            <table class="table summary-groups-table" data-summary-groups-table data-subject-perf-table>
                 <thead>
                     <tr>
                         <th>№</th>
                         <th>Предмет</th>
                         <th>Оценок</th>
-                        <th>Абс. усп.</th>
-                        <th>Кач. усп.</th>
+                        <th>
+                            <button
+                                type="button"
+                                class="summary-sort-btn"
+                                data-summary-sort="absolute"
+                                aria-pressed="false"
+                            >Абс. усп.</button>
+                        </th>
+                        <th>
+                            <button
+                                type="button"
+                                class="summary-sort-btn"
+                                data-summary-sort="quality"
+                                aria-pressed="false"
+                            >Кач. усп.</button>
+                        </th>
                         <th>Средний балл</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php foreach ($subjects as $index => $subject): ?>
-                    <tr>
-                        <td><?= $index + 1 ?></td>
+                    <tr
+                        data-subject-key="<?= e((string) $subject['key']) ?>"
+                        data-absolute="<?= e((string) $subject['absolute_percent']) ?>"
+                        data-quality="<?= e((string) $subject['quality_percent']) ?>"
+                    >
+                        <td data-summary-row-num><?= $index + 1 ?></td>
                         <td><?= e((string) $subject['name']) ?></td>
                         <td><?= (int) $subject['assessed'] ?></td>
                         <td><?= e((string) $subject['absolute_percent']) ?>%</td>

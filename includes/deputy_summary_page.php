@@ -627,7 +627,7 @@ require __DIR__ . '/header.php';
                 ?>
                 <dt>Оценённых</dt>
                 <dd><?= (int) $totals['assessed'] ?> (<?= e((string) $metrics['assessed_percent']) ?>%)</dd>
-                <dt>Без оценок</dt>
+                <dt>Неоценённых</dt>
                 <dd>
                     <?php if ($unassessedCount > 0): ?>
                     <a href="#summary-unassessed"><?= $unassessedCount ?></a>
@@ -664,17 +664,19 @@ require __DIR__ . '/header.php';
 
     </section>
 
-    <?php if ($unassessedCount > 0): ?>
     <section class="panel summary-unassessed-panel" id="summary-unassessed">
         <div class="panel__header">
             <div>
-                <h2>Без итоговых оценок</h2>
+                <h2>Неоценённые студенты</h2>
                 <p class="text-muted">
-                    Студенты без ни одной итоговой оценки за <?= e($periodCaption) ?>
-                    (<?= $unassessedCount ?> чел., разница «студентов − оценённых»).
+                    Студенты без полного набора итоговых оценок за <?= e($periodCaption) ?>
+                    (<?= $unassessedCount ?> чел.). Они не входят в расчёт абс./кач. успеваемости.
                 </p>
             </div>
         </div>
+        <?php if ($unassessedCount === 0): ?>
+            <p class="text-muted">Все студенты имеют полный набор итоговых оценок.</p>
+        <?php else: ?>
         <div class="table-wrap">
             <table class="table">
                 <thead>
@@ -691,15 +693,17 @@ require __DIR__ . '/header.php';
                     $fullName = trim((string) ($member['full_name'] ?? ''));
                     $displayName = $fullName !== '' ? person_last_first_name($fullName) : '—';
                     $reason = (string) ($member['reason'] ?? 'no_grades');
-                    $note = $reason === 'no_subjects'
-                        ? 'В плане группы нет предметов на период'
-                        : 'Нет итоговых оценок';
+                    $note = match ($reason) {
+                        'no_subjects' => 'В плане группы нет предметов на период',
+                        'incomplete' => 'Выставлены не все итоговые оценки',
+                        default => 'Нет итоговых оценок',
+                    };
                     $gradebookUrl = $summaryGradebookHref . '?group_id=' . (int) ($member['group_id'] ?? 0);
                     ?>
                     <tr>
                         <td><?= $index + 1 ?></td>
                         <td>
-                            <a href="<?= e($gradebookUrl) ?>"><?= e((string) ($member['group_number'] ?? '')) ?></a>
+                            <a href="<?= e($gradebookUrl) ?>" target="_blank" rel="noopener"><?= e((string) ($member['group_number'] ?? '')) ?></a>
                         </td>
                         <td><?= e($displayName) ?></td>
                         <td class="text-muted"><?= e($note) ?></td>
@@ -708,8 +712,8 @@ require __DIR__ . '/header.php';
                 </tbody>
             </table>
         </div>
+        <?php endif; ?>
     </section>
-    <?php endif; ?>
 
     <?php endif; ?>
 </div>

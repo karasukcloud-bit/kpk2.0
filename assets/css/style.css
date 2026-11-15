@@ -920,6 +920,99 @@ body {
     color: #1d4ed8;
 }
 
+.perf-indicators__title {
+    margin: 1.5rem 0 0.35rem;
+    font-size: 1.15rem;
+}
+
+.perf-indicators__hint {
+    margin: 0 0 0.75rem;
+    font-size: 0.9rem;
+}
+
+.perf-indicators-table .summary-group-link {
+    color: inherit;
+    font-weight: 700;
+}
+
+.perf-indicators-table .summary-group-link:hover {
+    color: var(--color-primary, #2563eb);
+}
+
+.perf-indicators-table .summary-perf-value {
+    color: inherit;
+    font-weight: 800;
+}
+
+.perf-indicators-table th:nth-child(1),
+.perf-indicators-table td:nth-child(1) {
+    width: 3.25rem;
+    white-space: nowrap;
+}
+
+.perf-indicators-table th:nth-child(2),
+.perf-indicators-table td:nth-child(2) {
+    width: 4.25rem;
+    white-space: nowrap;
+}
+
+.perf-indicators-table th:nth-child(5),
+.perf-indicators-table td:nth-child(5) {
+    width: 4.5rem;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.perf-indicators-table .perf-indicators__count-col {
+    width: 4.25rem;
+    white-space: nowrap;
+    text-align: center;
+}
+
+.perf-indicators-table .perf-indicators__students {
+    min-width: 18rem;
+    width: 34%;
+    line-height: 1.45;
+    font-size: 0.9rem;
+    white-space: normal;
+}
+
+.perf-indicators__row--high td {
+    background: #ecfdf5;
+}
+
+.perf-indicators__row--mid td {
+    background: #fffbeb;
+}
+
+.perf-indicators__row--low td {
+    background: #fef2f2;
+}
+
+.perf-indicators__row--high {
+    box-shadow: inset 3px 0 0 #22c55e;
+}
+
+.perf-indicators__row--mid {
+    box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.perf-indicators__row--low {
+    box-shadow: inset 3px 0 0 #ef4444;
+}
+
+.summary-groups-table tbody tr.perf-indicators__row--high:nth-child(even) td {
+    background: #d1fae5;
+}
+
+.summary-groups-table tbody tr.perf-indicators__row--mid:nth-child(even) td {
+    background: #fef3c7;
+}
+
+.summary-groups-table tbody tr.perf-indicators__row--low:nth-child(even) td {
+    background: #fee2e2;
+}
+
 .summary-years-trends {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -6555,67 +6648,59 @@ code {
     gap: 0.45rem;
 }
 
-.glaz-commission__list {
+.glaz-commission__chips {
     display: flex;
     flex-direction: column;
-    gap: 0.45rem;
+    gap: 0.35rem;
 }
 
-.glaz-commission__row {
+.glaz-commission__chip {
     display: flex;
-    flex-wrap: wrap;
     align-items: center;
-    gap: 0.45rem;
+    gap: 0.4rem;
+    min-height: 2rem;
+    padding: 0.2rem 0.35rem 0.2rem 0.65rem;
+    border: 1px solid #dbe3f0;
+    border-radius: 999px;
+    background: #f8fafc;
 }
 
-.glaz-commission__row select {
-    flex: 1 1 160px;
+.glaz-commission__chip-name {
+    flex: 1;
     min-width: 0;
-    max-width: 100%;
+    font-size: 0.9rem;
+    font-weight: 600;
+    line-height: 1.25;
 }
 
-.glaz-commission__add,
-.glaz-commission__remove {
+.glaz-commission__chip-remove {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    gap: 0.25rem;
-    min-height: 2rem;
-    border-radius: 0.4rem;
-    border: 1px solid var(--color-border);
-    background: var(--color-surface, #fff);
-    color: var(--color-text);
-    cursor: pointer;
-    font-size: 0.85rem;
-    line-height: 1.2;
-    padding: 0.25rem 0.65rem;
-    white-space: nowrap;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
-}
-
-.glaz-commission__add {
-    align-self: flex-start;
-}
-
-.glaz-commission__remove {
-    color: #b42318;
-    border-color: #f3c1bd;
-    background: #fff5f4;
-}
-
-.glaz-commission__add:hover {
-    border-color: var(--color-primary);
-    background: var(--color-bg);
-}
-
-.glaz-commission__remove:hover {
-    border-color: #d92d20;
+    flex: 0 0 auto;
+    width: 1.55rem;
+    height: 1.55rem;
+    border: 0;
+    border-radius: 50%;
     background: #fee4e2;
+    color: #b42318;
+    cursor: pointer;
+    font-size: 1.05rem;
+    line-height: 1;
+    padding: 0;
+}
+
+.glaz-commission__chip-remove:hover {
+    background: #fecdca;
     color: #912018;
 }
 
-.glaz-commission__add[hidden],
-.glaz-commission__remove[hidden] {
+.glaz-commission__picker select {
+    width: 100%;
+    min-width: 0;
+}
+
+.glaz-commission__picker[hidden] {
     display: none;
 }
 
