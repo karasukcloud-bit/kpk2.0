@@ -800,6 +800,126 @@ body {
     margin-bottom: 1.25rem;
 }
 
+.summary-groups-table {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+
+.summary-groups-table thead th {
+    vertical-align: bottom;
+    white-space: nowrap;
+}
+
+.summary-groups-table tbody tr:nth-child(even) {
+    background: #f8fafc;
+}
+
+.summary-groups-table__row--debt {
+    box-shadow: inset 3px 0 0 #f59e0b;
+}
+
+.summary-group-link {
+    font-weight: 700;
+    text-decoration: none;
+}
+
+.summary-group-link:hover {
+    text-decoration: underline;
+}
+
+.summary-sort-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    border: 0;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-weight: 700;
+    cursor: pointer;
+    padding: 0;
+}
+
+.summary-sort-btn::after {
+    content: '↕';
+    font-size: 0.75em;
+    opacity: 0.45;
+}
+
+.summary-sort-btn.is-active::after {
+    opacity: 1;
+    color: var(--color-primary, #2563eb);
+}
+
+.summary-sort-btn[data-dir="desc"]::after {
+    content: '↓';
+}
+
+.summary-sort-btn[data-dir="asc"]::after {
+    content: '↑';
+}
+
+.summary-sort-btn:hover,
+.summary-sort-btn.is-active {
+    color: var(--color-primary, #2563eb);
+}
+
+.summary-table-toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem 1rem;
+    margin: 0 0 0.75rem;
+}
+
+.summary-sort-hint {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.summary-export-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.summary-perf-value {
+    font-weight: 800;
+    font-variant-numeric: tabular-nums;
+    font-size: 1rem;
+    letter-spacing: 0.01em;
+}
+
+.summary-perf-value--high {
+    color: #15803d;
+}
+
+.summary-perf-value--mid {
+    color: #b45309;
+}
+
+.summary-perf-value--low {
+    color: #b91c1c;
+}
+
+.summary-metric {
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+}
+
+.summary-metric--warn {
+    color: #b45309;
+}
+
+.summary-metric--good {
+    color: #15803d;
+}
+
+.summary-metric--best {
+    color: #1d4ed8;
+}
+
 .summary-years-trends {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -5634,9 +5754,28 @@ body.is-col-resizing * {
 }
 
 .rating-table__place {
-    width: 4rem;
+    width: 4.75rem;
     text-align: center;
     font-weight: 700;
+    vertical-align: middle;
+}
+
+.rating-place {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3rem;
+    min-height: 1.4rem;
+}
+
+.rating-place__icon {
+    flex: 0 0 auto;
+    display: block;
+}
+
+.rating-place__num {
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
 }
 
 .rating-table__place--1 {
@@ -5649,6 +5788,18 @@ body.is-col-resizing * {
 
 .rating-table__place--3 {
     color: #9a3412;
+}
+
+.rating-table__place--bottom {
+    color: #b45309;
+}
+
+.rating-table__row--bottom {
+    background: #fffbeb;
+}
+
+.rating-table__row--bottom:nth-child(even) {
+    background: #fef3c7;
 }
 
 .rating-table__num {
@@ -6412,13 +6563,14 @@ code {
 
 .glaz-commission__row {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.45rem;
 }
 
 .glaz-commission__row select {
-    flex: 1;
-    min-width: 200px;
+    flex: 1 1 160px;
+    min-width: 0;
     max-width: 100%;
 }
 
@@ -6427,23 +6579,39 @@ code {
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 50%;
+    gap: 0.25rem;
+    min-height: 2rem;
+    border-radius: 0.4rem;
     border: 1px solid var(--color-border);
     background: var(--color-surface, #fff);
     color: var(--color-text);
     cursor: pointer;
-    font-size: 1.2rem;
-    line-height: 1;
-    padding: 0;
-    transition: border-color 0.15s ease, background 0.15s ease;
+    font-size: 0.85rem;
+    line-height: 1.2;
+    padding: 0.25rem 0.65rem;
+    white-space: nowrap;
+    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
 }
 
-.glaz-commission__add:hover,
-.glaz-commission__remove:hover {
+.glaz-commission__add {
+    align-self: flex-start;
+}
+
+.glaz-commission__remove {
+    color: #b42318;
+    border-color: #f3c1bd;
+    background: #fff5f4;
+}
+
+.glaz-commission__add:hover {
     border-color: var(--color-primary);
     background: var(--color-bg);
+}
+
+.glaz-commission__remove:hover {
+    border-color: #d92d20;
+    background: #fee4e2;
+    color: #912018;
 }
 
 .glaz-commission__add[hidden],

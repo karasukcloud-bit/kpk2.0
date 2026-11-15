@@ -206,7 +206,6 @@ require __DIR__ . '/../includes/header.php';
 <template id="glaz-commission-row-template">
     <?php
     $selectedId = 0;
-    $withRemove = true;
     require __DIR__ . '/../includes/glaz_commission_row.php';
     ?>
 </template>

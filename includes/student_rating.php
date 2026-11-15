@@ -146,6 +146,11 @@ function build_student_performance_rating(
         if ($a['average'] !== $b['average']) {
             return $b['average'] <=> $a['average'];
         }
+        $aHasThree = (int) $a['min_grade'] === 3 ? 1 : 0;
+        $bHasThree = (int) $b['min_grade'] === 3 ? 1 : 0;
+        if ($aHasThree !== $bHasThree) {
+            return $aHasThree <=> $bHasThree;
+        }
         if ($a['grades_count'] !== $b['grades_count']) {
             return $b['grades_count'] <=> $a['grades_count'];
         }
@@ -212,7 +217,8 @@ function assign_student_rating_places(array $items): array
 
     foreach ($items as &$item) {
         $hasTwo = (int) $item['min_grade'] <= 2 ? 1 : 0;
-        $key = $hasTwo . '|' . (float) $item['average'];
+        $hasThree = (int) $item['min_grade'] === 3 ? 1 : 0;
+        $key = $hasTwo . '|' . $hasThree . '|' . (float) $item['average'];
         if ($key !== $prevKey) {
             $place++;
             $prevKey = $key;
@@ -243,4 +249,76 @@ function filter_student_rating_items(array $items, string $scope, int $scopeId):
     }
 
     return assign_student_rating_places($items);
+}
+
+function student_rating_medal_svg(int $place): string
+{
+    $colors = [
+        1 => ['#f59e0b', '#fbbf24', '#b45309'],
+        2 => ['#94a3b8', '#cbd5e1', '#475569'],
+        3 => ['#d97706', '#f59e0b', '#9a3412'],
+    ];
+    if (!isset($colors[$place])) {
+        return '';
+    }
+    [$fill, $light, $stroke] = $colors[$place];
+
+    return '<svg class="rating-place__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+        . '<path fill="' . $fill . '" d="M8 2h2.2l1.8 4.2L13.8 2H16l-2.4 5.2A5.5 5.5 0 0 1 17.5 12.5 5.5 5.5 0 0 1 12 18a5.5 5.5 0 0 1-5.5-5.5 5.5 5.5 0 0 1 3.9-5.3L8 2z"/>'
+        . '<circle cx="12" cy="12.5" r="3.2" fill="' . $light . '" stroke="' . $stroke . '" stroke-width="1.2"/>'
+        . '<text x="12" y="13.7" text-anchor="middle" font-size="7" font-weight="700" fill="' . $stroke . '">' . $place . '</text>'
+        . '</svg>';
+}
+
+function student_rating_alert_svg(): string
+{
+    return '<svg class="rating-place__icon rating-place__icon--alert" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">'
+        . '<path fill="#f59e0b" d="M12 3.2 2.8 20.2h18.4L12 3.2z"/>'
+        . '<path fill="#fff" d="M11.1 9.2h1.8v5.2h-1.8V9.2zm0 6.4h1.8V18h-1.8v-2.4z"/>'
+        . '</svg>';
+}
+
+/**
+ * @param list<array> $items
+ * @return array{0:int,1:array<int,true>}
+ */
+function student_rating_bottom_row_flags(array $items, int $count = 5): array
+{
+    $total = count($items);
+    $flags = [];
+    if ($total === 0 || $count <= 0) {
+        return [$total, $flags];
+    }
+    $from = max(0, $total - $count);
+    for ($i = $from; $i < $total; $i++) {
+        $flags[$i] = true;
+    }
+
+    return [$total, $flags];
+}
+
+function render_student_rating_place_cell(int $place, bool $isBottom): string
+{
+    $placeClass = '';
+    $icon = '';
+    if ($place === 1) {
+        $placeClass = ' rating-table__place--1';
+        $icon = student_rating_medal_svg(1);
+    } elseif ($place === 2) {
+        $placeClass = ' rating-table__place--2';
+        $icon = student_rating_medal_svg(2);
+    } elseif ($place === 3) {
+        $placeClass = ' rating-table__place--3';
+        $icon = student_rating_medal_svg(3);
+    } elseif ($isBottom) {
+        $placeClass = ' rating-table__place--bottom';
+        $icon = student_rating_alert_svg();
+    }
+
+    return '<td class="rating-table__place' . $placeClass . '">'
+        . '<span class="rating-place">'
+        . $icon
+        . '<span class="rating-place__num">' . $place . '</span>'
+        . '</span>'
+        . '</td>';
 }

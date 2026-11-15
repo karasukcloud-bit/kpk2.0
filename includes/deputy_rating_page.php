@@ -205,21 +205,15 @@ require __DIR__ . '/header.php';
                         </tr>
                     </thead>
                     <tbody>
-                        <?php foreach ($items as $row): ?>
                         <?php
+                        [, $bottomFlags] = student_rating_bottom_row_flags($items, 5);
+                        foreach ($items as $rowIndex => $row):
                         $place = (int) $row['place'];
-                        $placeClass = '';
-                        if ($place === 1) {
-                            $placeClass = ' rating-table__place--1';
-                        } elseif ($place === 2) {
-                            $placeClass = ' rating-table__place--2';
-                        } elseif ($place === 3) {
-                            $placeClass = ' rating-table__place--3';
-                        }
+                        $isBottom = isset($bottomFlags[$rowIndex]) && $place > 3;
                         $category = (string) $row['category'];
                         ?>
-                        <tr>
-                            <td class="rating-table__place<?= $placeClass ?>"><?= $place ?></td>
+                        <tr<?= $isBottom ? ' class="rating-table__row--bottom"' : '' ?>>
+                            <?= render_student_rating_place_cell($place, $isBottom) ?>
                             <td><?= e(person_last_first_name((string) $row['full_name'])) ?></td>
                             <?php if ($scope !== 'group'): ?>
                             <td><?= e((string) $row['group_number']) ?></td>

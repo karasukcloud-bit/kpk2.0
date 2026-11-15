@@ -179,9 +179,24 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
                                                 $schedule,
                                                 $item['suggested_commission_ids'] ?? []
                                             );
-                                            foreach ($commissionIds as $index => $teacherId):
+                                            $rowTeachers = $teachers;
+                                            $knownTeacherIds = [];
+                                            foreach ($rowTeachers as $t) {
+                                                $knownTeacherIds[(int) $t['id']] = true;
+                                            }
+                                            foreach ($schedule['commission'] ?? [] as $member) {
+                                                $mid = (int) ($member['teacher_id'] ?? 0);
+                                                if ($mid > 0 && !isset($knownTeacherIds[$mid])) {
+                                                    $rowTeachers[] = [
+                                                        'id' => $mid,
+                                                        'full_name' => (string) ($member['full_name'] ?? ''),
+                                                    ];
+                                                    $knownTeacherIds[$mid] = true;
+                                                }
+                                            }
+                                            foreach ($commissionIds as $teacherId):
                                                 $selectedId = (int) $teacherId;
-                                                $withRemove = $index > 0;
+                                                $teachersForRow = $rowTeachers;
                                                 require __DIR__ . '/../glaz_commission_row.php';
                                             endforeach;
                                             ?>
@@ -191,8 +206,7 @@ $glazShowSourceColumn = $glazShowSourceColumn ?? false;
                                             class="glaz-commission__add"
                                             data-glaz-commission-add
                                             title="Добавить преподавателя"
-                                            aria-label="Добавить преподавателя"
-                                        >+</button>
+                                        >+ Добавить</button>
                                     </div>
 
                                     <div class="glaz-schedule-form__actions">

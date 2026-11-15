@@ -216,8 +216,43 @@ require __DIR__ . '/header.php';
             $totals = $report['totals'];
             $metrics = $report['metrics'];
             ?>
+            <?php
+            $summaryPerfCell = static function (float $percent): string {
+                $clamped = max(0.0, min(100.0, $percent));
+                if ($clamped >= 70) {
+                    $level = 'high';
+                } elseif ($clamped >= 40) {
+                    $level = 'mid';
+                } else {
+                    $level = 'low';
+                }
+                $label = rtrim(rtrim(number_format($clamped, 1, '.', ''), '0'), '.');
+                if ($label === '') {
+                    $label = '0';
+                }
+
+                return '<span class="summary-perf-value summary-perf-value--' . e($level) . '">'
+                    . e($label) . '%'
+                    . '</span>';
+            };
+            ?>
+            <div class="summary-table-toolbar">
+                <p class="text-muted summary-sort-hint">Нажмите «Абс. усп.» или «Кач. усп.» для сортировки групп.</p>
+                <div
+                    class="summary-export-actions"
+                    data-summary-export
+                    data-export-url="summary_export.php"
+                    data-year="<?= e($year) ?>"
+                    data-sem="<?= e($viewSem) ?>"
+                    data-source="<?= e($summarySource) ?>"
+                    data-csrf="<?= e(csrf_token()) ?>"
+                >
+                    <button type="button" class="btn btn--secondary btn--sm" data-export-format="pdf">Скачать PDF</button>
+                    <button type="button" class="btn btn--secondary btn--sm" data-export-format="excel">Скачать Excel</button>
+                </div>
+            </div>
             <div class="table-wrap">
-                <table class="table">
+                <table class="table summary-groups-table" data-summary-groups-table>
                     <thead>
                         <tr>
                             <th>№</th>
@@ -225,8 +260,22 @@ require __DIR__ . '/header.php';
                             <th>Специальность</th>
                             <th>Куратор</th>
                             <th>Студентов</th>
-                            <th>Абс. усп.</th>
-                            <th>Кач. усп.</th>
+                            <th>
+                                <button
+                                    type="button"
+                                    class="summary-sort-btn"
+                                    data-summary-sort="absolute"
+                                    aria-pressed="false"
+                                >Абс. усп.</button>
+                            </th>
+                            <th>
+                                <button
+                                    type="button"
+                                    class="summary-sort-btn"
+                                    data-summary-sort="quality"
+                                    aria-pressed="false"
+                                >Кач. усп.</button>
+                            </th>
                             <th>С 1 «2», %</th>
                             <th>С 1 «3», %</th>
                             <th>С «2»</th>
@@ -240,24 +289,32 @@ require __DIR__ . '/header.php';
                         $group = $row['group'];
                         $overview = $row['overview'];
                         $summary = $overview['summary'];
+                        $absPercent = (float) $summary['absolute_percent'];
+                        $qualPercent = (float) $summary['quality_percent'];
+                        $withTwos = (int) $overview['with_twos'];
                         ?>
-                        <tr>
-                            <td><?= $index + 1 ?></td>
+                        <tr
+                            data-group-id="<?= (int) $group['id'] ?>"
+                            data-absolute="<?= e((string) $absPercent) ?>"
+                            data-quality="<?= e((string) $qualPercent) ?>"
+                            class="<?= $withTwos > 0 ? 'summary-groups-table__row--debt' : '' ?>"
+                        >
+                            <td data-summary-row-num><?= $index + 1 ?></td>
                             <td>
-                                <a href="<?= e($summaryGradebookHref) ?>?group_id=<?= (int) $group['id'] ?>">
+                                <a class="summary-group-link" href="<?= e($summaryGradebookHref) ?>?group_id=<?= (int) $group['id'] ?>">
                                     <?= e($group['number']) ?>
                                 </a>
                             </td>
                             <td><?= e($group['specialty_name']) ?></td>
                             <td><?= e(($group['curator_name'] ?? '') !== '' ? $group['curator_name'] : '—') ?></td>
                             <td><?= (int) $overview['students'] ?></td>
-                            <td><?= e((string) $summary['absolute_percent']) ?>%</td>
-                            <td><?= e((string) $summary['quality_percent']) ?>%</td>
+                            <td><?= $summaryPerfCell($absPercent) ?></td>
+                            <td><?= $summaryPerfCell($qualPercent) ?></td>
                             <td><?= e((string) $summary['one_two_percent']) ?>%</td>
                             <td><?= e((string) $summary['one_three_percent']) ?>%</td>
-                            <td><?= (int) $overview['with_twos'] ?></td>
-                            <td><?= (int) $overview['only_good'] ?></td>
-                            <td><?= (int) $overview['excellent'] ?></td>
+                            <td class="<?= $withTwos > 0 ? 'summary-metric summary-metric--warn' : '' ?>"><?= $withTwos ?></td>
+                            <td class="summary-metric summary-metric--good"><?= (int) $overview['only_good'] ?></td>
+                            <td class="summary-metric summary-metric--best"><?= (int) $overview['excellent'] ?></td>
                         </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -733,6 +790,50 @@ const registerSummaryChart = (chartId, chart, baseLabels, datasets, sortKeys, av
     };
 };
 
+const formatBarLabelValue = (raw, asPercent) => {
+    const value = Number(raw);
+    if (!Number.isFinite(value)) {
+        return '';
+    }
+    const rounded = Math.round(value * 10) / 10;
+    const text = Number.isInteger(rounded) ? String(rounded) : String(rounded);
+    return asPercent ? text + '%' : text;
+};
+
+const createBarValueLabelsPlugin = (asPercent = true, colors = null) => ({
+    id: 'summaryBarValueLabels',
+    afterDatasetsDraw(chart) {
+        const { ctx } = chart;
+        ctx.save();
+        ctx.font = '600 11px Segoe UI, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'bottom';
+        chart.data.datasets.forEach((dataset, datasetIndex) => {
+            if ((dataset.type || chart.config.type) === 'line') {
+                return;
+            }
+            const meta = chart.getDatasetMeta(datasetIndex);
+            if (!meta || meta.hidden || meta.type === 'line') {
+                return;
+            }
+            meta.data.forEach((el, index) => {
+                const text = formatBarLabelValue(dataset.data[index], asPercent);
+                if (!text) {
+                    return;
+                }
+                const { x, y } = el.getProps(['x', 'y'], true);
+                if (Array.isArray(colors) && colors[datasetIndex]) {
+                    ctx.fillStyle = colors[datasetIndex];
+                } else {
+                    ctx.fillStyle = '#243041';
+                }
+                ctx.fillText(text, x, y - 4);
+            });
+        });
+        ctx.restore();
+    },
+});
+
 const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLabel, barColor, barBorder, rotateXLabels = false) => {
     const chartNode = document.getElementById(canvasId);
     if (!chartNode || typeof Chart === 'undefined') {
@@ -767,6 +868,7 @@ const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLa
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 22 } },
             animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
@@ -795,6 +897,7 @@ const renderSummaryGroupChart = (canvasId, labels, values, collegeAverage, barLa
                 },
             },
         },
+        plugins: [createBarValueLabelsPlugin(true, [barBorder || '#243041'])],
     });
 
     registerSummaryChart(canvasId, chart, labels, [values], values, collegeAverage);
@@ -832,6 +935,7 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 22 } },
             animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
@@ -862,6 +966,7 @@ const renderCompareBars = (canvasId, labels, values1, values2, label1, label2, m
                 },
             },
         },
+        plugins: [createBarValueLabelsPlugin(asPercent, ['#0d47a1', '#1b5e20'])],
     });
 
     const sortKeys = labels.map((_, index) => (
@@ -901,6 +1006,7 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
         options: {
             responsive: true,
             maintainAspectRatio: false,
+            layout: { padding: { top: 22 } },
             animation: { duration: 550, easing: 'easeOutQuart' },
             plugins: {
                 legend: { position: 'bottom' },
@@ -939,6 +1045,7 @@ const renderSpecialtyYearsChart = (canvasId, compareData, metricKey) => {
                 },
             },
         },
+        plugins: [createBarValueLabelsPlugin(true, yearComparePalette)],
     });
 
     const lastYearIndex = Math.max(0, yearCount - 1);
@@ -954,33 +1061,6 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
 
     const absoluteSeries = (compareData.college_absolute || []).map((v) => Number(v) || 0);
     const qualitySeries = (compareData.college_quality || []).map((v) => Number(v) || 0);
-
-    const barValueLabels = {
-        id: 'collegeYearsBarLabels',
-        afterDatasetsDraw(chart) {
-            const { ctx } = chart;
-            ctx.save();
-            ctx.font = '600 11px Segoe UI, system-ui, sans-serif';
-            ctx.textAlign = 'center';
-            ctx.textBaseline = 'bottom';
-            chart.data.datasets.forEach((dataset, datasetIndex) => {
-                const meta = chart.getDatasetMeta(datasetIndex);
-                if (!meta || meta.hidden) {
-                    return;
-                }
-                meta.data.forEach((el, index) => {
-                    const raw = dataset.data[index];
-                    if (raw == null || Number.isNaN(Number(raw))) {
-                        return;
-                    }
-                    const { x, y } = el.getProps(['x', 'y'], true);
-                    ctx.fillStyle = datasetIndex === 0 ? '#0d47a1' : '#1b5e20';
-                    ctx.fillText(String(raw) + '%', x, y - 4);
-                });
-            });
-            ctx.restore();
-        },
-    };
 
     new Chart(chartNode, {
         type: 'bar',
@@ -1008,7 +1088,7 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            layout: { padding: { top: 18 } },
+            layout: { padding: { top: 22 } },
             plugins: {
                 legend: { position: 'bottom' },
                 tooltip: {
@@ -1036,7 +1116,7 @@ const renderCollegeYearsChart = (canvasId, compareData) => {
                 },
             },
         },
-        plugins: [barValueLabels],
+        plugins: [createBarValueLabelsPlugin(true, ['#0d47a1', '#1b5e20'])],
     });
 };
 

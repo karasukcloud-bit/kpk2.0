@@ -547,6 +547,11 @@ function glaz_commission_teacher_ids(array $schedule, array $suggestedIds = []):
         return $ids;
     }
 
+    // Уже сохранённый график: пустая комиссия — не подставлять предложенных снова
+    if (!empty($schedule['id'])) {
+        return [0];
+    }
+
     $suggested = array_values(array_unique(array_filter(
         array_map('intval', $suggestedIds),
         static fn (int $id): bool => $id > 0

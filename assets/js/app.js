@@ -3373,6 +3373,59 @@ document.addEventListener('DOMContentLoaded', () => {
         const printBtn = glazPage.querySelector('[data-glaz-print]');
         const commissionTemplate = document.getElementById('glaz-commission-row-template');
 
+        const formatGlazDate = (value) => {
+            if (!value) {
+                return '';
+            }
+            const parts = String(value).split('-');
+            if (parts.length !== 3) {
+                return value;
+            }
+            return `${parts[2]}.${parts[1]}.${parts[0]}`;
+        };
+
+        const syncGlazFormDisplay = (form) => {
+            const displayNode = glazPage.querySelector(
+                `[data-glaz-display="${form.dataset.debtKey}"]`
+            );
+            if (!displayNode) {
+                return;
+            }
+
+            const dateValue = form.querySelector('[name="liquidation_date"]')?.value || '';
+            const timeValue = form.querySelector('[name="liquidation_time"]')?.value || '';
+            const names = Array.from(form.querySelectorAll('select[name="commission[]"]'))
+                .map((select) => {
+                    const option = select.options[select.selectedIndex];
+                    if (!option || !option.value) {
+                        return '';
+                    }
+                    return option.textContent.trim();
+                })
+                .filter(Boolean);
+
+            const lineParts = [];
+            const formattedDate = formatGlazDate(dateValue);
+            if (formattedDate) {
+                lineParts.push(formattedDate);
+            }
+            if (timeValue) {
+                lineParts.push(timeValue);
+            }
+
+            const lines = [];
+            if (lineParts.length) {
+                lines.push(lineParts.join(' '));
+            }
+            if (names.length) {
+                lines.push(names.join(', '));
+            }
+
+            displayNode.innerHTML = lines.length
+                ? lines.map((line) => line.replace(/</g, '&lt;')).join('<br>')
+                : '<span class="text-muted">—</span>';
+        };
+
         const updateCommissionControls = (commissionBlock) => {
             const list = commissionBlock.querySelector('[data-glaz-commission-list]');
             const addBtn = commissionBlock.querySelector('[data-glaz-commission-add]');
@@ -3383,12 +3436,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 addBtn.hidden = rows.length >= max;
             }
 
-            rows.forEach((row, index) => {
+            rows.forEach((row) => {
                 const removeBtn = row.querySelector('[data-glaz-commission-remove]');
-                if (!removeBtn) {
-                    return;
+                if (removeBtn) {
+                    removeBtn.hidden = false;
                 }
-                removeBtn.hidden = rows.length <= 1;
             });
         };
 
@@ -3397,6 +3449,7 @@ document.addEventListener('DOMContentLoaded', () => {
         glazPage.addEventListener('click', (event) => {
             const addBtn = event.target.closest('[data-glaz-commission-add]');
             if (addBtn) {
+                const form = addBtn.closest('[data-glaz-form]');
                 const commissionBlock = addBtn.closest('[data-glaz-commission]');
                 const list = commissionBlock?.querySelector('[data-glaz-commission-list]');
                 const max = parseInt(commissionBlock?.dataset.max || '3', 10);
@@ -3412,21 +3465,45 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 list.appendChild(row);
                 updateCommissionControls(commissionBlock);
+                if (form) {
+                    syncGlazFormDisplay(form);
+                    const statusNode = form.querySelector('[data-glaz-status]');
+                    if (statusNode) {
+                        statusNode.textContent = 'Не сохранено — нажмите «Сохранить»';
+                        statusNode.dataset.state = '';
+                    }
+                }
                 return;
             }
 
             const removeBtn = event.target.closest('[data-glaz-commission-remove]');
             if (removeBtn) {
+                const form = removeBtn.closest('[data-glaz-form]');
                 const commissionBlock = removeBtn.closest('[data-glaz-commission]');
                 const row = removeBtn.closest('.glaz-commission__row');
                 const list = commissionBlock?.querySelector('[data-glaz-commission-list]');
 
-                if (!row || !list || list.children.length <= 1) {
+                if (!row || !list) {
                     return;
                 }
 
-                row.remove();
+                if (list.children.length > 1) {
+                    row.remove();
+                } else {
+                    const select = row.querySelector('select');
+                    if (select) {
+                        select.selectedIndex = 0;
+                    }
+                }
                 updateCommissionControls(commissionBlock);
+                if (form) {
+                    syncGlazFormDisplay(form);
+                    const statusNode = form.querySelector('[data-glaz-status]');
+                    if (statusNode) {
+                        statusNode.textContent = 'Не сохранено — нажмите «Сохранить»';
+                        statusNode.dataset.state = '';
+                    }
+                }
             }
         });
 
@@ -3447,6 +3524,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 statusNode.textContent = message;
                 statusNode.dataset.state = state;
             };
+
+            form.addEventListener('change', (event) => {
+                if (
+                    event.target.matches('[name="liquidation_date"]')
+                    || event.target.matches('[name="liquidation_time"]')
+                    || event.target.matches('select[name="commission[]"]')
+                ) {
+                    syncGlazFormDisplay(form);
+                    setStatus('Не сохранено — нажмите «Сохранить»', '');
+                }
+            });
 
             form.addEventListener('submit', async (event) => {
                 event.preventDefault();
@@ -3481,6 +3569,114 @@ document.addEventListener('DOMContentLoaded', () => {
             });
         });
     }
+
+    document.querySelectorAll('[data-summary-groups-table]').forEach((table) => {
+        const body = table.tBodies[0];
+        if (!body) {
+            return;
+        }
+
+        const buttons = table.querySelectorAll('[data-summary-sort]');
+        let activeKey = '';
+        let activeDir = 'desc';
+        table.dataset.sortKey = '';
+        table.dataset.sortDir = '';
+
+        const renumber = () => {
+            Array.from(body.rows).forEach((row, index) => {
+                const cell = row.querySelector('[data-summary-row-num]');
+                if (cell) {
+                    cell.textContent = String(index + 1);
+                }
+            });
+        };
+
+        const applySort = (key, dir) => {
+            const rows = Array.from(body.rows);
+            rows.sort((a, b) => {
+                const av = parseFloat(a.dataset[key] || '0') || 0;
+                const bv = parseFloat(b.dataset[key] || '0') || 0;
+                return dir === 'asc' ? av - bv : bv - av;
+            });
+            rows.forEach((row) => body.appendChild(row));
+            renumber();
+            table.dataset.sortKey = key;
+            table.dataset.sortDir = dir;
+
+            buttons.forEach((btn) => {
+                const isActive = btn.dataset.summarySort === key;
+                btn.classList.toggle('is-active', isActive);
+                btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+                if (isActive) {
+                    btn.dataset.dir = dir;
+                } else {
+                    delete btn.dataset.dir;
+                }
+            });
+        };
+
+        buttons.forEach((btn) => {
+            btn.addEventListener('click', () => {
+                const key = btn.dataset.summarySort;
+                if (!key) {
+                    return;
+                }
+                if (activeKey === key) {
+                    activeDir = activeDir === 'desc' ? 'asc' : 'desc';
+                } else {
+                    activeKey = key;
+                    activeDir = 'desc';
+                }
+                applySort(key, activeDir);
+            });
+        });
+    });
+
+    document.querySelectorAll('[data-summary-export]').forEach((box) => {
+        box.addEventListener('click', (event) => {
+            const btn = event.target.closest('[data-export-format]');
+            if (!btn) {
+                return;
+            }
+            const format = btn.dataset.exportFormat;
+            const table = document.querySelector('[data-summary-groups-table]');
+            if (!format || !table || !box.dataset.exportUrl) {
+                return;
+            }
+
+            const order = Array.from(table.tBodies[0]?.rows || [])
+                .map((row) => row.dataset.groupId || '')
+                .filter(Boolean)
+                .join(',');
+
+            const form = document.createElement('form');
+            form.method = 'POST';
+            form.action = box.dataset.exportUrl;
+            form.style.display = 'none';
+
+            const fields = {
+                csrf_token: box.dataset.csrf || '',
+                format,
+                year: box.dataset.year || '',
+                sem: box.dataset.sem || '',
+                source: box.dataset.source || 'journal',
+                order,
+                sort: table.dataset.sortKey || '',
+                dir: table.dataset.sortDir || 'desc',
+            };
+
+            Object.entries(fields).forEach(([name, value]) => {
+                const input = document.createElement('input');
+                input.type = 'hidden';
+                input.name = name;
+                input.value = value;
+                form.appendChild(input);
+            });
+
+            document.body.appendChild(form);
+            form.submit();
+        });
+    });
 
     document.querySelectorAll('[data-ktp-print]').forEach((button) => {
         button.addEventListener('click', () => {
