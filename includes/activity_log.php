@@ -63,6 +63,7 @@ function activity_log_action_options(): array
         'manual_brs.pa_save' => 'Изменение ПА в ручном БРС',
         'manual_brs.kn_quick_save' => 'Изменение оценки КН (быстрый ввод) в ручном БРС',
         'archive.import_json' => 'Импорт архивных ведомостей (JSON)',
+        'activities.import' => 'Импорт занятости во внеурочное время',
     ];
 }
 

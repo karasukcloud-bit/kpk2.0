@@ -20,6 +20,14 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
        class="admin-tabs__item<?= $currentAdminTab === 'students' ? ' admin-tabs__item--active' : '' ?>">
         Студенты
     </a>
+    <a href="activities.php"
+       class="admin-tabs__item<?= $currentAdminTab === 'activities' ? ' admin-tabs__item--active' : '' ?>">
+        Занятость
+    </a>
+    <a href="backup_merge.php"
+       class="admin-tabs__item<?= $currentAdminTab === 'backup_merge' ? ' admin-tabs__item--active' : '' ?>">
+        Снимок БД
+    </a>
     <a href="promote_groups.php"
        class="admin-tabs__item<?= $currentAdminTab === 'promote_groups' ? ' admin-tabs__item--active' : '' ?>">
         Перевод

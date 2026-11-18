@@ -66,6 +66,8 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
             ['tab' => 'teachers', 'href' => $base . 'teachers.php', 'icon' => 'group', 'label' => 'Преподаватели'],
             ['tab' => 'info', 'href' => $base . 'info.php', 'icon' => 'report', 'label' => 'Инфо'],
             ['tab' => 'students', 'href' => $base . 'students.php', 'icon' => 'student', 'label' => 'Студенты'],
+            ['tab' => 'activities', 'href' => $base . 'activities.php', 'icon' => 'activities', 'label' => 'Занятость'],
+            ['tab' => 'backup_merge', 'href' => $base . 'backup_merge.php', 'icon' => 'archive', 'label' => 'Снимок БД'],
             ['tab' => 'promote_groups', 'href' => $base . 'promote_groups.php', 'icon' => 'activities', 'label' => 'Перевод'],
             ['tab' => 'curriculum', 'href' => $base . 'curriculum.php', 'icon' => 'grades', 'label' => 'План'],
         ];

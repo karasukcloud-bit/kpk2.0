@@ -12,7 +12,7 @@ $live = require __DIR__ . '/database.php';
 $liveDb = (string) ($live['dbname'] ?? '');
 // Beget: live = u3716463_spo_progress → снимок u3716463_spo_progress_backup_oct
 // Локально: spo_progress → spo_progress_backup_oct2026
-if (str_starts_with($liveDb, 'u3716463_')) {
+if (strpos($liveDb, 'u3716463_') === 0) {
     $backupDb = 'u3716463_spo_progress_backup_oct';
 } else {
     $backupDb = 'spo_progress_backup_oct2026';

@@ -230,7 +230,7 @@ function backup_merge_names_match(string $liveName, string $backupName): bool
     if ($live === $bak) {
         return true;
     }
-    if (str_starts_with($bak, $live . ' ')) {
+    if (strpos($bak, $live . ' ') === 0) {
         return true;
     }
 
@@ -664,5 +664,169 @@ function backup_merge_apply_attendance_for_group(
         'days' => $daysInserted,
         'entries' => $entriesInserted,
         'skipped_entries' => $skippedEntries,
+    ];
+}
+
+/**
+ * Занятость из снимка для студента.
+ *
+ * @return list<array<string,mixed>>
+ */
+function backup_merge_backup_activities(PDO $bak, int $backupStudentId): array
+{
+    try {
+        $stmt = $bak->prepare(
+            'SELECT activity_type, title, place, sort_order
+             FROM student_activities
+             WHERE student_id = ?
+             ORDER BY sort_order ASC, id ASC'
+        );
+        $stmt->execute([$backupStudentId]);
+
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Превью занятости группы: данные из снимка, сопоставление с live по ФИО.
+ *
+ * @return array{
+ *   rows: list<array<string,mixed>>,
+ *   to_import: int,
+ *   already_filled: int,
+ *   no_backup_data: int,
+ *   unmatched: int
+ * }
+ */
+function backup_merge_activities_preview_for_group(PDO $bak, int $liveGroupId): array
+{
+    require_once __DIR__ . '/student_activities.php';
+    ensure_student_activities_schema();
+
+    $stmt = db()->prepare('SELECT id, number FROM study_groups WHERE id = ?');
+    $stmt->execute([$liveGroupId]);
+    $liveGroup = $stmt->fetch();
+    if (!$liveGroup) {
+        return [
+            'rows' => [],
+            'to_import' => 0,
+            'already_filled' => 0,
+            'no_backup_data' => 0,
+            'unmatched' => 0,
+        ];
+    }
+
+    $stmt = $bak->prepare('SELECT id, number FROM study_groups WHERE number = ?');
+    $stmt->execute([(string) $liveGroup['number']]);
+    $bakGroup = $stmt->fetch();
+    if (!$bakGroup) {
+        return [
+            'rows' => [],
+            'to_import' => 0,
+            'already_filled' => 0,
+            'no_backup_data' => 0,
+            'unmatched' => 0,
+        ];
+    }
+
+    $liveStudents = backup_merge_live_students_in_group($liveGroupId);
+    $bakStudents = backup_merge_backup_students_in_group($bak, (int) $bakGroup['id']);
+    $match = backup_merge_match_students($liveStudents, $bakStudents);
+
+    $liveIds = array_map(static function (array $s): int {
+        return (int) $s['id'];
+    }, $liveStudents);
+    $liveMap = get_students_activities_map($liveIds);
+
+    $rows = [];
+    $toImport = 0;
+    $alreadyFilled = 0;
+    $noBackupData = 0;
+
+    foreach ($match['matches'] as $pair) {
+        $liveId = (int) $pair['live']['id'];
+        $bakId = (int) $pair['backup']['id'];
+        $bakActivities = backup_merge_backup_activities($bak, $bakId);
+        $liveActivities = $liveMap[$liveId] ?? [];
+        $summary = format_student_activities_summary($bakActivities);
+        $willImport = $bakActivities !== [] && $liveActivities === [];
+
+        if ($bakActivities === []) {
+            $noBackupData++;
+            $status = 'no_backup';
+        } elseif ($liveActivities !== []) {
+            $alreadyFilled++;
+            $status = 'already';
+        } else {
+            $toImport++;
+            $status = 'import';
+        }
+
+        $rows[] = [
+            'live_id' => $liveId,
+            'backup_id' => $bakId,
+            'live_name' => (string) $pair['live']['full_name'],
+            'backup_name' => (string) $pair['backup']['full_name'],
+            'backup_activities' => $bakActivities,
+            'summary' => $summary,
+            'live_has' => $liveActivities !== [],
+            'will_import' => $willImport,
+            'status' => $status,
+        ];
+    }
+
+    return [
+        'rows' => $rows,
+        'to_import' => $toImport,
+        'already_filled' => $alreadyFilled,
+        'no_backup_data' => $noBackupData,
+        'unmatched' => count($match['live_unmatched']) + count($match['backup_unmatched']),
+    ];
+}
+
+/**
+ * Записать занятость из снимка в live по ФИО (только если в live пусто).
+ *
+ * @return array{success:bool,error?:string,imported:int,skipped:int,activities:int}
+ */
+function backup_merge_apply_activities_for_group(PDO $bak, int $liveGroupId): array
+{
+    require_once __DIR__ . '/student_activities.php';
+    ensure_student_activities_schema();
+
+    $preview = backup_merge_activities_preview_for_group($bak, $liveGroupId);
+    $imported = 0;
+    $skipped = 0;
+    $activities = 0;
+
+    foreach ($preview['rows'] as $row) {
+        if (empty($row['will_import'])) {
+            $skipped++;
+            continue;
+        }
+        $items = [];
+        foreach ($row['backup_activities'] as $activity) {
+            $items[] = [
+                'activity_type' => (($activity['activity_type'] ?? '') === 'section') ? 'section' : 'club',
+                'title' => (string) ($activity['title'] ?? ''),
+                'place' => (string) ($activity['place'] ?? ''),
+            ];
+        }
+        $result = save_student_activities((int) $row['live_id'], $items);
+        if ($result['success']) {
+            $imported++;
+            $activities += (int) ($result['count'] ?? count($items));
+        } else {
+            $skipped++;
+        }
+    }
+
+    return [
+        'success' => true,
+        'imported' => $imported,
+        'skipped' => $skipped,
+        'activities' => $activities,
     ];
 }

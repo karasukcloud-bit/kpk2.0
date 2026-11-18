@@ -54,6 +54,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $error = $result['error'] ?? 'Не удалось импортировать пропуски.';
+        } elseif ($action === 'apply_activities' && $liveGroupIdPost > 0) {
+            $result = backup_merge_apply_activities_for_group($bak, $liveGroupIdPost);
+            if ($result['success']) {
+                flash_set(
+                    'success',
+                    'Занятость: записано студентам ' . $result['imported']
+                    . ', записей ' . $result['activities']
+                    . ', пропущено ' . $result['skipped'] . '.'
+                );
+                header('Location: backup_merge.php?group=' . rawurlencode($groupNumber));
+                exit;
+            }
+            $error = $result['error'] ?? 'Не удалось импортировать занятость.';
         } elseif ($action === 'save_student') {
             $id = (int) ($_POST['live_id'] ?? 0);
             $data = student_payload_from_post($_POST);
@@ -447,6 +460,13 @@ if ($backupStudentId > 0) {
                     <input type="hidden" name="live_group_id" value="<?= (int) $liveGroupId ?>">
                     <input type="hidden" name="action" value="apply_attendance">
                     <button type="submit" class="btn">Импорт пропусков сен–окт</button>
+                </form>
+                <form method="post" onsubmit="return confirm('Записать занятость из снимка в текущую БД по ФИО для этой группы?');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="group" value="<?= e($groupNumber) ?>">
+                    <input type="hidden" name="live_group_id" value="<?= (int) $liveGroupId ?>">
+                    <input type="hidden" name="action" value="apply_activities">
+                    <button type="submit" class="btn">Импорт занятости</button>
                 </form>
             </div>
 
