@@ -58,6 +58,11 @@ $basePath = '../';
 $currentAdminTab = 'backup_merge';
 require __DIR__ . '/../includes/header.php';
 
+$liveDbConfig = require __DIR__ . '/../config/database.php';
+$backupDbConfig = require __DIR__ . '/../config/database_backup.php';
+$liveDbName = (string) ($liveDbConfig['dbname'] ?? 'spo_progress');
+$backupDbName = (string) ($backupDbConfig['dbname'] ?? '');
+
 $summaries = $bak ? backup_merge_group_summaries($bak) : [];
 $detail = null;
 $liveGroupId = null;
@@ -85,8 +90,9 @@ if ($bak && $groupNumber !== '') {
             <div>
                 <h1>Временная дозапись из снимка БД</h1>
                 <p class="text-muted">
-                    Live: <code>spo_progress</code> · Снимок:
-                    <code>spo_progress_backup_oct2026</code>.
+                    Live: <code><?= e($liveDbName) ?></code> · Снимок:
+                    <code><?= e($backupDbName) ?></code>
+                    (user: <code><?= e((string) ($backupDbConfig['username'] ?? '')) ?></code>).
                     Сопоставление по ФИО внутри номера группы. Пустые поля дописываются, заполненные не затираются.
                 </p>
             </div>

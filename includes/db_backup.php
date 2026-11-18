@@ -61,20 +61,32 @@ function db_backup_error(): string
 
     /** @var array{host:string,dbname:string,charset:string,username:string,password:string} $config */
     $config = require $configPath;
+    $hosts = array_values(array_unique(array_filter([
+        (string) ($config['host'] ?? ''),
+        '127.0.1.30',
+        '127.0.0.1',
+        'localhost',
+    ])));
 
-    try {
-        $dsn = sprintf(
-            'mysql:host=%s;dbname=%s;charset=%s',
-            $config['host'],
-            $config['dbname'],
-            $config['charset']
-        );
-        new PDO($dsn, $config['username'], $config['password'], [
-            PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-        ]);
+    $last = 'неизвестная ошибка';
+    foreach ($hosts as $host) {
+        try {
+            $dsn = sprintf(
+                'mysql:host=%s;dbname=%s;charset=%s',
+                $host,
+                $config['dbname'],
+                $config['charset']
+            );
+            new PDO($dsn, $config['username'], $config['password'], [
+                PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+            ]);
 
-        return '';
-    } catch (Throwable $e) {
-        return $e->getMessage();
+            return '';
+        } catch (Throwable $e) {
+            $last = $e->getMessage();
+        }
     }
+
+    return $last . ' (dbname=' . (string) ($config['dbname'] ?? '')
+        . ', user=' . (string) ($config['username'] ?? '') . ')';
 }
