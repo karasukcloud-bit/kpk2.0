@@ -38,6 +38,106 @@ function backup_merge_student_profile_fields(): array
     ];
 }
 
+/** @return array<string,string> */
+function backup_merge_field_labels(): array
+{
+    return [
+        'full_name' => 'ФИО',
+        'phone' => 'Телефон',
+        'snils' => 'СНИЛС',
+        'birth_date' => 'Дата рождения',
+        'gender' => 'Пол',
+        'mother_name' => 'Мать: ФИО',
+        'mother_phone' => 'Мать: телефон',
+        'mother_workplace' => 'Мать: место работы',
+        'mother_education' => 'Мать: образование',
+        'father_name' => 'Отец: ФИО',
+        'father_phone' => 'Отец: телефон',
+        'father_workplace' => 'Отец: место работы',
+        'father_education' => 'Отец: образование',
+        'address_registered' => 'Адрес по прописке',
+        'address_region' => 'Область / край',
+        'address_district' => 'Район',
+        'address_locality' => 'Населённый пункт',
+        'address_street' => 'Улица',
+        'address_house' => 'Дом',
+        'address_actual' => 'Фактический адрес',
+        'district' => 'Район (старое поле)',
+        'is_low_income' => 'Малообеспеченная семья',
+        'family_type' => 'Состав семьи',
+        'siblings_under_18' => 'Братьев/сестёр < 18',
+        'residence_type' => 'Место проживания',
+        'is_nonresident' => 'Иногородний',
+        'without_parental_care' => 'Без попечительства',
+    ];
+}
+
+function backup_merge_get_backup_student(PDO $bak, int $id): ?array
+{
+    $stmt = $bak->prepare('SELECT * FROM students WHERE id = ? LIMIT 1');
+    $stmt->execute([$id]);
+    $row = $stmt->fetch();
+
+    return $row ?: null;
+}
+
+/**
+ * Дописать пустые поля одному live-студенту из строки снимка.
+ *
+ * @return array{success:bool,error?:string,updated_fields:list<string>}
+ */
+function backup_merge_apply_one_student_from_backup(array $live, array $backup, bool $alsoFullName = true): array
+{
+    require_once __DIR__ . '/students.php';
+
+    $liveId = (int) ($live['id'] ?? 0);
+    if ($liveId <= 0 || get_student_by_id($liveId) === null) {
+        return ['success' => false, 'error' => 'Студент live не найден.', 'updated_fields' => []];
+    }
+
+    $pair = backup_merge_match_students([$live], [$backup]);
+    if ($pair['matches'] === []) {
+        // даже без совпадения ФИО разрешаем ручное заполнение по выбранной паре
+        $fields = [];
+        foreach (backup_merge_student_profile_fields() as $field) {
+            if (backup_merge_is_empty_value($live[$field] ?? null)
+                && !backup_merge_is_empty_value($backup[$field] ?? null)) {
+                $fields[] = $field;
+            }
+        }
+        if ($alsoFullName) {
+            $liveName = trim((string) ($live['full_name'] ?? ''));
+            $bakName = trim((string) ($backup['full_name'] ?? ''));
+            if ($bakName !== '' && $liveName !== $bakName) {
+                $fields[] = 'full_name';
+            }
+        }
+    } else {
+        $fields = $pair['matches'][0]['fields_to_fill'];
+        if (!$alsoFullName) {
+            $fields = array_values(array_filter($fields, static fn(string $f): bool => $f !== 'full_name'));
+        }
+    }
+
+    $fields = array_values(array_unique($fields));
+    if ($fields === []) {
+        return ['success' => true, 'updated_fields' => []];
+    }
+
+    $sets = [];
+    $params = [];
+    foreach ($fields as $field) {
+        $sets[] = '`' . $field . '` = ?';
+        $params[] = $backup[$field] ?? null;
+    }
+    $sets[] = '`updated_at` = NOW()';
+    $params[] = $liveId;
+
+    db()->prepare('UPDATE students SET ' . implode(', ', $sets) . ' WHERE id = ?')->execute($params);
+
+    return ['success' => true, 'updated_fields' => $fields];
+}
+
 function backup_merge_normalize_name(string $name): string
 {
     $name = preg_replace('/\s+/u', ' ', trim($name)) ?? '';
