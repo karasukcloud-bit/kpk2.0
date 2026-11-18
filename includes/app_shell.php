@@ -79,6 +79,7 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
             ['tab' => 'logs', 'href' => $base . 'logs.php', 'icon' => 'logs', 'label' => 'Журнал'],
             ['tab' => 'expelled', 'href' => $base . 'expelled.php', 'icon' => 'expelled', 'label' => 'Отчисленные'],
             ['tab' => 'stats', 'href' => $base . 'stats.php', 'icon' => 'stats', 'label' => 'Статистика'],
+            ['tab' => 'backup_merge', 'href' => $base . 'backup_merge.php', 'icon' => 'archive', 'label' => 'Снимок БД'],
         ]);
 
         return [
