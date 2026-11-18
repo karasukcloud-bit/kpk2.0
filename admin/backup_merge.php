@@ -14,7 +14,11 @@ $success = flash_get('success');
 $groupNumber = trim((string) ($_GET['group'] ?? $_POST['group'] ?? ''));
 $liveStudentId = isset($_GET['live_id']) ? (int) $_GET['live_id'] : (int) ($_POST['live_id'] ?? 0);
 $backupStudentId = isset($_GET['backup_id']) ? (int) $_GET['backup_id'] : (int) ($_POST['backup_id'] ?? 0);
-$editMode = isset($_GET['edit']) || isset($_POST['edit']);
+$editTarget = strtolower(trim((string) ($_GET['edit'] ?? $_POST['edit'] ?? '')));
+if ($editTarget === '1') {
+    $editTarget = 'live'; // совместимость со старыми ссылками
+}
+$editMode = $editTarget === 'live' || $editTarget === 'backup';
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!verify_csrf($_POST['csrf_token'] ?? null)) {
@@ -64,8 +68,26 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $error = $result['error'] ?? 'Не удалось сохранить.';
+            $editTarget = 'live';
             $editMode = true;
             $liveStudentId = $id;
+        } elseif ($action === 'save_backup_student') {
+            $id = (int) ($_POST['backup_id'] ?? 0);
+            $data = student_payload_from_post($_POST);
+            $result = backup_merge_update_backup_student($bak, $id, $data);
+            if ($result['success']) {
+                flash_set('success', 'Данные студента в снимке сохранены.');
+                $q = 'group=' . rawurlencode($groupNumber) . '&backup_id=' . $id;
+                if ($liveStudentId > 0) {
+                    $q .= '&live_id=' . $liveStudentId;
+                }
+                header('Location: backup_merge.php?' . $q);
+                exit;
+            }
+            $error = $result['error'] ?? 'Не удалось сохранить снимок.';
+            $editTarget = 'backup';
+            $editMode = true;
+            $backupStudentId = $id;
         } elseif ($action === 'fill_from_backup') {
             $id = (int) ($_POST['live_id'] ?? 0);
             $bakId = (int) ($_POST['backup_id'] ?? 0);
@@ -152,9 +174,18 @@ $displayOrDash = static function (?string $value): string {
     return $value !== '' ? $value : '—';
 };
 
-$formData = $viewLive ?? [];
-if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['action'] ?? '') === 'save_student') {
+$formData = $editTarget === 'backup' ? ($viewBackup ?? []) : ($viewLive ?? []);
+if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST'
+    && in_array((string) ($_POST['action'] ?? ''), ['save_student', 'save_backup_student'], true)) {
     $formData = array_merge($formData, student_payload_from_post($_POST));
+}
+
+$cardBackQuery = 'group=' . rawurlencode($groupNumber);
+if ($liveStudentId > 0) {
+    $cardBackQuery .= '&live_id=' . $liveStudentId;
+}
+if ($backupStudentId > 0) {
+    $cardBackQuery .= '&backup_id=' . $backupStudentId;
 }
 ?>
 
@@ -250,8 +281,12 @@ if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['acti
                 <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1rem;">
                     <?php if (!$editMode): ?>
                         <a class="btn btn--primary"
-                           href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&live_id=<?= (int) $viewLive['id'] ?>&backup_id=<?= (int) $viewBackup['id'] ?>&edit=1">
+                           href="backup_merge.php?<?= e($cardBackQuery) ?>&edit=live">
                             Редактировать live
+                        </a>
+                        <a class="btn"
+                           href="backup_merge.php?<?= e($cardBackQuery) ?>&edit=backup">
+                            Редактировать снимок
                         </a>
                         <form method="post" style="display:inline;"
                               onsubmit="return confirm('Дописать пустые поля live из снимка для этого студента?');">
@@ -272,24 +307,26 @@ if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['acti
                 <?php if ($editMode): ?>
                     <form method="post" class="form">
                         <?= csrf_field() ?>
-                        <input type="hidden" name="action" value="save_student">
-                        <input type="hidden" name="edit" value="1">
+                        <input type="hidden" name="action" value="<?= $editTarget === 'backup' ? 'save_backup_student' : 'save_student' ?>">
+                        <input type="hidden" name="edit" value="<?= e($editTarget) ?>">
                         <input type="hidden" name="group" value="<?= e($groupNumber) ?>">
                         <input type="hidden" name="live_id" value="<?= (int) $viewLive['id'] ?>">
                         <input type="hidden" name="backup_id" value="<?= (int) $viewBackup['id'] ?>">
+                        <p class="text-muted" style="margin-bottom:1rem;">
+                            Редактируется: <strong><?= $editTarget === 'backup' ? 'снимок (новая БД)' : 'live' ?></strong>
+                        </p>
                         <?php
                         $data = $formData;
                         require __DIR__ . '/../includes/student_fields.php';
                         ?>
                         <div style="display:flex;gap:.75rem;flex-wrap:wrap;margin-top:1rem;">
-                            <button type="submit" class="btn btn--primary">Сохранить в live</button>
-                            <a class="btn"
-                               href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&live_id=<?= (int) $viewLive['id'] ?>&backup_id=<?= (int) $viewBackup['id'] ?>">
-                                Отмена
-                            </a>
+                            <button type="submit" class="btn btn--primary">
+                                <?= $editTarget === 'backup' ? 'Сохранить в снимок' : 'Сохранить в live' ?>
+                            </button>
+                            <a class="btn" href="backup_merge.php?<?= e($cardBackQuery) ?>">Отмена</a>
                         </div>
                     </form>
-                    <h3 style="margin-top:1.5rem;">Снимок (только просмотр)</h3>
+                    <h3 style="margin-top:1.5rem;">Сравнение Live / Снимок</h3>
                 <?php endif; ?>
 
                 <div class="table-wrap">
@@ -322,7 +359,7 @@ if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['acti
                 <p class="text-muted">В снимке пары по ФИО нет — можно править только live.</p>
                 <?php if (!$editMode): ?>
                     <a class="btn btn--primary"
-                       href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&live_id=<?= (int) $viewLive['id'] ?>&edit=1">
+                       href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&live_id=<?= (int) $viewLive['id'] ?>&edit=live">
                         Редактировать live
                     </a>
                     <dl class="profile-list" style="margin-top:1rem;">
@@ -335,7 +372,7 @@ if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['acti
                     <form method="post" class="form">
                         <?= csrf_field() ?>
                         <input type="hidden" name="action" value="save_student">
-                        <input type="hidden" name="edit" value="1">
+                        <input type="hidden" name="edit" value="live">
                         <input type="hidden" name="group" value="<?= e($groupNumber) ?>">
                         <input type="hidden" name="live_id" value="<?= (int) $viewLive['id'] ?>">
                         <?php
@@ -349,13 +386,35 @@ if ($editMode && $_SERVER['REQUEST_METHOD'] === 'POST' && (string) ($_POST['acti
                     </form>
                 <?php endif; ?>
             <?php else: ?>
-                <p class="text-muted">Только снимок (в live нет пары) — правка недоступна, сначала заведите/выровняйте студента в live.</p>
-                <dl class="profile-list">
-                    <?php foreach (array_merge(['full_name'], backup_merge_student_profile_fields()) as $field): ?>
-                        <dt><?= e($fieldLabels[$field] ?? $field) ?></dt>
-                        <dd><?= e($displayOrDash((string) ($viewBackup[$field] ?? ''))) ?></dd>
-                    <?php endforeach; ?>
-                </dl>
+                <p class="text-muted">Только снимок (в live нет пары). Можно править карточку в новой БД; для переноса в live сначала выровняйте ФИО.</p>
+                <?php if (!$editMode): ?>
+                    <a class="btn btn--primary"
+                       href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&backup_id=<?= (int) $viewBackup['id'] ?>&edit=backup">
+                        Редактировать снимок
+                    </a>
+                    <dl class="profile-list" style="margin-top:1rem;">
+                        <?php foreach (array_merge(['full_name'], backup_merge_student_profile_fields()) as $field): ?>
+                            <dt><?= e($fieldLabels[$field] ?? $field) ?></dt>
+                            <dd><?= e($displayOrDash((string) ($viewBackup[$field] ?? ''))) ?></dd>
+                        <?php endforeach; ?>
+                    </dl>
+                <?php else: ?>
+                    <form method="post" class="form">
+                        <?= csrf_field() ?>
+                        <input type="hidden" name="action" value="save_backup_student">
+                        <input type="hidden" name="edit" value="backup">
+                        <input type="hidden" name="group" value="<?= e($groupNumber) ?>">
+                        <input type="hidden" name="backup_id" value="<?= (int) $viewBackup['id'] ?>">
+                        <?php
+                        $data = $formData;
+                        require __DIR__ . '/../includes/student_fields.php';
+                        ?>
+                        <div style="display:flex;gap:.75rem;margin-top:1rem;">
+                            <button type="submit" class="btn btn--primary">Сохранить в снимок</button>
+                            <a class="btn" href="backup_merge.php?group=<?= rawurlencode($groupNumber) ?>&backup_id=<?= (int) $viewBackup['id'] ?>">Отмена</a>
+                        </div>
+                    </form>
+                <?php endif; ?>
             <?php endif; ?>
         </section>
 

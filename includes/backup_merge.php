@@ -82,6 +82,74 @@ function backup_merge_get_backup_student(PDO $bak, int $id): ?array
 }
 
 /**
+ * Обновить карточку студента в БД-снимке.
+ *
+ * @return array{success:bool,error?:string}
+ */
+function backup_merge_update_backup_student(PDO $bak, int $id, array $data): array
+{
+    require_once __DIR__ . '/students.php';
+
+    $student = backup_merge_get_backup_student($bak, $id);
+    if ($student === null) {
+        return ['success' => false, 'error' => 'Студент в снимке не найден.'];
+    }
+
+    $check = validate_student_data($data);
+    if (!$check['success']) {
+        return $check;
+    }
+
+    $data = apply_student_auto_address($data);
+
+    $stmt = $bak->prepare(
+        'UPDATE students SET
+            full_name = ?, phone = ?, snils = ?, birth_date = ?, gender = ?,
+            mother_name = ?, mother_phone = ?, mother_workplace = ?, mother_education = ?,
+            father_name = ?, father_phone = ?, father_workplace = ?, father_education = ?,
+            address_region = ?, address_district = ?, address_locality = ?,
+            address_street = ?, address_house = ?,
+            address_registered = ?, address_actual = ?,
+            district = ?, is_low_income = ?, family_type = ?, siblings_under_18 = ?,
+            residence_type = ?, is_nonresident = ?, without_parental_care = ?,
+            updated_at = NOW()
+         WHERE id = ?'
+    );
+    $stmt->execute([
+        $data['full_name'],
+        $data['phone'],
+        normalize_student_snils($data['snils'] ?? null),
+        normalize_student_birth_date($data['birth_date'] ?? null),
+        normalize_student_gender($data['gender'] ?? null),
+        $data['mother_name'],
+        $data['mother_phone'],
+        (string) ($data['mother_workplace'] ?? ''),
+        (string) ($data['mother_education'] ?? ''),
+        $data['father_name'],
+        $data['father_phone'],
+        (string) ($data['father_workplace'] ?? ''),
+        (string) ($data['father_education'] ?? ''),
+        (string) ($data['address_region'] ?? ''),
+        (string) ($data['address_district'] ?? ''),
+        (string) ($data['address_locality'] ?? ''),
+        (string) ($data['address_street'] ?? ''),
+        (string) ($data['address_house'] ?? ''),
+        $data['address_registered'],
+        $data['address_actual'],
+        (string) ($data['district'] ?? ''),
+        !empty($data['is_low_income']) ? 1 : 0,
+        normalize_student_family_type($data['family_type'] ?? null),
+        normalize_student_siblings_under_18($data['siblings_under_18'] ?? 0),
+        normalize_student_residence_type($data['residence_type'] ?? null),
+        !empty($data['is_nonresident']) ? 1 : 0,
+        !empty($data['without_parental_care']) ? 1 : 0,
+        $id,
+    ]);
+
+    return ['success' => true];
+}
+
+/**
  * Дописать пустые поля одному live-студенту из строки снимка.
  *
  * @return array{success:bool,error?:string,updated_fields:list<string>}
@@ -141,12 +209,15 @@ function backup_merge_apply_one_student_from_backup(array $live, array $backup, 
 function backup_merge_normalize_name(string $name): string
 {
     $name = preg_replace('/\s+/u', ' ', trim($name)) ?? '';
+    $name = mb_strtolower($name, 'UTF-8');
+    // е и ё считаем одной буквой при сопоставлении
+    $name = str_replace(['ё', 'Ё'], ['е', 'Е'], $name);
 
-    return mb_strtolower($name, 'UTF-8');
+    return $name;
 }
 
 /**
- * Сопоставление ФИО: точное, или live = начало backup (без отчества).
+ * Сопоставление ФИО: точное (с учётом е/ё), или live = начало backup (без отчества).
  */
 function backup_merge_names_match(string $liveName, string $backupName): bool
 {
