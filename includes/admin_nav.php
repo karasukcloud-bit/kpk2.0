@@ -58,4 +58,8 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
        class="admin-tabs__item<?= $currentAdminTab === 'stats' ? ' admin-tabs__item--active' : '' ?>">
         Статистика
     </a>
+    <a href="backup_merge.php"
+       class="admin-tabs__item<?= $currentAdminTab === 'backup_merge' ? ' admin-tabs__item--active' : '' ?>">
+        Снимок БД
+    </a>
 </nav>
