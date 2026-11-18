@@ -143,33 +143,55 @@ declare(strict_types=1);
                     <span class="text-muted"> — <?= e($autoNote) ?></span>
                 </p>
             <?php elseif ($item['type'] === 'students'): ?>
-                <div class="curator-monthly-report-students" data-students-root data-students-key="<?= e($key) ?>">
-                    <?php
-                    $selected = is_array($payload[$key] ?? null) ? $payload[$key] : [];
-                    if ($selected === []) {
-                        $selected = [0];
+                <?php
+                $selected = is_array($payload[$key] ?? null) ? $payload[$key] : [];
+                $selectedSet = [];
+                foreach ($selected as $selectedId) {
+                    $selectedId = (int) $selectedId;
+                    if ($selectedId > 0) {
+                        $selectedSet[$selectedId] = true;
                     }
-                    foreach ($selected as $selectedId):
-                    ?>
-                    <div class="curator-monthly-report-students__row" data-student-row>
-                        <select name="<?= e($key) ?>[]" data-student-select>
-                            <option value="">— Выберите студента —</option>
-                            <?php foreach ($students as $student): ?>
-                                <option
-                                    value="<?= (int) $student['id'] ?>"
-                                    <?= (int) $selectedId === (int) $student['id'] ? ' selected' : '' ?>
-                                ><?= e((string) $student['full_name']) ?></option>
-                            <?php endforeach; ?>
-                        </select>
-                        <button type="button" class="btn btn--ghost btn--sm" data-student-remove title="Удалить">×</button>
+                }
+                $selectedCount = count($selectedSet);
+                ?>
+                <div class="curator-monthly-report-students" data-students-root data-students-key="<?= e($key) ?>">
+                    <div class="cmr-ms" data-student-ms>
+                        <button type="button" class="cmr-ms__toggle" data-ms-toggle aria-expanded="false">
+                            <span data-ms-label><?= $selectedCount > 0
+                                ? ('Выбрано: ' . $selectedCount)
+                                : '— Выберите студентов —' ?></span>
+                        </button>
+                        <div class="cmr-ms__panel" data-ms-panel hidden>
+                            <input
+                                type="search"
+                                class="cmr-ms__search"
+                                placeholder="Поиск по ФИО…"
+                                data-ms-search
+                                autocomplete="off"
+                            >
+                            <div class="cmr-ms__list" data-ms-list>
+                                <?php foreach ($students as $student): ?>
+                                    <?php $sid = (int) $student['id']; ?>
+                                    <label class="cmr-ms__option" data-ms-option data-ms-name="<?= e(mb_strtolower((string) $student['full_name'], 'UTF-8')) ?>">
+                                        <input
+                                            type="checkbox"
+                                            name="<?= e($key) ?>[]"
+                                            value="<?= $sid ?>"
+                                            data-student-check
+                                            <?= isset($selectedSet[$sid]) ? ' checked' : '' ?>
+                                        >
+                                        <span><?= e((string) $student['full_name']) ?></span>
+                                    </label>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="cmr-ms__actions">
+                                <button type="button" class="btn btn--ghost btn--sm" data-ms-all>Выбрать всех</button>
+                                <button type="button" class="btn btn--ghost btn--sm" data-ms-none>Сбросить</button>
+                            </div>
+                        </div>
                     </div>
-                    <?php endforeach; ?>
                 </div>
-                <button type="button" class="btn btn--ghost btn--sm" data-student-add>+ Добавить студента</button>
-                <p class="text-muted">Выбрано: <strong data-students-count><?= count(array_filter(
-                    is_array($payload[$key] ?? null) ? $payload[$key] : [],
-                    static fn ($id) => (int) $id > 0
-                )) ?></strong></p>
+                <p class="text-muted">Выбрано: <strong data-students-count><?= $selectedCount ?></strong></p>
             <?php elseif ($item['type'] === 'characteristics'): ?>
                 <div class="summary-report-filters__tabs curator-monthly-report-chars">
                     <label class="summary-report-filters__tab<?= $payload['characteristics'] === 'submitted' ? ' is-active' : '' ?>">

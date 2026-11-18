@@ -555,7 +555,7 @@ require __DIR__ . '/../header.php';
         <?php endif; ?>
 
         <div class="panel__header curriculum-add-subject-head">
-            <h3 class="subsection-title">Добавить предмет</h3>
+        <h3 class="subsection-title">Добавить предмет</h3>
             <div class="panel__header-actions">
                 <a
                     href="curriculum_import.php?group_id=<?= (int) $groupId ?>&year=<?= e(urlencode($academicYear)) ?>"

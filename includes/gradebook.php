@@ -435,7 +435,7 @@ function merge_gradebook_subjects(array ...$subjectLists): array
 {
     $merged = [];
     foreach ($subjectLists as $subjects) {
-        foreach ($subjects as $subject) {
+            foreach ($subjects as $subject) {
             $itemId = (int) ($subject['curriculum_item_id'] ?? 0);
             if ($itemId <= 0 || isset($merged[$itemId])) {
                 continue;
@@ -1774,13 +1774,13 @@ function resolve_gradebook_year_period(
     // Архив — только стандартный контур; ручное БРС всегда из живых данных.
     if ($source === 'journal') {
         foreach ($semesterOrder as $semester) {
-            $archive = get_archive_period('gradebook', $academicYear, $semester);
-            if ($archive) {
-                return [
-                    'academic_year' => $academicYear,
-                    'semester' => $semester,
-                    'archive_id' => (int) $archive['id'],
-                ];
+        $archive = get_archive_period('gradebook', $academicYear, $semester);
+        if ($archive) {
+            return [
+                'academic_year' => $academicYear,
+                'semester' => $semester,
+                'archive_id' => (int) $archive['id'],
+            ];
             }
         }
     }

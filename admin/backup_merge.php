@@ -67,6 +67,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 exit;
             }
             $error = $result['error'] ?? 'Не удалось импортировать занятость.';
+        } elseif ($action === 'apply_journal' && $liveGroupIdPost > 0) {
+            $result = backup_merge_apply_journal_for_group($bak, $liveGroupIdPost);
+            if ($result['success']) {
+                flash_set(
+                    'success',
+                    'Журнал: дисциплин ' . $result['subjects']
+                    . ', уроков добавлено ' . $result['lessons']
+                    . ', оценок ' . $result['grades']
+                    . ', уроков уже было ' . $result['skipped_lessons']
+                    . ', оценок пропущено ' . $result['skipped_grades']
+                    . ', дисциплин без пары ' . $result['skipped_subjects'] . '.'
+                );
+                header('Location: backup_merge.php?group=' . rawurlencode($groupNumber));
+                exit;
+            }
+            $error = $result['error'] ?? 'Не удалось импортировать журнал.';
         } elseif ($action === 'save_student') {
             $id = (int) ($_POST['live_id'] ?? 0);
             $data = student_payload_from_post($_POST);
@@ -166,6 +182,10 @@ if ($bak && $groupNumber !== '') {
         $detail = backup_merge_match_students($liveStudents, $bakStudents);
     }
 }
+
+$journalPreview = ($bak && $liveGroupId && $backupGroupId && $detail !== null && $liveStudentId <= 0 && $backupStudentId <= 0)
+    ? backup_merge_journal_preview_for_group($bak, (int) $liveGroupId)
+    : null;
 
 $viewLive = $liveStudentId > 0 ? get_student_by_id($liveStudentId) : null;
 $viewBackup = null;
@@ -468,7 +488,86 @@ if ($backupStudentId > 0) {
                     <input type="hidden" name="action" value="apply_activities">
                     <button type="submit" class="btn">Импорт занятости</button>
                 </form>
+                <form method="post" onsubmit="return confirm('Импортировать электронный журнал из снимка в текущий журнал для сопоставленных дисциплин и студентов этой группы? Существующие уроки/оценки не перезаписываются.');">
+                    <?= csrf_field() ?>
+                    <input type="hidden" name="group" value="<?= e($groupNumber) ?>">
+                    <input type="hidden" name="live_group_id" value="<?= (int) $liveGroupId ?>">
+                    <input type="hidden" name="action" value="apply_journal">
+                    <button type="submit" class="btn"<?= ($journalPreview && (int) ($journalPreview['matched'] ?? 0) === 0) ? ' disabled' : '' ?>>
+                        Импорт журнала
+                    </button>
+                </form>
             </div>
+
+            <?php if ($journalPreview !== null): ?>
+                <div class="panel__header panel__header--compact" style="margin-top:0.5rem;">
+                    <div>
+                        <h3 style="margin:0;">Электронный журнал (снимок)</h3>
+                        <p class="text-muted" style="margin:0.35rem 0 0;">
+                            Дисциплин с данными: <?= (int) $journalPreview['subjects_with_data'] ?>,
+                            сопоставлено с планом live: <?= (int) $journalPreview['matched'] ?>,
+                            без пары: <?= (int) $journalPreview['unmatched'] ?>.
+                            Уроков в снимке: <?= (int) $journalPreview['bak_lessons'] ?>,
+                            оценок: <?= (int) $journalPreview['bak_grades'] ?>.
+                            В live уже: уроков <?= (int) $journalPreview['live_lessons'] ?>,
+                            оценок <?= (int) $journalPreview['live_grades'] ?>.
+                        </p>
+                    </div>
+                    <a
+                        class="btn btn--small"
+                        href="backup_journal.php?group=<?= rawurlencode($groupNumber) ?>"
+                    >Смотреть журналы снимка</a>
+                </div>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                        <tr>
+                            <th>Дисциплина</th>
+                            <th>Год</th>
+                            <th>Сем.</th>
+                            <th>Уроков (снимок)</th>
+                            <th>Оценок (снимок)</th>
+                            <th>Уроков (live)</th>
+                            <th>Оценок (live)</th>
+                            <th>Статус</th>
+                            <th></th>
+                        </tr>
+                        </thead>
+                        <tbody>
+                        <?php if ($journalPreview['rows'] === []): ?>
+                            <tr>
+                                <td colspan="9" class="text-muted">В снимке нет уроков электронного журнала по этой группе.</td>
+                            </tr>
+                        <?php else: ?>
+                            <?php foreach ($journalPreview['rows'] as $jRow): ?>
+                                <tr>
+                                    <td><?= e((string) $jRow['subject_name']) ?></td>
+                                    <td><?= e((string) $jRow['academic_year']) ?></td>
+                                    <td><?= e((string) $jRow['semester']) ?></td>
+                                    <td><?= (int) $jRow['bak_lessons'] ?></td>
+                                    <td><?= (int) $jRow['bak_grades'] ?></td>
+                                    <td><?= (int) $jRow['live_lessons'] ?></td>
+                                    <td><?= (int) $jRow['live_grades'] ?></td>
+                                    <td>
+                                        <?php if ($jRow['status'] === 'matched'): ?>
+                                            <span style="color:#166534;">можно импортировать</span>
+                                        <?php else: ?>
+                                            <span class="text-muted">нет дисциплины в live-плане</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    <td>
+                                        <a
+                                            class="btn btn--small"
+                                            href="backup_journal.php?group=<?= rawurlencode($groupNumber) ?>&item_id=<?= (int) $jRow['backup_item_id'] ?>"
+                                        >Смотреть</a>
+                                    </td>
+                                </tr>
+                            <?php endforeach; ?>
+                        <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endif; ?>
 
             <h3>Сопоставления</h3>
             <div class="table-wrap">

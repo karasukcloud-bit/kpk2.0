@@ -165,11 +165,6 @@ $curatorGroupId = $groupId;
 $curatorGroups = $groups;
 require __DIR__ . '/../includes/header.php';
 
-$studentOptionsHtml = '';
-foreach ($students as $student) {
-    $studentOptionsHtml .= '<option value="' . (int) $student['id'] . '">'
-        . e((string) $student['full_name']) . '</option>';
-}
 ?>
 
 <div class="dashboard dashboard--wide curator-page curator-monthly-report-page" data-monthly-report-page>
@@ -290,15 +285,6 @@ foreach ($students as $student) {
         <button type="button" class="btn btn--ghost btn--sm" data-event-remove title="Удалить">×</button>
     </div>
 </template>
-<template id="monthly-report-student-row">
-    <div class="curator-monthly-report-students__row" data-student-row>
-        <select name="__KEY__[]" data-student-select>
-            <option value="">— Выберите студента —</option>
-            <?= $studentOptionsHtml ?>
-        </select>
-        <button type="button" class="btn btn--ghost btn--sm" data-student-remove title="Удалить">×</button>
-    </div>
-</template>
 <script>
 (() => {
     const page = document.querySelector('[data-monthly-report-page]');
@@ -309,7 +295,6 @@ foreach ($students as $student) {
 
     const groupId = editor.dataset.groupId || '';
     const eventTpl = document.getElementById('monthly-report-event-row');
-    const studentTpl = document.getElementById('monthly-report-student-row');
     let loading = false;
     let formCleanup = null;
 
@@ -384,56 +369,48 @@ foreach ($students as $student) {
         };
 
         const countSelectedStudents = (root) => {
-            const seen = {};
             let n = 0;
-            root.querySelectorAll('[data-student-select]').forEach((select) => {
-                const id = Number(select.value || 0);
-                if (id > 0 && !seen[id]) {
-                    seen[id] = true;
+            root.querySelectorAll('[data-student-check]').forEach((input) => {
+                if (input.checked) {
                     n += 1;
                 }
             });
             return n;
         };
 
-        const syncStudentSelects = (root) => {
-            if (!root) {
-                return;
+        const syncMsLabel = (root) => {
+            const count = countSelectedStudents(root);
+            const label = root.querySelector('[data-ms-label]');
+            if (label) {
+                label.textContent = count > 0
+                    ? ('Выбрано: ' + count)
+                    : '— Выберите студентов —';
             }
-            const selects = [...root.querySelectorAll('[data-student-select]')];
-            const taken = {};
-            selects.forEach((select) => {
-                const id = String(select.value || '');
-                if (id !== '' && taken[id]) {
-                    select.value = '';
-                } else if (id !== '') {
-                    taken[id] = true;
-                }
-            });
-            selects.forEach((select) => {
-                const current = String(select.value || '');
-                select.querySelectorAll('option').forEach((option) => {
-                    const value = String(option.value || '');
-                    if (value === '') {
-                        option.disabled = false;
-                        return;
-                    }
-                    option.disabled = value !== current && !!taken[value];
-                });
-            });
             const item = root.closest('[data-report-item]');
-            const addBtn = item && item.querySelector('[data-student-add]');
-            if (addBtn) {
-                addBtn.disabled = countSelectedStudents(root) >= studentCount;
+            const counter = item && item.querySelector('[data-students-count]');
+            if (counter) {
+                counter.textContent = String(count);
             }
         };
 
-        const syncAllStudentSelects = () => {
-            form.querySelectorAll('[data-students-root]').forEach((root) => syncStudentSelects(root));
+        const closeAllMs = (except) => {
+            form.querySelectorAll('[data-student-ms]').forEach((ms) => {
+                if (except && ms === except) {
+                    return;
+                }
+                const panel = ms.querySelector('[data-ms-panel]');
+                const toggle = ms.querySelector('[data-ms-toggle]');
+                if (panel) {
+                    panel.hidden = true;
+                }
+                if (toggle) {
+                    toggle.setAttribute('aria-expanded', 'false');
+                }
+                ms.classList.remove('is-open');
+            });
         };
 
         const recalc = () => {
-            syncAllStudentSelects();
             let total = 0;
             form.querySelectorAll('[data-report-item]').forEach((item) => {
                 const key = item.dataset.reportItem;
@@ -468,9 +445,8 @@ foreach ($students as $student) {
                     count = root ? countSelectedStudents(root) : 0;
                     percent = percentOf(count, studentCount);
                     points = pointsByPercent(percent, inverted);
-                    const counter = item.querySelector('[data-students-count]');
-                    if (counter) {
-                        counter.textContent = String(count);
+                    if (root) {
+                        syncMsLabel(root);
                     }
                 } else if (type === 'characteristics') {
                     const checked = item.querySelector('[data-char-input]:checked');
@@ -496,8 +472,72 @@ foreach ($students as $student) {
             }
         };
 
-        const onInput = () => recalc();
+        const onInput = (event) => {
+            const search = event.target.closest('[data-ms-search]');
+            if (search) {
+                const ms = search.closest('[data-student-ms]');
+                const q = String(search.value || '').trim().toLowerCase();
+                if (ms) {
+                    ms.querySelectorAll('[data-ms-option]').forEach((option) => {
+                        const name = String(option.dataset.msName || '');
+                        option.hidden = q !== '' && !name.includes(q);
+                    });
+                }
+                return;
+            }
+            recalc();
+        };
+
         const onClick = (event) => {
+            const toggle = event.target.closest('[data-ms-toggle]');
+            if (toggle) {
+                const ms = toggle.closest('[data-student-ms]');
+                const panel = ms && ms.querySelector('[data-ms-panel]');
+                if (!ms || !panel) {
+                    return;
+                }
+                const open = panel.hidden;
+                closeAllMs(ms);
+                panel.hidden = !open;
+                toggle.setAttribute('aria-expanded', open ? 'true' : 'false');
+                ms.classList.toggle('is-open', open);
+                if (open) {
+                    const search = panel.querySelector('[data-ms-search]');
+                    if (search) {
+                        search.focus();
+                    }
+                }
+                return;
+            }
+
+            const allBtn = event.target.closest('[data-ms-all]');
+            if (allBtn) {
+                const root = allBtn.closest('[data-students-root]');
+                if (root) {
+                    root.querySelectorAll('[data-student-check]').forEach((input) => {
+                        const option = input.closest('[data-ms-option]');
+                        if (!option || option.hidden) {
+                            return;
+                        }
+                        input.checked = true;
+                    });
+                    recalc();
+                }
+                return;
+            }
+
+            const noneBtn = event.target.closest('[data-ms-none]');
+            if (noneBtn) {
+                const root = noneBtn.closest('[data-students-root]');
+                if (root) {
+                    root.querySelectorAll('[data-student-check]').forEach((input) => {
+                        input.checked = false;
+                    });
+                    recalc();
+                }
+                return;
+            }
+
             const addEventBtn = event.target.closest('[data-event-add]');
             if (addEventBtn && eventTpl) {
                 const root = form.querySelector('[data-events-root]');
@@ -523,43 +563,14 @@ foreach ($students as $student) {
                     }
                     recalc();
                 }
+            }
+        };
+
+        const onDocClick = (event) => {
+            if (event.target.closest('[data-student-ms]')) {
                 return;
             }
-
-            const addStudentBtn = event.target.closest('[data-student-add]');
-            if (addStudentBtn && studentTpl) {
-                if (addStudentBtn.disabled) {
-                    return;
-                }
-                const item = addStudentBtn.closest('[data-report-item]');
-                const root = item && item.querySelector('[data-students-root]');
-                const key = root && root.dataset.studentsKey;
-                if (root && key) {
-                    if (countSelectedStudents(root) >= studentCount) {
-                        return;
-                    }
-                    root.insertAdjacentHTML('beforeend', studentTpl.innerHTML.replaceAll('__KEY__', key).trim());
-                    recalc();
-                }
-                return;
-            }
-
-            const removeStudentBtn = event.target.closest('[data-student-remove]');
-            if (removeStudentBtn) {
-                const root = removeStudentBtn.closest('[data-students-root]');
-                const row = removeStudentBtn.closest('[data-student-row]');
-                if (root && row) {
-                    if (root.querySelectorAll('[data-student-row]').length <= 1) {
-                        const select = row.querySelector('[data-student-select]');
-                        if (select) {
-                            select.value = '';
-                        }
-                    } else {
-                        row.remove();
-                    }
-                    recalc();
-                }
-            }
+            closeAllMs(null);
         };
 
         const onCharChange = (event) => {
@@ -577,6 +588,7 @@ foreach ($students as $student) {
         form.addEventListener('change', onInput);
         form.addEventListener('click', onClick);
         form.addEventListener('change', onCharChange);
+        document.addEventListener('click', onDocClick);
         recalc();
 
         formCleanup = () => {
@@ -584,6 +596,7 @@ foreach ($students as $student) {
             form.removeEventListener('change', onInput);
             form.removeEventListener('click', onClick);
             form.removeEventListener('change', onCharChange);
+            document.removeEventListener('click', onDocClick);
         };
     };
 

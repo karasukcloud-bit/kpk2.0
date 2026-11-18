@@ -830,3 +830,628 @@ function backup_merge_apply_activities_for_group(PDO $bak, int $liveGroupId): ar
         'activities' => $activities,
     ];
 }
+
+/**
+ * Карточка дисциплины журнала в снимке.
+ *
+ * @return array<string,mixed>|null
+ */
+function backup_merge_get_backup_journal_item(PDO $bak, int $itemId): ?array
+{
+    if ($itemId <= 0 || !backup_merge_pdo_table_exists($bak, 'curriculum_items')) {
+        return null;
+    }
+
+    $hasItemType = backup_merge_pdo_column_exists($bak, 'curriculum_items', 'item_type');
+    $itemTypeSelect = $hasItemType ? 'ci.item_type' : "'' AS item_type";
+    $sql = "SELECT ci.id AS curriculum_item_id,
+                   sub.name AS subject_name,
+                   ci.semester,
+                   {$itemTypeSelect},
+                   cp.academic_year,
+                   cp.group_id,
+                   g.number AS group_number,
+                   u.full_name AS teacher_name
+            FROM curriculum_items ci
+            INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
+            INNER JOIN subjects sub ON sub.id = ci.subject_id
+            INNER JOIN study_groups g ON g.id = cp.group_id
+            LEFT JOIN users u ON u.id = ci.teacher_id
+            WHERE ci.id = ?
+            LIMIT 1";
+    try {
+        $stmt = $bak->prepare($sql);
+        $stmt->execute([$itemId]);
+        $row = $stmt->fetch();
+
+        return $row ?: null;
+    } catch (Throwable $e) {
+        return null;
+    }
+}
+
+/**
+ * Лист журнала из снимка: студенты группы, уроки, оценки, итоги.
+ *
+ * @return array{
+ *   item: array<string,mixed>,
+ *   students: list<array<string,mixed>>,
+ *   lessons: list<array<string,mixed>>,
+ *   grades: array<int, array<int, array{mark:string,activity:int,late:int}>>,
+ *   totals: array<int, array<string,mixed>>
+ * }|null
+ */
+function backup_merge_backup_journal_sheet(PDO $bak, int $itemId): ?array
+{
+    require_once __DIR__ . '/journal.php';
+    require_once __DIR__ . '/grading.php';
+
+    $item = backup_merge_get_backup_journal_item($bak, $itemId);
+    if ($item === null || !backup_merge_pdo_table_exists($bak, 'journal_lessons')) {
+        return null;
+    }
+
+    $students = backup_merge_backup_students_in_group($bak, (int) $item['group_id']);
+    usort($students, static function (array $a, array $b): int {
+        return strnatcasecmp((string) ($a['full_name'] ?? ''), (string) ($b['full_name'] ?? ''));
+    });
+
+    $hasGradeType = backup_merge_pdo_column_exists($bak, 'journal_lessons', 'grade_type');
+    $hasNote = backup_merge_pdo_column_exists($bak, 'journal_lessons', 'note');
+    $hasKtp = backup_merge_pdo_column_exists($bak, 'journal_lessons', 'ktp_topic_id')
+        && backup_merge_pdo_table_exists($bak, 'ktp_topics');
+
+    $cols = ['jl.id', 'jl.lesson_date'];
+    $cols[] = $hasGradeType ? 'jl.grade_type' : "'current' AS grade_type";
+    $cols[] = $hasNote ? 'jl.note' : "'' AS note";
+    $join = '';
+    if ($hasKtp) {
+        $cols[] = 'kt.title AS topic_title';
+        $join = 'LEFT JOIN ktp_topics kt ON kt.id = jl.ktp_topic_id';
+    } else {
+        $cols[] = "'' AS topic_title";
+    }
+
+    $lessonsStmt = $bak->prepare(
+        'SELECT ' . implode(', ', $cols) . '
+         FROM journal_lessons jl
+         ' . $join . '
+         WHERE jl.curriculum_item_id = ?
+         ORDER BY jl.lesson_date ASC, jl.id ASC'
+    );
+    $lessonsStmt->execute([$itemId]);
+    $lessons = $lessonsStmt->fetchAll();
+
+    $grades = [];
+    if ($lessons !== [] && backup_merge_pdo_table_exists($bak, 'journal_grades')) {
+        $hasMark = backup_merge_pdo_column_exists($bak, 'journal_grades', 'mark');
+        $hasGrade = backup_merge_pdo_column_exists($bak, 'journal_grades', 'grade');
+        $hasActivity = backup_merge_pdo_column_exists($bak, 'journal_grades', 'activity');
+        $hasLate = backup_merge_pdo_column_exists($bak, 'journal_grades', 'late');
+        $markExpr = $hasMark ? 'jg.mark' : ($hasGrade ? 'CAST(jg.grade AS CHAR)' : "''");
+        $gradesStmt = $bak->prepare(
+            "SELECT jg.lesson_id, jg.student_id, {$markExpr} AS mark,
+                    " . ($hasActivity ? 'jg.activity' : '0') . ' AS activity,
+                    ' . ($hasLate ? 'jg.late' : '0') . ' AS late
+             FROM journal_grades jg
+             INNER JOIN journal_lessons jl ON jl.id = jg.lesson_id
+             WHERE jl.curriculum_item_id = ?'
+        );
+        $gradesStmt->execute([$itemId]);
+        foreach ($gradesStmt->fetchAll() as $row) {
+            $sid = (int) $row['student_id'];
+            $lid = (int) $row['lesson_id'];
+            $grades[$sid][$lid] = [
+                'mark' => (string) ($row['mark'] ?? ''),
+                'activity' => (int) ($row['activity'] ?? 0) ? 1 : 0,
+                'late' => (int) ($row['late'] ?? 0) ? 1 : 0,
+            ];
+        }
+    }
+
+    $totals = build_journal_totals($students, $lessons, $grades);
+
+    return [
+        'item' => $item,
+        'students' => $students,
+        'lessons' => $lessons,
+        'grades' => $grades,
+        'totals' => $totals,
+    ];
+}
+
+function backup_merge_pdo_table_exists(PDO $pdo, string $table): bool
+{
+    try {
+        $stmt = $pdo->query("SHOW TABLES LIKE " . $pdo->quote($table));
+
+        return (bool) $stmt->fetch();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function backup_merge_pdo_column_exists(PDO $pdo, string $table, string $column): bool
+{
+    try {
+        $stmt = $pdo->query('SHOW COLUMNS FROM `' . str_replace('`', '``', $table) . '` LIKE ' . $pdo->quote($column));
+
+        return (bool) $stmt->fetch();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+function backup_merge_journal_subject_key(string $academicYear, string $semester, string $subjectName, string $itemType = ''): string
+{
+    $name = mb_strtolower(trim($subjectName), 'UTF-8');
+    $type = mb_strtolower(trim($itemType), 'UTF-8');
+
+    return $academicYear . '|' . $semester . '|' . $name . '|' . $type;
+}
+
+/**
+ * Дисциплины группы с уроками электронного журнала.
+ *
+ * @return list<array<string,mixed>>
+ */
+function backup_merge_journal_items_for_group(PDO $pdo, int $groupId): array
+{
+    if ($groupId <= 0
+        || !backup_merge_pdo_table_exists($pdo, 'journal_lessons')
+        || !backup_merge_pdo_table_exists($pdo, 'curriculum_items')
+    ) {
+        return [];
+    }
+
+    $hasItemType = backup_merge_pdo_column_exists($pdo, 'curriculum_items', 'item_type');
+    $itemTypeSelect = $hasItemType ? 'ci.item_type' : "'' AS item_type";
+    $hasGrades = backup_merge_pdo_table_exists($pdo, 'journal_grades');
+    $gradesJoin = $hasGrades
+        ? 'LEFT JOIN journal_grades jg ON jg.lesson_id = jl.id'
+        : '';
+    $gradesCount = $hasGrades ? 'COUNT(jg.id)' : '0';
+
+    $sql = "SELECT ci.id AS curriculum_item_id,
+                   sub.name AS subject_name,
+                   ci.semester,
+                   {$itemTypeSelect},
+                   cp.academic_year,
+                   COUNT(DISTINCT jl.id) AS lessons_count,
+                   {$gradesCount} AS grades_count
+            FROM curriculum_items ci
+            INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
+            INNER JOIN subjects sub ON sub.id = ci.subject_id
+            INNER JOIN journal_lessons jl ON jl.curriculum_item_id = ci.id
+            {$gradesJoin}
+            WHERE cp.group_id = ?
+            GROUP BY ci.id, sub.name, ci.semester, cp.academic_year"
+        . ($hasItemType ? ', ci.item_type' : '')
+        . ' HAVING lessons_count > 0
+            ORDER BY cp.academic_year DESC, sub.name ASC, ci.semester ASC';
+
+    try {
+        $stmt = $pdo->prepare($sql);
+        $stmt->execute([$groupId]);
+
+        return $stmt->fetchAll();
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Карты live curriculum_item_id: полный ключ и без типа.
+ *
+ * @return array{full: array<string,int>, soft: array<string,int>}
+ */
+function backup_merge_live_curriculum_map(int $liveGroupId): array
+{
+    $hasItemType = backup_merge_pdo_column_exists(db(), 'curriculum_items', 'item_type');
+    $itemTypeSelect = $hasItemType ? 'ci.item_type' : "'' AS item_type";
+    $sql = "SELECT ci.id, sub.name AS subject_name, ci.semester, {$itemTypeSelect}, cp.academic_year
+            FROM curriculum_items ci
+            INNER JOIN curriculum_plans cp ON cp.id = ci.curriculum_plan_id
+            INNER JOIN subjects sub ON sub.id = ci.subject_id
+            WHERE cp.group_id = ?";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$liveGroupId]);
+    $full = [];
+    $soft = [];
+    foreach ($stmt->fetchAll() as $row) {
+        $id = (int) $row['id'];
+        $fullKey = backup_merge_journal_subject_key(
+            (string) $row['academic_year'],
+            (string) $row['semester'],
+            (string) $row['subject_name'],
+            (string) ($row['item_type'] ?? '')
+        );
+        $softKey = backup_merge_journal_subject_key(
+            (string) $row['academic_year'],
+            (string) $row['semester'],
+            (string) $row['subject_name'],
+            ''
+        );
+        if (!isset($full[$fullKey])) {
+            $full[$fullKey] = $id;
+        }
+        if (!isset($soft[$softKey])) {
+            $soft[$softKey] = $id;
+        }
+    }
+
+    return ['full' => $full, 'soft' => $soft];
+}
+
+/**
+ * Превью журнала группы: дисциплины со снимка и сопоставление с live.
+ *
+ * @return array{
+ *   rows: list<array<string,mixed>>,
+ *   subjects_with_data: int,
+ *   matched: int,
+ *   unmatched: int,
+ *   bak_lessons: int,
+ *   bak_grades: int,
+ *   live_lessons: int,
+ *   live_grades: int
+ * }
+ */
+function backup_merge_journal_preview_for_group(PDO $bak, int $liveGroupId): array
+{
+    $empty = [
+        'rows' => [],
+        'subjects_with_data' => 0,
+        'matched' => 0,
+        'unmatched' => 0,
+        'bak_lessons' => 0,
+        'bak_grades' => 0,
+        'live_lessons' => 0,
+        'live_grades' => 0,
+    ];
+
+    $stmt = db()->prepare('SELECT id, number FROM study_groups WHERE id = ?');
+    $stmt->execute([$liveGroupId]);
+    $liveGroup = $stmt->fetch();
+    if (!$liveGroup) {
+        return $empty;
+    }
+
+    $stmt = $bak->prepare('SELECT id, number FROM study_groups WHERE number = ?');
+    $stmt->execute([(string) $liveGroup['number']]);
+    $bakGroup = $stmt->fetch();
+    if (!$bakGroup) {
+        return $empty;
+    }
+
+    $bakItems = backup_merge_journal_items_for_group($bak, (int) $bakGroup['id']);
+    $liveMap = backup_merge_live_curriculum_map($liveGroupId);
+    $liveItemsById = [];
+    foreach (backup_merge_journal_items_for_group(db(), $liveGroupId) as $liveItem) {
+        $liveItemsById[(int) $liveItem['curriculum_item_id']] = $liveItem;
+    }
+
+    $rows = [];
+    $matched = 0;
+    $unmatched = 0;
+    $bakLessons = 0;
+    $bakGrades = 0;
+    $liveLessons = 0;
+    $liveGrades = 0;
+
+    foreach ($bakItems as $item) {
+        $fullKey = backup_merge_journal_subject_key(
+            (string) $item['academic_year'],
+            (string) $item['semester'],
+            (string) $item['subject_name'],
+            (string) ($item['item_type'] ?? '')
+        );
+        $softKey = backup_merge_journal_subject_key(
+            (string) $item['academic_year'],
+            (string) $item['semester'],
+            (string) $item['subject_name'],
+            ''
+        );
+        $liveItemId = $liveMap['full'][$fullKey] ?? $liveMap['soft'][$softKey] ?? null;
+        $liveItem = $liveItemId !== null ? ($liveItemsById[$liveItemId] ?? null) : null;
+        $status = $liveItemId !== null ? 'matched' : 'no_live_item';
+        if ($liveItemId !== null) {
+            $matched++;
+        } else {
+            $unmatched++;
+        }
+
+        $bLessons = (int) $item['lessons_count'];
+        $bGrades = (int) $item['grades_count'];
+        $lLessons = $liveItem ? (int) $liveItem['lessons_count'] : 0;
+        $lGrades = $liveItem ? (int) $liveItem['grades_count'] : 0;
+        $bakLessons += $bLessons;
+        $bakGrades += $bGrades;
+        $liveLessons += $lLessons;
+        $liveGrades += $lGrades;
+
+        $rows[] = [
+            'subject_name' => (string) $item['subject_name'],
+            'academic_year' => (string) $item['academic_year'],
+            'semester' => (string) $item['semester'],
+            'item_type' => (string) ($item['item_type'] ?? ''),
+            'backup_item_id' => (int) $item['curriculum_item_id'],
+            'live_item_id' => $liveItemId,
+            'bak_lessons' => $bLessons,
+            'bak_grades' => $bGrades,
+            'live_lessons' => $lLessons,
+            'live_grades' => $lGrades,
+            'status' => $status,
+            'will_import' => $liveItemId !== null && $bLessons > 0,
+        ];
+    }
+
+    return [
+        'rows' => $rows,
+        'subjects_with_data' => count($rows),
+        'matched' => $matched,
+        'unmatched' => $unmatched,
+        'bak_lessons' => $bakLessons,
+        'bak_grades' => $bakGrades,
+        'live_lessons' => $liveLessons,
+        'live_grades' => $liveGrades,
+    ];
+}
+
+/**
+ * Импорт уроков и оценок журнала из снимка в live для группы.
+ *
+ * @return array{
+ *   success:bool,
+ *   error?:string,
+ *   subjects:int,
+ *   lessons:int,
+ *   grades:int,
+ *   skipped_lessons:int,
+ *   skipped_grades:int,
+ *   skipped_subjects:int
+ * }
+ */
+function backup_merge_apply_journal_for_group(PDO $bak, int $liveGroupId): array
+{
+    $fail = static function (string $error): array {
+        return [
+            'success' => false,
+            'error' => $error,
+            'subjects' => 0,
+            'lessons' => 0,
+            'grades' => 0,
+            'skipped_lessons' => 0,
+            'skipped_grades' => 0,
+            'skipped_subjects' => 0,
+        ];
+    };
+
+    if (!backup_merge_pdo_table_exists($bak, 'journal_lessons')
+        || !backup_merge_pdo_table_exists(db(), 'journal_lessons')
+    ) {
+        return $fail('Таблицы журнала отсутствуют в снимке или в live.');
+    }
+
+    $stmt = db()->prepare('SELECT id, number FROM study_groups WHERE id = ?');
+    $stmt->execute([$liveGroupId]);
+    $liveGroup = $stmt->fetch();
+    if (!$liveGroup) {
+        return $fail('Группа не найдена в live.');
+    }
+
+    $stmt = $bak->prepare('SELECT id, number FROM study_groups WHERE number = ?');
+    $stmt->execute([(string) $liveGroup['number']]);
+    $bakGroup = $stmt->fetch();
+    if (!$bakGroup) {
+        return $fail('Группы нет в снимке.');
+    }
+
+    $liveStudents = backup_merge_live_students_in_group($liveGroupId);
+    $bakStudents = backup_merge_backup_students_in_group($bak, (int) $bakGroup['id']);
+    $match = backup_merge_match_students($liveStudents, $bakStudents);
+    $bakToLive = [];
+    foreach ($match['matches'] as $pair) {
+        $bakToLive[(int) $pair['backup']['id']] = (int) $pair['live']['id'];
+    }
+    if ($bakToLive === []) {
+        return $fail('Нет сопоставленных студентов по ФИО — сначала выровняйте списки.');
+    }
+
+    $preview = backup_merge_journal_preview_for_group($bak, $liveGroupId);
+    if ($preview['rows'] === []) {
+        return $fail('В снимке нет уроков электронного журнала по этой группе.');
+    }
+
+    $pdo = db();
+    $hasGradeType = backup_merge_pdo_column_exists($pdo, 'journal_lessons', 'grade_type');
+    $hasBakGradeType = backup_merge_pdo_column_exists($bak, 'journal_lessons', 'grade_type');
+    $hasNote = backup_merge_pdo_column_exists($pdo, 'journal_lessons', 'note');
+    $hasBakNote = backup_merge_pdo_column_exists($bak, 'journal_lessons', 'note');
+    $hasKtp = backup_merge_pdo_column_exists($pdo, 'journal_lessons', 'ktp_topic_id');
+    $hasMark = backup_merge_pdo_column_exists($bak, 'journal_grades', 'mark');
+    $hasGrade = backup_merge_pdo_column_exists($bak, 'journal_grades', 'grade');
+    $hasActivity = backup_merge_pdo_column_exists($bak, 'journal_grades', 'activity');
+    $hasLate = backup_merge_pdo_column_exists($bak, 'journal_grades', 'late');
+    $hasLiveGrades = backup_merge_pdo_table_exists($pdo, 'journal_grades');
+
+    $bakLessonCols = ['id', 'curriculum_item_id', 'lesson_date'];
+    if ($hasBakGradeType) {
+        $bakLessonCols[] = 'grade_type';
+    }
+    if ($hasBakNote) {
+        $bakLessonCols[] = 'note';
+    }
+    $bakLessonsStmt = $bak->prepare(
+        'SELECT ' . implode(', ', $bakLessonCols) . '
+         FROM journal_lessons
+         WHERE curriculum_item_id = ?
+         ORDER BY lesson_date ASC, id ASC'
+    );
+
+    $bakGradeSelect = ['student_id'];
+    if ($hasMark) {
+        $bakGradeSelect[] = 'mark';
+    } elseif ($hasGrade) {
+        $bakGradeSelect[] = 'CAST(grade AS CHAR) AS mark';
+    } else {
+        $bakGradeSelect[] = "'' AS mark";
+    }
+    $bakGradeSelect[] = $hasActivity ? 'activity' : '0 AS activity';
+    $bakGradeSelect[] = $hasLate ? 'late' : '0 AS late';
+    $bakGradesStmt = $hasLiveGrades
+        ? $bak->prepare(
+            'SELECT ' . implode(', ', $bakGradeSelect) . '
+             FROM journal_grades
+             WHERE lesson_id = ?'
+        )
+        : null;
+
+    if ($hasGradeType) {
+        $findLiveLesson = $pdo->prepare(
+            'SELECT id FROM journal_lessons
+             WHERE curriculum_item_id = ? AND lesson_date = ? AND grade_type = ?
+             LIMIT 1'
+        );
+    } else {
+        $findLiveLesson = $pdo->prepare(
+            'SELECT id FROM journal_lessons
+             WHERE curriculum_item_id = ? AND lesson_date = ?
+             LIMIT 1'
+        );
+    }
+
+    if ($hasGradeType && $hasNote && $hasKtp) {
+        $insertLesson = $pdo->prepare(
+            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, note, created_at)
+             VALUES (?, ?, NULL, ?, ?, NOW())'
+        );
+    } elseif ($hasGradeType && $hasKtp) {
+        $insertLesson = $pdo->prepare(
+            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, ktp_topic_id, grade_type, created_at)
+             VALUES (?, ?, NULL, ?, NOW())'
+        );
+    } elseif ($hasGradeType) {
+        $insertLesson = $pdo->prepare(
+            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, grade_type, created_at)
+             VALUES (?, ?, ?, NOW())'
+        );
+    } else {
+        $insertLesson = $pdo->prepare(
+            'INSERT INTO journal_lessons (curriculum_item_id, lesson_date, created_at)
+             VALUES (?, ?, NOW())'
+        );
+    }
+
+    $gradeExists = $hasLiveGrades
+        ? $pdo->prepare('SELECT id FROM journal_grades WHERE lesson_id = ? AND student_id = ? LIMIT 1')
+        : null;
+    $insertGrade = $hasLiveGrades
+        ? $pdo->prepare(
+            'INSERT INTO journal_grades (lesson_id, student_id, mark, activity, late, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, NOW(), NOW())'
+        )
+        : null;
+
+    $subjects = 0;
+    $lessons = 0;
+    $grades = 0;
+    $skippedLessons = 0;
+    $skippedGrades = 0;
+    $skippedSubjects = 0;
+
+    $pdo->beginTransaction();
+    try {
+        foreach ($preview['rows'] as $row) {
+            if (empty($row['will_import']) || empty($row['live_item_id'])) {
+                $skippedSubjects++;
+                continue;
+            }
+
+            $liveItemId = (int) $row['live_item_id'];
+            $bakItemId = (int) $row['backup_item_id'];
+            $bakLessonsStmt->execute([$bakItemId]);
+            $bakLessons = $bakLessonsStmt->fetchAll();
+            if ($bakLessons === []) {
+                $skippedSubjects++;
+                continue;
+            }
+
+            $subjects++;
+            foreach ($bakLessons as $bakLesson) {
+                $date = (string) $bakLesson['lesson_date'];
+                $gradeType = (string) ($bakLesson['grade_type'] ?? 'current');
+                if (!in_array($gradeType, ['current', 'control', 'attestation'], true)) {
+                    $gradeType = 'current';
+                }
+                $note = (string) ($bakLesson['note'] ?? '');
+
+                if ($hasGradeType) {
+                    $findLiveLesson->execute([$liveItemId, $date, $gradeType]);
+                } else {
+                    $findLiveLesson->execute([$liveItemId, $date]);
+                }
+                $liveLessonId = $findLiveLesson->fetchColumn();
+                if ($liveLessonId === false) {
+                    if ($hasGradeType && $hasNote && $hasKtp) {
+                        $insertLesson->execute([$liveItemId, $date, $gradeType, $note]);
+                    } elseif ($hasGradeType && $hasKtp) {
+                        $insertLesson->execute([$liveItemId, $date, $gradeType]);
+                    } elseif ($hasGradeType) {
+                        $insertLesson->execute([$liveItemId, $date, $gradeType]);
+                    } else {
+                        $insertLesson->execute([$liveItemId, $date]);
+                    }
+                    $liveLessonId = (int) $pdo->lastInsertId();
+                    $lessons++;
+                } else {
+                    $liveLessonId = (int) $liveLessonId;
+                    $skippedLessons++;
+                }
+
+                if ($bakGradesStmt === null || $gradeExists === null || $insertGrade === null) {
+                    continue;
+                }
+
+                $bakGradesStmt->execute([(int) $bakLesson['id']]);
+                foreach ($bakGradesStmt->fetchAll() as $grade) {
+                    $bakStudentId = (int) ($grade['student_id'] ?? 0);
+                    if ($bakStudentId <= 0 || !isset($bakToLive[$bakStudentId])) {
+                        $skippedGrades++;
+                        continue;
+                    }
+                    $liveStudentId = $bakToLive[$bakStudentId];
+                    $gradeExists->execute([$liveLessonId, $liveStudentId]);
+                    if ($gradeExists->fetchColumn() !== false) {
+                        $skippedGrades++;
+                        continue;
+                    }
+                    $mark = trim((string) ($grade['mark'] ?? ''));
+                    $activity = (int) ($grade['activity'] ?? 0) ? 1 : 0;
+                    $late = (int) ($grade['late'] ?? 0) ? 1 : 0;
+                    if ($mark === '' && $activity === 0 && $late === 0) {
+                        $skippedGrades++;
+                        continue;
+                    }
+                    $insertGrade->execute([$liveLessonId, $liveStudentId, $mark, $activity, $late]);
+                    $grades++;
+                }
+            }
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        $pdo->rollBack();
+
+        return $fail('Ошибка импорта журнала: ' . $e->getMessage());
+    }
+
+    return [
+        'success' => true,
+        'subjects' => $subjects,
+        'lessons' => $lessons,
+        'grades' => $grades,
+        'skipped_lessons' => $skippedLessons,
+        'skipped_grades' => $skippedGrades,
+        'skipped_subjects' => $skippedSubjects,
+    ];
+}
