@@ -1,6 +1,9 @@
 (function () {
     const PAGE_LOADER_KEY = 'kpk_page_loader';
+    const PAGE_LOADER_WATCHDOG_MS = 2500;
     const HEAVY_PAGE_RE = /\/(glaz|summary|performance_indicators|rating|subject_performance|gradebook|grades|record_books?|manual_brs_gradebook|report|parent_reports|monthly_report|characteristics|activities|attendance|absence_rating|group_attendance|daily_attendance|all_students|stats|logs|students|teachers)\.php(?:$|\?)/i;
+    const FILE_DOWNLOAD_RE = /(?:^|\/)(?:[^/?#]*(?:_export|_pdf|export_word)|[^/?#]*pdf)\.php(?:$|\?)/i;
+    let pageLoaderWatchdog = 0;
 
     const showPageLoader = (message) => {
         try {
@@ -13,9 +16,15 @@
         if (text && message) {
             text.textContent = message;
         }
+        window.clearTimeout(pageLoaderWatchdog);
+        pageLoaderWatchdog = window.setTimeout(() => {
+            hidePageLoader();
+        }, PAGE_LOADER_WATCHDOG_MS);
     };
 
     const hidePageLoader = () => {
+        window.clearTimeout(pageLoaderWatchdog);
+        pageLoaderWatchdog = 0;
         try {
             sessionStorage.removeItem(PAGE_LOADER_KEY);
         } catch (e) {
@@ -28,7 +37,19 @@
         }
     };
 
-    const shouldShowLoaderForUrl = (url) => HEAVY_PAGE_RE.test(url.pathname);
+    const shouldShowLoaderForUrl = (url) => HEAVY_PAGE_RE.test(url.pathname) && !FILE_DOWNLOAD_RE.test(url.pathname);
+
+    const isDownloadSubmitter = (submitter) => {
+        if (!(submitter instanceof HTMLElement)) {
+            return false;
+        }
+        if (submitter.dataset.noLoader !== undefined) {
+            return true;
+        }
+        const value = (submitter.getAttribute('value') || '').toLowerCase();
+        const name = (submitter.getAttribute('name') || '').toLowerCase();
+        return value === 'download' || name === 'download' || /(?:^|_)(download|export)(?:$|_)/i.test(value + '_' + name);
+    };
 
     document.addEventListener('click', (event) => {
         if (event.defaultPrevented || event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) {
@@ -57,6 +78,9 @@
         if (url.pathname === window.location.pathname && url.search === window.location.search && url.hash !== '') {
             return;
         }
+        if (FILE_DOWNLOAD_RE.test(url.pathname)) {
+            return;
+        }
         if (link.dataset.pageLoader !== undefined || shouldShowLoaderForUrl(url)) {
             showPageLoader('Загрузка…');
         }
@@ -67,10 +91,16 @@
         if (!(form instanceof HTMLFormElement) || form.dataset.noLoader !== undefined) {
             return;
         }
+        if (isDownloadSubmitter(event.submitter)) {
+            return;
+        }
         let url;
         try {
             url = new URL(form.getAttribute('action') || window.location.href, window.location.href);
         } catch (e) {
+            return;
+        }
+        if (FILE_DOWNLOAD_RE.test(url.pathname)) {
             return;
         }
         if (form.dataset.pageLoader !== undefined || shouldShowLoaderForUrl(url)) {
@@ -78,17 +108,18 @@
         }
     }, true);
 
-    window.addEventListener('pageshow', (event) => {
-        if (event.persisted) {
-            hidePageLoader();
-        }
-    });
-
-    window.addEventListener('load', () => {
+    window.addEventListener('pageshow', () => {
         hidePageLoader();
     });
 
-    if (document.readyState === 'complete') {
+    window.addEventListener('pagehide', () => {
+        window.clearTimeout(pageLoaderWatchdog);
+        pageLoaderWatchdog = 0;
+    });
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', hidePageLoader);
+    } else {
         hidePageLoader();
     }
 

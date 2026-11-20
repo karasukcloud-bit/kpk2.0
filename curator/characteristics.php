@@ -397,7 +397,7 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 <div class="form__actions" style="margin-top:1rem">
                     <button type="submit" name="action" value="save" class="btn btn--primary">Сохранить</button>
                     <button type="button" class="btn btn--ghost" data-print-characteristic>Печать</button>
-                    <button type="submit" name="action" value="download" class="btn btn--ghost">Скачать Word</button>
+                    <button type="submit" name="action" value="download" class="btn btn--ghost" data-no-loader>Скачать Word</button>
                 </div>
                 <?php if ($hasSavedCharacteristic): ?>
                 <p class="text-muted" style="margin-top:0.75rem">Загружена сохранённая характеристика студента.</p>
