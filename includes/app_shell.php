@@ -143,20 +143,34 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
         if ($manualBrs) {
             $items[] = ['tab' => 'manual_brs', 'href' => $base . 'manual_brs.php', 'icon' => 'grades', 'label' => 'Ручное БРС'];
         }
-        $items[] = [
-            'tab' => 'testoria',
-            'href' => $base . 'testoria.php',
-            'icon' => 'testoria',
-            'label' => 'Тестория',
-            'external' => true,
-        ];
 
         return [
             'role' => 'teacher',
             'tab' => $tab,
             'label' => 'Панель преподавателя',
             'home' => $base . 'subjects.php',
-            'sections' => [['title' => 'Преподавание', 'items' => $items]],
+            'sections' => [
+                ['title' => 'Преподавание', 'items' => $items],
+                [
+                    'title' => 'Полезное',
+                    'items' => [
+                        [
+                            'tab' => 'testoria',
+                            'href' => $base . 'testoria.php',
+                            'icon' => 'testoria',
+                            'label' => 'Тестория',
+                            'external' => true,
+                        ],
+                        [
+                            'tab' => 'mindmap',
+                            'href' => $base . 'mindmap.php',
+                            'icon' => 'activities',
+                            'label' => 'Ментальные карты',
+                            'external' => true,
+                        ],
+                    ],
+                ],
+            ],
         ];
     }
 
