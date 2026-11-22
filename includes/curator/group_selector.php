@@ -19,7 +19,7 @@ if (count($curatorGroups) <= 1) {
         <div class="form__group">
             <label for="curator_group_id">Группа</label>
             <select id="curator_group_id" name="group_id" onchange="this.form.submit()">
-                <option value="">— Выберите группу —</option>
+                <option value=""<?= $curatorGroupId <= 0 ? ' selected' : '' ?>>Группа</option>
                 <?php foreach ($curatorGroups as $item): ?>
                 <option value="<?= (int) $item['id'] ?>"<?= (int) $item['id'] === $curatorGroupId ? ' selected' : '' ?>>
                     <?= e($item['number']) ?> · <?= e($item['specialty_name']) ?>

@@ -8,6 +8,7 @@ require_once __DIR__ . '/../includes/curriculum.php';
 require_once __DIR__ . '/../includes/group_report.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 require_once __DIR__ . '/../includes/attendance.php';
+require_once __DIR__ . '/../includes/student_activities.php';
 
 require_curator_panel();
 
@@ -23,11 +24,28 @@ $studentsTotal = count($students);
 $avgGrade = null;
 $attendancePercent = null;
 $debtorsCount = 0;
+$profilesPercent = null;
+$activitiesPercent = null;
 $academicYear = get_default_academic_year();
 
 if ($group !== null && $students !== []) {
     $report = build_group_report($students, $groupId);
     $debtorsCount = (int) ($report['debtors_count'] ?? 0);
+
+    $completeProfiles = 0;
+    foreach ($students as $student) {
+        if (is_student_profile_complete($student)) {
+            $completeProfiles++;
+        }
+    }
+    $profilesPercent = round($completeProfiles / $studentsTotal * 100, 1);
+
+    try {
+        $activitiesReport = build_group_activities_report($students);
+        $activitiesPercent = (float) ($activitiesReport['pct_with'] ?? 0);
+    } catch (Throwable $e) {
+        $activitiesPercent = null;
+    }
 
     try {
         $period = get_active_gradebook_period();
@@ -115,6 +133,7 @@ require __DIR__ . '/../includes/header.php';
                                 </svg>
                             </span>
                             <select name="group_id" class="curator-group-pill__select" onchange="this.form.submit()" aria-label="Группа">
+                                <option value=""<?= $groupId <= 0 ? ' selected' : '' ?>>Группа</option>
                                 <?php foreach ($groups as $item): ?>
                                 <option value="<?= (int) $item['id'] ?>"<?= (int) $item['id'] === $groupId ? ' selected' : '' ?>>
                                     <?= e($item['number']) ?>
@@ -243,10 +262,52 @@ require __DIR__ . '/../includes/header.php';
                     </div>
                     <div class="curator-group-stat__body">
                         <div class="curator-group-stat__value"><?= $debtorsCount ?></div>
-                        <div class="curator-group-stat__label">Студенты с задолженностями</div>
+                        <div class="curator-group-stat__label">С задолженностями</div>
                     </div>
                     <span class="curator-group-stat__chevron" aria-hidden="true">
-                        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="m9 18 6-6-6-6"/>
+                        </svg>
+                    </span>
+                </a>
+
+                <article class="curator-group-stat curator-group-stat--profiles">
+                    <div class="curator-group-stat__icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                            <path d="M14 2v6h6"/>
+                            <path d="M8 13h8M8 17h5"/>
+                        </svg>
+                    </div>
+                    <div class="curator-group-stat__body">
+                        <div class="curator-group-stat__value">
+                            <?= $profilesPercent !== null ? e((string) $profilesPercent) . '%' : '—' ?>
+                        </div>
+                        <div class="curator-group-stat__label">Заполненность профилей</div>
+                    </div>
+                </article>
+
+                <a
+                    href="activities.php?group_id=<?= $groupId ?>"
+                    class="curator-group-stat curator-group-stat--activities"
+                    title="Открыть занятость студентов"
+                >
+                    <div class="curator-group-stat__icon" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
+                            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+                            <circle cx="9" cy="7" r="4"/>
+                            <path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/>
+                            <path d="M19 8v4M17 10h4"/>
+                        </svg>
+                    </div>
+                    <div class="curator-group-stat__body">
+                        <div class="curator-group-stat__value">
+                            <?= $activitiesPercent !== null ? e((string) $activitiesPercent) . '%' : '—' ?>
+                        </div>
+                        <div class="curator-group-stat__label">Занятость студентов</div>
+                    </div>
+                    <span class="curator-group-stat__chevron" aria-hidden="true">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round">
                             <path d="m9 18 6-6-6-6"/>
                         </svg>
                     </span>
@@ -400,7 +461,7 @@ require __DIR__ . '/../includes/header.php';
     <div class="app-sheet__panel" role="dialog" aria-modal="true" aria-labelledby="groupSheetTitle">
         <div class="app-sheet__handle" aria-hidden="true"></div>
         <div class="app-sheet__head">
-            <h2 class="app-sheet__title" id="groupSheetTitle">Выберите группу</h2>
+            <h2 class="app-sheet__title" id="groupSheetTitle">Группа</h2>
             <button type="button" class="app-sheet__close" data-group-sheet-close aria-label="Закрыть">×</button>
         </div>
         <label class="app-sheet__search">

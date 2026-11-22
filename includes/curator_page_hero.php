@@ -77,6 +77,7 @@ if (isset($group) && is_array($group)) {
                             </svg>
                         </span>
                         <select name="group_id" class="curator-group-pill__select" onchange="this.form.submit()" aria-label="Группа">
+                            <option value=""<?= $curatorGroupId <= 0 ? ' selected' : '' ?>>Группа</option>
                             <?php foreach ($curatorGroups as $item): ?>
                             <option value="<?= (int) $item['id'] ?>"<?= (int) $item['id'] === $curatorGroupId ? ' selected' : '' ?>>
                                 <?= e((string) $item['number']) ?>

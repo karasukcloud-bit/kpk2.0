@@ -200,8 +200,22 @@ function resolve_curator_group_context(?int $requestedGroupId = null): array
     $groups = get_groups_for_curator();
     $groupId = $requestedGroupId ?? 0;
 
-    if ($groupId === 0 && count($groups) === 1) {
+    // Одна закреплённая группа — сразу открываем её список.
+    if ($groupId === 0 && $requestedGroupId === null && count($groups) === 1) {
         $groupId = (int) $groups[0]['id'];
+    }
+
+    // Несколько групп: без явного выбора берём последнюю из сессии.
+    if ($groupId === 0 && $requestedGroupId === null && count($groups) > 1) {
+        $savedId = (int) ($_SESSION['curator_group_id'] ?? 0);
+        if ($savedId > 0) {
+            foreach ($groups as $item) {
+                if ((int) $item['id'] === $savedId) {
+                    $groupId = $savedId;
+                    break;
+                }
+            }
+        }
     }
 
     $error = null;
@@ -214,6 +228,12 @@ function resolve_curator_group_context(?int $requestedGroupId = null): array
         } else {
             $group = get_group_by_id($groupId);
         }
+    }
+
+    if ($groupId > 0) {
+        $_SESSION['curator_group_id'] = $groupId;
+    } elseif ($requestedGroupId !== null && $requestedGroupId <= 0) {
+        unset($_SESSION['curator_group_id']);
     }
 
     return [
