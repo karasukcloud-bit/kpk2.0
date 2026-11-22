@@ -70,10 +70,101 @@ require __DIR__ . '/includes/header.php';
 .parent-report__meta { margin: 0 0 1rem; color: var(--color-muted, #666); line-height: 1.45; }
 .parent-report__grade-col { width: 5rem; text-align: center; }
 .parent-report__grade--two { color: #b71c1c; font-weight: 700; }
+.parent-report__average { margin: 0.65rem 0 0; }
 .parent-report__summary { max-width: 28rem; margin-top: 0.75rem; }
+.parent-report__attendance-note { margin: 0 0 0.5rem; }
 .parent-report-actions { margin-bottom: 1rem; }
 @media print {
-    .header, .footer, .parent-report-actions { display: none !important; }
+    @page {
+        size: A4 portrait;
+        margin: 8mm;
+    }
+
+    .header,
+    .footer,
+    .parent-report-actions,
+    .parent-report__title {
+        display: none !important;
+    }
+
+    .page,
+    .dashboard,
+    .panel {
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        box-shadow: none !important;
+    }
+
+    .parent-report {
+        font-size: 10.5pt;
+        line-height: 1.25;
+        page-break-inside: avoid;
+        break-inside: avoid;
+    }
+
+    .parent-report__org {
+        margin: 0 0 0.35rem;
+        font-size: 11.5pt;
+    }
+
+    .parent-report__meta {
+        margin: 0 0 0.45rem;
+        font-size: 9.5pt;
+        line-height: 1.3;
+    }
+
+    .parent-report__body {
+        display: grid;
+        grid-template-columns: 1.45fr 1fr;
+        gap: 0.75rem 1rem;
+        align-items: start;
+    }
+
+    .parent-report__block h3 {
+        margin: 0 0 0.3rem;
+        font-size: 11pt;
+    }
+
+    .parent-report__grades-wrap {
+        overflow: visible !important;
+    }
+
+    .parent-report__grades-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 9pt;
+    }
+
+    .parent-report__grades-table th,
+    .parent-report__grades-table td {
+        padding: 0.12rem 0.3rem !important;
+        border: 1px solid #333 !important;
+        line-height: 1.2;
+    }
+
+    .parent-report__average {
+        margin: 0.35rem 0 0;
+        font-size: 10pt;
+    }
+
+    .parent-report__attendance-note {
+        margin: 0 0 0.3rem;
+        font-size: 9pt;
+    }
+
+    .parent-report__summary {
+        margin: 0;
+        max-width: none;
+    }
+
+    .parent-report__summary dt,
+    .parent-report__summary dd {
+        margin: 0;
+        padding: 0.15rem 0;
+        font-size: 9.5pt;
+        line-height: 1.25;
+    }
 }
 </style>
 

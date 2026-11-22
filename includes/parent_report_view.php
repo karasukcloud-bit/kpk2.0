@@ -27,48 +27,52 @@ $period = $report['period'];
         Источник оценок: <?= e(parent_report_source_label((string) $report['source'])) ?>
     </p>
 
-    <h3>Успеваемость</h3>
-    <?php if ($report['subjects'] === []): ?>
-        <p class="text-muted">Предметы за период не найдены.</p>
-    <?php else: ?>
-        <div class="table-wrap">
-            <table class="table">
-                <thead>
-                    <tr>
-                        <th>Предмет</th>
-                        <th class="parent-report__grade-col">Оценка</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <?php foreach ($report['subjects'] as $item): ?>
-                    <tr>
-                        <td><?= e($item['name']) ?></td>
-                        <td class="parent-report__grade-col<?= ((int) ($item['grade'] ?? 0) === 2) ? ' parent-report__grade--two' : '' ?>">
-                            <?= $item['grade'] !== null ? e((string) $item['grade']) : '—' ?>
-                        </td>
-                    </tr>
-                    <?php endforeach; ?>
-                </tbody>
-            </table>
-        </div>
-        <dl class="profile-list parent-report__summary">
-            <dt>Выставлено оценок</dt>
-            <dd><?= (int) $report['grades_filled'] ?> из <?= (int) $report['grades_expected'] ?></dd>
-            <dt>Средний балл</dt>
-            <dd><?= $report['average'] !== null ? e((string) $report['average']) : '—' ?></dd>
-            <dt>Есть оценки «2»</dt>
-            <dd><?= !empty($report['has_twos']) ? 'да' : 'нет' ?></dd>
-        </dl>
-    <?php endif; ?>
+    <div class="parent-report__body">
+        <section class="parent-report__block parent-report__block--grades">
+            <h3>Успеваемость</h3>
+            <?php if ($report['subjects'] === []): ?>
+                <p class="text-muted">Предметы за период не найдены.</p>
+            <?php else: ?>
+                <div class="table-wrap parent-report__grades-wrap">
+                    <table class="table parent-report__grades-table">
+                        <thead>
+                            <tr>
+                                <th>Предмет</th>
+                                <th class="parent-report__grade-col">Оценка</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($report['subjects'] as $item): ?>
+                            <tr>
+                                <td><?= e($item['name']) ?></td>
+                                <td class="parent-report__grade-col<?= ((int) ($item['grade'] ?? 0) === 2) ? ' parent-report__grade--two' : '' ?>">
+                                    <?= $item['grade'] !== null ? e((string) $item['grade']) : '—' ?>
+                                </td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+                <p class="parent-report__average">
+                    Средний балл:
+                    <strong><?= $report['average'] !== null ? e((string) $report['average']) : '—' ?></strong>
+                </p>
+            <?php endif; ?>
+        </section>
 
-    <h3>Посещаемость</h3>
-    <p class="text-muted">За <?= e(semester_label((string) $period['semester'])) ?> текущего учебного года.</p>
-    <dl class="profile-list parent-report__summary">
-        <dt>Уважительные пропуски</dt>
-        <dd><?= (int) $report['attendance']['excused'] ?></dd>
-        <dt>Неуважительные пропуски</dt>
-        <dd><?= (int) $report['attendance']['unexcused'] ?></dd>
-        <dt>Всего пропусков</dt>
-        <dd><?= (int) $report['attendance']['total'] ?></dd>
-    </dl>
+        <section class="parent-report__block parent-report__block--attendance">
+            <h3>Посещаемость</h3>
+            <p class="parent-report__attendance-note text-muted">
+                За <?= e(semester_label((string) $period['semester'])) ?> текущего учебного года.
+            </p>
+            <dl class="profile-list parent-report__summary parent-report__summary--attendance">
+                <dt>Уважительные пропуски</dt>
+                <dd><?= (int) $report['attendance']['excused'] ?></dd>
+                <dt>Неуважительные пропуски</dt>
+                <dd><?= (int) $report['attendance']['unexcused'] ?></dd>
+                <dt>Всего пропусков</dt>
+                <dd><?= (int) $report['attendance']['total'] ?></dd>
+            </dl>
+        </section>
+    </div>
 </article>
