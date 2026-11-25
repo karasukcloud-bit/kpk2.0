@@ -122,7 +122,8 @@ function manual_brs_failing_entries_for_student(
             continue;
         }
 
-        if (($sem['pa_grade'] ?? null) === 2) {
+        $paPoints = $sem['pa_points'] ?? null;
+        if ($paPoints !== null && (float) $paPoints < 60) {
             $entries[] = [
                 'discipline' => $discipline,
                 'section' => 'ПА',

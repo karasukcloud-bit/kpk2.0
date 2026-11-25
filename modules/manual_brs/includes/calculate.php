@@ -303,11 +303,65 @@ function manual_brs_calculate(array $input, ?array $brs = null): array
     ];
 }
 
-/** Итог семестра: баллы периода (семестра) + ПА. Второй период опционален (устаревшее усреднение). */
+/** Нормализация баллов ПА (0–100) или null. */
+function manual_brs_normalize_pa_points(mixed $raw): ?float
+{
+    if ($raw === null || $raw === '') {
+        return null;
+    }
+    if (!is_numeric($raw)) {
+        return null;
+    }
+    $value = (float) $raw;
+    if ($value < 0 || $value > 100) {
+        return null;
+    }
+
+    return round($value, 1);
+}
+
+/**
+ * Итог составной дисциплины: база по разделам (оценка) + ПА в баллах.
+ * Раздел «2» → итог 2. ПА &lt; 60 → итог 2. Иначе среднее mid-баллов базы и ПА.
+ */
+function manual_brs_resolve_composite_with_pa_points(?int $baseGrade, ?float $paPoints, ?array $brs = null): ?int
+{
+    $brs = $brs ?? manual_brs_weights();
+    $base = ($baseGrade !== null && $baseGrade >= 2 && $baseGrade <= 5) ? $baseGrade : null;
+    $paPoints = manual_brs_normalize_pa_points($paPoints);
+
+    if ($base === 2) {
+        return 2;
+    }
+    if ($paPoints !== null && $paPoints < 60) {
+        return 2;
+    }
+    if ($base !== null && $paPoints !== null) {
+        $avg = (manual_brs_grade_to_mid_points($base, $brs) + $paPoints) / 2.0;
+
+        return manual_brs_points_to_grade($avg, $brs);
+    }
+    if ($base !== null) {
+        return $base;
+    }
+    if ($paPoints !== null) {
+        return manual_brs_points_to_grade($paPoints, $brs);
+    }
+
+    return null;
+}
+
+/**
+ * Итог семестра: баллы периода + ПА в баллах (0–100).
+ * Итоговые баллы = среднее(баллы семестра, ПА); если ПА &lt; 60 → оценка 2.
+ * Второй период опционален (устаревшее усреднение).
+ *
+ * @param float|int|null $paPoints баллы ПА 0–100 (раньше сюда передавали оценку 2–5)
+ */
 function manual_brs_semester_total(
     ?float $pointsA,
     ?float $pointsB = null,
-    ?int $paGrade = null,
+    $paPoints = null,
     ?array $brs = null
 ): array {
     $brs = $brs ?? manual_brs_weights();
@@ -319,60 +373,51 @@ function manual_brs_semester_total(
         $values[] = $pointsB;
     }
 
-    $points = null;
+    $semesterPoints = null;
     $brsGrade = null;
     if ($values !== []) {
-        $points = round(array_sum($values) / count($values), 1);
-        $brsGrade = manual_brs_points_to_grade($points, $brs);
+        $semesterPoints = round(array_sum($values) / count($values), 1);
+        $brsGrade = manual_brs_points_to_grade($semesterPoints, $brs);
     }
 
-    $paGrade = ($paGrade !== null && $paGrade >= 2 && $paGrade <= 5) ? $paGrade : null;
+    $paPoints = manual_brs_normalize_pa_points($paPoints);
 
-    if ($paGrade === null) {
+    if ($paPoints === null) {
         if ($brsGrade === null) {
             $result = [
                 'points' => null,
                 'grade' => null,
                 'brs_grade' => null,
                 'pa_grade' => null,
+                'pa_points' => null,
                 'display' => '',
             ];
         } else {
             $result = [
-                'points' => $points,
+                'points' => $semesterPoints,
                 'grade' => $brsGrade,
                 'brs_grade' => $brsGrade,
                 'pa_grade' => null,
-                'display' => manual_brs_format_number($points, 1) . ' → ' . $brsGrade,
+                'pa_points' => null,
+                'display' => manual_brs_format_number($semesterPoints, 1) . ' → ' . $brsGrade,
             ];
         }
-    } elseif ($paGrade === 2) {
-        $result = [
-            'points' => $points,
-            'grade' => 2,
-            'brs_grade' => $brsGrade,
-            'pa_grade' => 2,
-            'display' => $points !== null
-                ? manual_brs_format_number($points, 1) . ' → 2'
-                : '2',
-        ];
-    } elseif ($brsGrade === null) {
-        $result = [
-            'points' => null,
-            'grade' => $paGrade,
-            'brs_grade' => null,
-            'pa_grade' => $paGrade,
-            'display' => (string) $paGrade,
-        ];
     } else {
-        $final = (int) round(($brsGrade + $paGrade) / 2, 0, PHP_ROUND_HALF_UP);
-        $final = max(2, min(5, $final));
+        $finalPoints = $semesterPoints !== null
+            ? round(($semesterPoints + $paPoints) / 2.0, 1)
+            : $paPoints;
+        $finalGrade = $paPoints < 60.0
+            ? 2
+            : manual_brs_points_to_grade($finalPoints, $brs);
+        $paAsGrade = $paPoints < 60.0 ? 2 : manual_brs_points_to_grade($paPoints, $brs);
+
         $result = [
-            'points' => $points,
-            'grade' => $final,
+            'points' => $finalPoints,
+            'grade' => $finalGrade,
             'brs_grade' => $brsGrade,
-            'pa_grade' => $paGrade,
-            'display' => manual_brs_format_number($points, 1) . ' → ' . $final,
+            'pa_grade' => $paAsGrade,
+            'pa_points' => $paPoints,
+            'display' => manual_brs_format_number($finalPoints, 1) . ' → ' . $finalGrade,
         ];
     }
 

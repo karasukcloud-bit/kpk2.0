@@ -19,12 +19,13 @@
         return fixed.replace(/\.?0+$/, '');
     }
 
-    function syncPaSelectInRow(row, paGrade) {
-        const select = row.querySelector('[data-manual-brs-pa]');
-        if (select) {
-            select.value = paGrade == null || paGrade === '' ? '' : String(paGrade);
+    function syncPaInputInRow(row, paPoints) {
+        const input = row.querySelector('[data-manual-brs-pa]');
+        const value = paPoints == null || paPoints === '' ? '' : String(paPoints);
+        if (input) {
+            input.value = value;
         }
-        row.setAttribute('data-pa-grade', paGrade == null || paGrade === '' ? '' : String(paGrade));
+        row.setAttribute('data-pa-points', value);
     }
 
     function renderSemesterHtml(grade, points) {
@@ -73,8 +74,8 @@
                 semesterCell.innerHTML = renderSemesterHtml(data.semester_grade, data.semester_points);
             }
         }
-        if (data.pa_grade !== undefined) {
-            syncPaSelectInRow(row, data.pa_grade);
+        if (data.pa_points !== undefined) {
+            syncPaInputInRow(row, data.pa_points);
         }
         if (data.stage1_quick_grade !== undefined) {
             syncStage1QuickSelectInRow(row, data.stage1_quick_grade);
@@ -394,9 +395,26 @@
         }
 
         points = Math.round(Math.max(0, Math.min(100, points)) * 10) / 10;
-        const grade = pointsToGrade(points);
-        totalNode.textContent = formatNum(points, 1) + ' → ' + grade;
-        return { points: points, grade: grade, display: formatNum(points, 1) + ' → ' + grade };
+        const periodGrade = pointsToGrade(points);
+
+        let paRaw = paModalSelect ? String(paModalSelect.value || '').trim().replace(',', '.') : '';
+        let paPoints = null;
+        if (paRaw !== '') {
+            const paNum = Number(paRaw);
+            if (!Number.isNaN(paNum)) {
+                paPoints = Math.max(0, Math.min(100, Math.round(paNum)));
+            }
+        }
+
+        let finalPoints = points;
+        let finalGrade = periodGrade;
+        if (paPoints !== null) {
+            finalPoints = Math.round(((points + paPoints) / 2) * 10) / 10;
+            finalGrade = paPoints < 60 ? 2 : pointsToGrade(finalPoints);
+        }
+
+        totalNode.textContent = formatNum(finalPoints, 1) + ' → ' + finalGrade;
+        return { points: points, grade: periodGrade, display: formatNum(points, 1) + ' → ' + periodGrade };
     }
     runCalculate = calculate;
 
@@ -433,7 +451,7 @@
             });
         });
         if (paModalSelect) {
-            paModalSelect.value = row.getAttribute('data-pa-grade') || '';
+            paModalSelect.value = row.getAttribute('data-pa-points') || '';
         }
         if (statusNode) {
             statusNode.textContent = '';
@@ -490,6 +508,16 @@
 
     syncAttendanceFieldLimits();
 
+    if (paModalSelect) {
+        paModalSelect.addEventListener('input', () => {
+            calculate();
+        });
+        paModalSelect.addEventListener('change', () => {
+            clampPaPointsInput(paModalSelect);
+            calculate();
+        });
+    }
+
     form.addEventListener('submit', async (event) => {
         event.preventDefault();
         if (statusNode) {
@@ -542,35 +570,72 @@
         }
     });
 
-    document.querySelectorAll('[data-manual-brs-pa]').forEach((select) => {
-        select.addEventListener('change', async () => {
-            if (!paForm || !paStudentInput || !paValueInput) {
-                return;
+    function clampPaPointsInput(input) {
+        if (!input) {
+            return;
+        }
+        let raw = String(input.value || '').trim().replace(',', '.');
+        if (raw === '') {
+            input.value = '';
+            return;
+        }
+        let num = Number(raw);
+        if (Number.isNaN(num)) {
+            input.value = '';
+            return;
+        }
+        num = Math.max(0, Math.min(100, Math.round(num)));
+        input.value = String(num);
+    }
+
+    async function savePaFromInput(input) {
+        if (!paForm || !paStudentInput || !paValueInput || !input) {
+            return;
+        }
+        clampPaPointsInput(input);
+        const row = input.closest('tr');
+        const studentId = input.getAttribute('data-student-id') || '';
+        const prev = row ? (row.getAttribute('data-pa-points') || '') : '';
+        const next = String(input.value || '');
+        if (prev === next) {
+            return;
+        }
+        paStudentInput.value = studentId;
+        paValueInput.value = next;
+        input.disabled = true;
+        try {
+            const response = await fetch(window.location.href, {
+                method: 'POST',
+                headers: {
+                    'X-Requested-With': 'XMLHttpRequest',
+                },
+                body: new FormData(paForm),
+            });
+            const data = await response.json();
+            if (!data.success) {
+                throw new Error(data.error || 'Ошибка сохранения ПА');
             }
-            const row = select.closest('tr');
-            const studentId = select.getAttribute('data-student-id') || '';
-            paStudentInput.value = studentId;
-            paValueInput.value = select.value;
-            select.disabled = true;
-            try {
-                const response = await fetch(window.location.href, {
-                    method: 'POST',
-                    headers: {
-                        'X-Requested-With': 'XMLHttpRequest',
-                    },
-                    body: new FormData(paForm),
-                });
-                const data = await response.json();
-                if (!data.success) {
-                    throw new Error(data.error || 'Ошибка сохранения ПА');
-                }
-                if (row) {
-                    updateRowSemester(row, data);
-                }
-            } catch (err) {
-                alert(err.message || 'Не удалось сохранить ПА');
-            } finally {
-                select.disabled = false;
+            if (row) {
+                updateRowSemester(row, data);
+            }
+        } catch (err) {
+            alert(err.message || 'Не удалось сохранить ПА');
+            if (row) {
+                input.value = prev;
+            }
+        } finally {
+            input.disabled = false;
+        }
+    }
+
+    document.querySelectorAll('[data-manual-brs-pa]').forEach((input) => {
+        input.addEventListener('change', () => {
+            savePaFromInput(input);
+        });
+        input.addEventListener('keydown', (event) => {
+            if (event.key === 'Enter') {
+                event.preventDefault();
+                input.blur();
             }
         });
     });

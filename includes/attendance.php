@@ -844,14 +844,16 @@ function build_educator_attendance_report(
 }
 
 /**
- * Рейтинг групп по неуважительным пропускам.
+ * Рейтинг групп по пропускам (всего + неуважительные).
  * $period: 1 | 2 | year
  *
  * @return list<array{
  *   group_id:int,
  *   group_number:string,
  *   student_count:int,
+ *   total:int,
  *   unexcused:int,
+ *   per_student_total:float,
  *   per_student_unexcused:float
  * }>
  */
@@ -871,7 +873,9 @@ function build_group_unexcused_absence_rating(string $academicYear, string $peri
             'group_id' => (int) ($row['group_id'] ?? 0),
             'group_number' => (string) ($row['group_number'] ?? ''),
             'student_count' => (int) ($summary['student_count'] ?? 0),
+            'total' => (int) ($summary['total'] ?? 0),
             'unexcused' => (int) ($summary['unexcused'] ?? 0),
+            'per_student_total' => (float) ($summary['per_student_total'] ?? 0),
             'per_student_unexcused' => (float) ($summary['per_student_unexcused'] ?? 0),
         ];
     }

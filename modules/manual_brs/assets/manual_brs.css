@@ -74,16 +74,24 @@
 }
 
 .manual-brs-pa-cell {
-    width: 4.5rem;
+    width: 5rem;
 }
 
-.manual-brs-pa-select {
+.manual-brs-pa-select,
+.manual-brs-pa-input {
     min-width: 3.5rem;
+    max-width: 4.75rem;
+    width: 100%;
     padding: 0.25rem 0.35rem;
     border: 1px solid var(--color-border, #d0d7de);
     border-radius: 6px;
     font: inherit;
     background: #fff;
+    box-sizing: border-box;
+}
+
+.manual-brs-pa-input {
+    text-align: center;
 }
 
 .manual-brs-semester-cell {

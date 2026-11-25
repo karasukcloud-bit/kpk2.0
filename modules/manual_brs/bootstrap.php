@@ -79,6 +79,7 @@ function manual_brs_ensure_schema(?PDO $pdo = null): void
                 curriculum_item_id INT UNSIGNED NOT NULL,
                 student_id INT UNSIGNED NOT NULL,
                 grade TINYINT UNSIGNED NULL,
+                points DECIMAL(5,1) NULL,
                 updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
                 PRIMARY KEY (id),
                 UNIQUE KEY uq_manual_brs_pa (academic_year, semester, curriculum_item_id, student_id),
@@ -98,6 +99,38 @@ function manual_brs_ensure_schema(?PDO $pdo = null): void
         error_log('manual_brs_migrate_legacy_quarter_periods: ' . $e->getMessage());
     }
     manual_brs_ensure_entry_stages_schema($pdo);
+    manual_brs_ensure_attestation_points_schema($pdo);
+}
+
+/** ПА в баллах 0–100 (миграция со старых оценок 2–5). */
+function manual_brs_ensure_attestation_points_schema(PDO $pdo): void
+{
+    if (!$pdo->query("SHOW TABLES LIKE 'manual_brs_attestations'")->fetch()) {
+        return;
+    }
+
+    $pointsCol = $pdo->query("SHOW COLUMNS FROM manual_brs_attestations LIKE 'points'")->fetch();
+    if (!$pointsCol) {
+        $pdo->exec('ALTER TABLE manual_brs_attestations ADD points DECIMAL(5,1) NULL AFTER grade');
+    }
+
+    require_once __DIR__ . '/includes/calculate.php';
+    $brs = manual_brs_weights();
+    $rows = $pdo->query(
+        'SELECT id, grade, points FROM manual_brs_attestations
+         WHERE points IS NULL AND grade IS NOT NULL AND grade BETWEEN 2 AND 5'
+    )->fetchAll();
+    if ($rows === []) {
+        return;
+    }
+
+    $upd = $pdo->prepare('UPDATE manual_brs_attestations SET points = ? WHERE id = ?');
+    foreach ($rows as $row) {
+        $upd->execute([
+            manual_brs_grade_to_mid_points((int) $row['grade'], $brs),
+            (int) $row['id'],
+        ]);
+    }
 }
 
 /** Два этапа семестра в одной записи БРС. */

@@ -158,7 +158,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                                 'points' => $row['points'],
                                 'grade' => $row['grade'],
                                 'stage1_quick_grade' => $row['stage1_quick_grade'] ?? null,
-                                'pa_grade' => $row['pa_grade'],
+                                'pa_points' => $row['pa_points'] ?? null,
+                                'pa_grade' => $row['pa_grade'] ?? null,
                                 'semester_html' => $row['semester_html'],
                                 'semester_grade' => $row['semester_grade'],
                                 'semester_points' => $row['semester_points'],
@@ -188,10 +189,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                         $manualBrsJsonExit(['success' => false, 'error' => $error]);
                     }
                 } else {
-                    $paGrade = null;
+                    $paPoints = null;
                     // ПА только у самостоятельной дисциплины / родителя, не у раздела.
-                    if (!$isJournalPartPost && array_key_exists('pa_grade', $_POST)) {
-                        $paRaw = $_POST['pa_grade'] ?? '';
+                    $paPosted = array_key_exists('pa_points', $_POST) || array_key_exists('pa_grade', $_POST);
+                    if (!$isJournalPartPost && $paPosted) {
+                        $paRaw = $_POST['pa_points'] ?? $_POST['pa_grade'] ?? '';
                         $paResult = manual_brs_save_attestation(
                             $academicYear,
                             $semester,
@@ -205,10 +207,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                                 $manualBrsJsonExit(['success' => false, 'error' => $error]);
                             }
                         } else {
-                            $paGrade = $paResult['grade'];
+                            $paPoints = $paResult['points'];
                         }
                     } else {
-                        $paGrade = manual_brs_get_attestation(
+                        $paPoints = manual_brs_get_attestation(
                             $academicYear,
                             $semester,
                             $itemId,
@@ -227,7 +229,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                             $studentId
                         );
                         if (($sem['display'] ?? '') === '' && $periodPoints !== null) {
-                            $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+                            $sem = manual_brs_semester_total($periodPoints, null, $paPoints);
                         }
                         if ($isAjaxPost) {
                             $manualBrsJsonExit([
@@ -235,7 +237,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                                 'calc' => $result['calc'],
                                 'current_period' => $period,
                                 'period_display' => $result['calc']['display'] ?? '',
-                                'pa_grade' => $paGrade,
+                                'pa_points' => $paPoints,
+                                'pa_grade' => $sem['pa_grade'] ?? null,
                                 'stage1_quick_grade' => null,
                                 'semester_display' => $sem['display'] ?? '',
                                 'semester_grade' => $sem['grade'] ?? null,
@@ -263,7 +266,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                         $manualBrsJsonExit(['success' => false, 'error' => $error]);
                     }
                 } else {
-                    $paGrade = manual_brs_get_attestation(
+                    $paPoints = manual_brs_get_attestation(
                         $academicYear,
                         $semester,
                         $itemId,
@@ -272,7 +275,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                     $periodPoints = isset($result['calc']['points'])
                         ? (float) $result['calc']['points']
                         : null;
-                    $sem = manual_brs_semester_total($periodPoints, null, $paGrade);
+                    $sem = manual_brs_semester_total($periodPoints, null, $paPoints);
                     if ($isAjaxPost) {
                         $manualBrsJsonExit([
                             'success' => true,
@@ -281,7 +284,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                             'period_display' => $result['calc']['display'] ?? '',
                             'points' => $result['calc']['points'] ?? null,
                             'grade' => $result['calc']['grade'] ?? null,
-                            'pa_grade' => $paGrade,
+                            'pa_points' => $paPoints,
+                            'pa_grade' => $sem['pa_grade'] ?? null,
                             'semester_display' => $sem['display'],
                             'semester_grade' => $sem['grade'],
                             'semester_points' => $sem['points'],
@@ -294,7 +298,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                 }
             } elseif ($action === 'save_pa') {
                 $studentId = (int) ($_POST['student_id'] ?? 0);
-                $paRaw = $_POST['pa_grade'] ?? '';
+                $paRaw = $_POST['pa_points'] ?? $_POST['pa_grade'] ?? '';
                 $result = manual_brs_save_attestation(
                     $academicYear,
                     $semester,
@@ -329,7 +333,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && $assignment !== null && $sheet !== 
                         }
                         $manualBrsJsonExit([
                             'success' => true,
-                            'pa_grade' => $result['grade'],
+                            'pa_points' => $result['points'],
+                            'pa_grade' => $sem['pa_grade'] ?? $result['grade'],
                             'period_display' => $periodDisplay,
                             'semester_display' => $sem['display'],
                             'semester_grade' => $sem['grade'],
@@ -387,7 +392,7 @@ $currentTeacherTab = 'manual_brs';
 require __DIR__ . '/../../../includes/header.php';
 ?>
 
-<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261014a">
+<link rel="stylesheet" href="<?= e(manual_brs_asset_url('manual_brs.css', $basePath)) ?>?v=20261124pa">
 
 <div class="dashboard dashboard--wide">
     <section class="panel">
@@ -424,7 +429,7 @@ require __DIR__ . '/../../../includes/header.php';
                 </select>
             </div>
             <p class="text-muted manual-brs-period-hint">
-                Два периода в учебном году: 1-й и 2-й семестр. Итог семестра — по баллам выбранного семестра и ПА.
+                Два периода в учебном году: 1-й и 2-й семестр. Итог семестра — среднее баллов семестра и ПА (0–100); при ПА &lt; 60 — оценка 2.
             </p>
         </form>
     </section>
@@ -462,8 +467,8 @@ require __DIR__ . '/../../../includes/header.php';
 
             <?php if ($isAttestationOnly): ?>
                 <p class="text-muted">
-                    Составная дисциплина: баллы БРС — в разделах; здесь выставляется только ПА.
-                    Итог = агрегация разделов (любая 2 → 2, иначе среднее) и ПА.
+                    Составная дисциплина: баллы БРС — в разделах; здесь выставляется только ПА (баллы 0–100).
+                    Итог = агрегация разделов (любая 2 → 2) и ПА; при ПА &lt; 60 — итог 2.
                 </p>
             <?php elseif ($isJournalPart): ?>
                 <p class="text-muted">
@@ -510,7 +515,7 @@ require __DIR__ . '/../../../includes/header.php';
                                 <?php endif; ?>
                                 <th><?= $isAttestationOnly ? 'Разделы' : ('Баллы (' . e($periodMeta['label']) . ')') ?></th>
                                 <?php if (!$isJournalPart): ?>
-                                <th>ПА</th>
+                                <th title="Баллы промежуточной аттестации 0–100. При &lt; 60 итог семестра — 2">ПА</th>
                                 <?php endif; ?>
                                 <th>Итог семестра</th>
                             </tr>
@@ -537,7 +542,7 @@ require __DIR__ . '/../../../includes/header.php';
                                     data-s2-absent="<?= (int) $s2['absent_count'] ?>"
                                     data-s2-late="<?= (int) $s2['late_count'] ?>"
                                     data-s2-activity="<?= (int) $s2['activity_count'] ?>"
-                                    data-pa-grade="<?= $row['pa_grade'] !== null ? (int) $row['pa_grade'] : '' ?>"
+                                    data-pa-points="<?= $row['pa_points'] !== null ? e(manual_brs_format_number((float) $row['pa_points'], 1)) : '' ?>"
                                     data-points="<?= $row['points'] !== null ? e(manual_brs_format_number($row['points'], 1)) : '' ?>"
                                     data-grade="<?= $row['grade'] !== null ? (int) $row['grade'] : '' ?>"
                                     data-semester-display="<?= e($row['semester_display']) ?>"
@@ -564,17 +569,20 @@ require __DIR__ . '/../../../includes/header.php';
                                     <td data-manual-brs-period-cell><?= $row['display'] !== '' ? e($row['display']) : '—' ?></td>
                                     <?php if (!$isJournalPart): ?>
                                     <td class="manual-brs-pa-cell" onclick="event.stopPropagation();">
-                                        <select
-                                            class="manual-brs-pa-select"
+                                        <input
+                                            type="number"
+                                            class="manual-brs-pa-input"
                                             data-manual-brs-pa
                                             data-student-id="<?= (int) $st['id'] ?>"
-                                            aria-label="Промежуточная аттестация"
+                                            min="0"
+                                            max="100"
+                                            step="1"
+                                            inputmode="numeric"
+                                            placeholder="—"
+                                            value="<?= $row['pa_points'] !== null ? e(manual_brs_format_number((float) $row['pa_points'], 1)) : '' ?>"
+                                            aria-label="Промежуточная аттестация, баллы 0–100"
+                                            title="Баллы ПА 0–100. При &lt; 60 итог семестра — 2"
                                         >
-                                            <option value=""<?= $row['pa_grade'] === null ? ' selected' : '' ?>>—</option>
-                                            <?php foreach ([2, 3, 4, 5] as $paOpt): ?>
-                                            <option value="<?= $paOpt ?>"<?= (int) $row['pa_grade'] === $paOpt ? ' selected' : '' ?>><?= $paOpt ?></option>
-                                            <?php endforeach; ?>
-                                        </select>
                                     </td>
                                     <?php endif; ?>
                                     <td class="manual-brs-semester-cell" data-manual-brs-semester-cell><?= $row['semester_html'] ?></td>
@@ -681,14 +689,19 @@ require __DIR__ . '/../../../includes/header.php';
                             </div>
                             <?php if (!$isJournalPart): ?>
                             <div class="form__group">
-                                <label for="mbrs_pa">Промежуточная аттестация (ПА)</label>
-                                <select id="mbrs_pa" name="pa_grade" data-manual-brs-pa-modal>
-                                    <option value="">— Не выставлена —</option>
-                                    <option value="2">2</option>
-                                    <option value="3">3</option>
-                                    <option value="4">4</option>
-                                    <option value="5">5</option>
-                                </select>
+                                <label for="mbrs_pa">Промежуточная аттестация (ПА), баллы</label>
+                                <input
+                                    type="number"
+                                    id="mbrs_pa"
+                                    name="pa_points"
+                                    min="0"
+                                    max="100"
+                                    step="1"
+                                    inputmode="numeric"
+                                    placeholder="0–100"
+                                    data-manual-brs-pa-modal
+                                >
+                                <p class="form__hint">Итог семестра = среднее баллов семестра и ПА. Если ПА &lt; 60 — итог 2.</p>
                             </div>
                             <?php endif; ?>
                         </section>
@@ -717,7 +730,7 @@ require __DIR__ . '/../../../includes/header.php';
             <input type="hidden" name="action" value="save_pa">
             <input type="hidden" name="ajax" value="1">
             <input type="hidden" name="student_id" value="" data-manual-brs-pa-student>
-            <input type="hidden" name="pa_grade" value="" data-manual-brs-pa-value>
+            <input type="hidden" name="pa_points" value="" data-manual-brs-pa-value>
         </form>
 
         <?php /* TEMPORARY: быстрая оценка КН — удалить вместе с колонкой stage1_quick_grade */ ?>
@@ -736,7 +749,7 @@ require __DIR__ . '/../../../includes/header.php';
             'currentPeriod' => $period,
         ], JSON_UNESCAPED_UNICODE) ?>;
         </script>
-        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261109a"></script>
+        <script src="<?= e(manual_brs_asset_url('manual_brs.js', $basePath)) ?>?v=20261124pa"></script>
 
     <?php elseif ($selectedGroup !== null && $selectedParent !== null): ?>
         <section class="panel">

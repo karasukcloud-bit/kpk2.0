@@ -176,7 +176,7 @@ function build_gradebook_composite_fill_map_manual_brs(
         foreach ($students as $student) {
             $studentId = (int) $student['id'];
             $pa = $batch['pa'][$itemId][$studentId] ?? null;
-            $paByStudent[$studentId] = $pa !== null ? (int) $pa : null;
+            $paByStudent[$studentId] = $pa !== null ? (float) $pa : null;
         }
 
         $result[$itemId] = gradebook_composite_fill_pack(
@@ -187,7 +187,10 @@ function build_gradebook_composite_fill_map_manual_brs(
             $partGradesByChild,
             $paByStudent,
             $studentCount,
-            $igoIds
+            $igoIds,
+            static function (?int $base, $paPoints): ?int {
+                return manual_brs_resolve_composite_with_pa_points($base, $paPoints);
+            }
         );
     }
 
@@ -219,7 +222,8 @@ function gradebook_composite_pa_from_marks(array $marks): ?int
  * @param list<array{curriculum_item_id:int,subject_name:string}> $childMeta
  * @param list<array<string,mixed>> $students
  * @param array<int, array<int, ?int>> $partGradesByChild
- * @param array<int, ?int> $paByStudent
+ * @param array<int, float|int|null> $paByStudent оценка 2–5 (журнал) или баллы 0–100 (ручное БРС)
+ * @param callable(?int, mixed): ?int|null $resolveFinal
  * @return array<string,mixed>
  */
 /**
@@ -233,7 +237,8 @@ function gradebook_composite_fill_pack(
     array $partGradesByChild,
     array $paByStudent,
     int $studentCount,
-    array $igoIds = []
+    array $igoIds = [],
+    ?callable $resolveFinal = null
 ): array {
     $sectionsTotal = count($childMeta);
     $sectionsComplete = 0;
@@ -289,6 +294,14 @@ function gradebook_composite_fill_pack(
             }
         }
         $base = aggregate_composite_part_grades($partGrades);
+        $final = $resolveFinal !== null
+            ? $resolveFinal($base, $paGrade)
+            : resolve_composite_final_grade(
+                $base,
+                ($paGrade !== null && (int) $paGrade >= 2 && (int) $paGrade <= 5)
+                    ? (int) $paGrade
+                    : null
+            );
         $rows[] = [
             'student_id' => $studentId,
             'full_name' => (string) ($student['full_name'] ?? ''),
@@ -296,7 +309,7 @@ function gradebook_composite_fill_pack(
             'parts' => $parts,
             'base_grade' => $base,
             'pa_grade' => $paGrade,
-            'final_grade' => resolve_composite_final_grade($base, $paGrade),
+            'final_grade' => $final,
         ];
     }
 

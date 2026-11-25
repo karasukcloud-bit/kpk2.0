@@ -690,10 +690,10 @@ function manual_brs_load_period_grades_map(string $academicYear, int $period, ar
 }
 
 /**
- * Пакет ПА: item_id => student_id => grade.
+ * Пакет ПА: item_id => student_id => баллы 0–100.
  *
  * @param list<int> $itemIds
- * @return array<int, array<int, int>>
+ * @return array<int, array<int, float>>
  */
 function manual_brs_get_attestations_map_multi(
     string $academicYear,
@@ -708,8 +708,12 @@ function manual_brs_get_attestations_map_multi(
 
     $placeholders = implode(',', array_fill(0, count($itemIds), '?'));
     $params = array_merge([$academicYear, $semester], $itemIds);
+    $hasPoints = (bool) db()->query("SHOW COLUMNS FROM manual_brs_attestations LIKE 'points'")->fetch();
+    $select = $hasPoints
+        ? 'curriculum_item_id, student_id, points, grade'
+        : 'curriculum_item_id, student_id, grade, NULL AS points';
     $stmt = db()->prepare(
-        "SELECT curriculum_item_id, student_id, grade
+        "SELECT {$select}
          FROM manual_brs_attestations
          WHERE academic_year = ? AND semester = ?
            AND curriculum_item_id IN ($placeholders)"
@@ -718,14 +722,28 @@ function manual_brs_get_attestations_map_multi(
 
     $map = [];
     foreach ($stmt->fetchAll() as $row) {
-        $grade = $row['grade'] !== null ? (int) $row['grade'] : null;
-        if ($grade === null || $grade < 2 || $grade > 5) {
+        $points = manual_brs_attestation_row_points($row);
+        if ($points === null) {
             continue;
         }
-        $map[(int) $row['curriculum_item_id']][(int) $row['student_id']] = $grade;
+        $map[(int) $row['curriculum_item_id']][(int) $row['student_id']] = $points;
     }
 
     return $map;
+}
+
+/** @param array<string,mixed> $row */
+function manual_brs_attestation_row_points(array $row): ?float
+{
+    if (array_key_exists('points', $row) && $row['points'] !== null && $row['points'] !== '') {
+        return manual_brs_normalize_pa_points($row['points']);
+    }
+    $grade = $row['grade'] ?? null;
+    if ($grade !== null && $grade !== '' && (int) $grade >= 2 && (int) $grade <= 5) {
+        return manual_brs_grade_to_mid_points((int) $grade);
+    }
+
+    return null;
 }
 
 /**
@@ -799,13 +817,14 @@ function manual_brs_resolve_from_batch(int $curriculumItemId, int $studentId, ar
             }
         }
         $base = aggregate_composite_part_grades($partGrades);
-        $grade = resolve_composite_final_grade($base, $pa);
+        $grade = manual_brs_resolve_composite_with_pa_points($base, $pa);
 
         return [
             'points' => null,
             'grade' => $grade,
             'brs_grade' => $base,
-            'pa_grade' => $pa,
+            'pa_grade' => $pa !== null ? ($pa < 60 ? 2 : manual_brs_points_to_grade($pa)) : null,
+            'pa_points' => $pa,
             'display' => $grade !== null ? (string) $grade : '',
             'html' => manual_brs_render_semester_html($grade, null),
         ];
@@ -840,57 +859,69 @@ function manual_brs_points_for_periods(
     return $result;
 }
 
+/** Баллы ПА 0–100 или null. */
 function manual_brs_get_attestation(
     string $academicYear,
     string $semester,
     int $curriculumItemId,
     int $studentId
-): ?int {
+): ?float {
     $semester = $semester === '2' ? '2' : '1';
+    $hasPoints = (bool) db()->query("SHOW COLUMNS FROM manual_brs_attestations LIKE 'points'")->fetch();
+    $select = $hasPoints ? 'points, grade' : 'grade, NULL AS points';
     $stmt = db()->prepare(
-        'SELECT grade FROM manual_brs_attestations
+        "SELECT {$select} FROM manual_brs_attestations
          WHERE academic_year = ? AND semester = ?
            AND curriculum_item_id = ? AND student_id = ?
-         LIMIT 1'
+         LIMIT 1"
     );
     $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId]);
-    $grade = $stmt->fetchColumn();
-    if ($grade === false || $grade === null || $grade === '') {
+    $row = $stmt->fetch();
+    if ($row === false) {
         return null;
     }
-    $grade = (int) $grade;
 
-    return ($grade >= 2 && $grade <= 5) ? $grade : null;
+    return manual_brs_attestation_row_points($row);
 }
 
+/**
+ * @return array<int, float> student_id => points
+ */
 function manual_brs_get_attestations_map(
     string $academicYear,
     string $semester,
     int $curriculumItemId
 ): array {
     $semester = $semester === '2' ? '2' : '1';
+    $hasPoints = (bool) db()->query("SHOW COLUMNS FROM manual_brs_attestations LIKE 'points'")->fetch();
+    $select = $hasPoints ? 'student_id, points, grade' : 'student_id, grade, NULL AS points';
     $stmt = db()->prepare(
-        'SELECT student_id, grade FROM manual_brs_attestations
-         WHERE academic_year = ? AND semester = ? AND curriculum_item_id = ?'
+        "SELECT {$select} FROM manual_brs_attestations
+         WHERE academic_year = ? AND semester = ? AND curriculum_item_id = ?"
     );
     $stmt->execute([$academicYear, $semester, $curriculumItemId]);
     $map = [];
     foreach ($stmt->fetchAll() as $row) {
-        $grade = $row['grade'] !== null ? (int) $row['grade'] : null;
-        if ($grade !== null && $grade >= 2 && $grade <= 5) {
-            $map[(int) $row['student_id']] = $grade;
+        $points = manual_brs_attestation_row_points($row);
+        if ($points !== null) {
+            $map[(int) $row['student_id']] = $points;
         }
     }
 
     return $map;
 }
 
+/**
+ * Сохранить ПА в баллах 0–100 (пусто — удалить).
+ *
+ * @return array{success:bool,error?:string,points:?float,grade:?int}
+ */
 function manual_brs_save_attestation(
     string $academicYear,
     string $semester,
     int $curriculumItemId,
     int $studentId,
-    $grade
+    $points
 ): array {
     $semester = $semester === '2' ? '2' : '1';
     $student = get_student_by_id($studentId);
@@ -901,12 +932,11 @@ function manual_brs_save_attestation(
     require_once __DIR__ . '/../../../includes/curriculum_composites.php';
     $item = get_curriculum_item_by_id($curriculumItemId);
     $isChildPart = $item !== null && (int) ($item['parent_item_id'] ?? 0) > 0;
-    $oldGrade = manual_brs_get_attestation($academicYear, $semester, $curriculumItemId, $studentId);
+    $oldPoints = manual_brs_get_attestation($academicYear, $semester, $curriculumItemId, $studentId);
 
-    if ($grade === null || $grade === '') {
-        // Для раздела ПА не хранится — очищение не ошибка.
+    if ($points === null || $points === '') {
         if ($isChildPart) {
-            return ['success' => true, 'grade' => null];
+            return ['success' => true, 'points' => null, 'grade' => null];
         }
         $stmt = db()->prepare(
             'DELETE FROM manual_brs_attestations
@@ -921,11 +951,11 @@ function manual_brs_save_attestation(
             $semester,
             $curriculumItemId,
             $student,
-            $oldGrade,
+            $oldPoints,
             null
         );
 
-        return ['success' => true, 'grade' => null];
+        return ['success' => true, 'points' => null, 'grade' => null];
     }
 
     if ($isChildPart) {
@@ -935,18 +965,30 @@ function manual_brs_save_attestation(
         ];
     }
 
-    $grade = (int) $grade;
-    if ($grade < 2 || $grade > 5) {
-        return ['success' => false, 'error' => 'ПА: оценка 2–5 или пусто.'];
+    $points = manual_brs_normalize_pa_points($points);
+    if ($points === null) {
+        return ['success' => false, 'error' => 'ПА: баллы от 0 до 100 или пусто.'];
     }
 
-    $stmt = db()->prepare(
-        'INSERT INTO manual_brs_attestations
-         (academic_year, semester, curriculum_item_id, student_id, grade)
-         VALUES (?, ?, ?, ?, ?)
-         ON DUPLICATE KEY UPDATE grade = VALUES(grade)'
-    );
-    $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId, $grade]);
+    $gradeFromPoints = $points < 60.0 ? 2 : manual_brs_points_to_grade($points, manual_brs_weights());
+    $hasPoints = (bool) db()->query("SHOW COLUMNS FROM manual_brs_attestations LIKE 'points'")->fetch();
+    if ($hasPoints) {
+        $stmt = db()->prepare(
+            'INSERT INTO manual_brs_attestations
+             (academic_year, semester, curriculum_item_id, student_id, grade, points)
+             VALUES (?, ?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE grade = VALUES(grade), points = VALUES(points)'
+        );
+        $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId, $gradeFromPoints, $points]);
+    } else {
+        $stmt = db()->prepare(
+            'INSERT INTO manual_brs_attestations
+             (academic_year, semester, curriculum_item_id, student_id, grade)
+             VALUES (?, ?, ?, ?, ?)
+             ON DUPLICATE KEY UPDATE grade = VALUES(grade)'
+        );
+        $stmt->execute([$academicYear, $semester, $curriculumItemId, $studentId, $gradeFromPoints]);
+    }
 
     require_once __DIR__ . '/../../../includes/activity_log.php';
     activity_log_manual_brs_pa(
@@ -954,11 +996,11 @@ function manual_brs_save_attestation(
         $semester,
         $curriculumItemId,
         $student,
-        $oldGrade,
-        $grade
+        $oldPoints,
+        $points
     );
 
-    return ['success' => true, 'grade' => $grade];
+    return ['success' => true, 'points' => $points, 'grade' => $gradeFromPoints];
 }
 
 /**
@@ -987,13 +1029,14 @@ function manual_brs_resolve_semester_grade(
             }
         }
         $base = aggregate_composite_part_grades($partGrades);
-        $grade = resolve_composite_final_grade($base, $pa);
+        $grade = manual_brs_resolve_composite_with_pa_points($base, $pa);
 
         return [
             'points' => null,
             'grade' => $grade,
             'brs_grade' => $base,
-            'pa_grade' => $pa,
+            'pa_grade' => $pa !== null ? ($pa < 60 ? 2 : manual_brs_points_to_grade($pa)) : null,
+            'pa_points' => $pa,
             'display' => $grade !== null ? (string) $grade : '',
             'html' => manual_brs_render_semester_html($grade, null),
         ];
@@ -1028,7 +1071,7 @@ function manual_brs_build_student_rows(
     foreach ($students as $student) {
         $studentId = (int) $student['id'];
         $entry = $entries[$studentId] ?? null;
-        $paGrade = $isPart ? null : ($paMap[$studentId] ?? null);
+        $paPoints = $isPart ? null : ($paMap[$studentId] ?? null);
 
         if ($isCompositeParent) {
             $sem = manual_brs_resolve_semester_grade($academicYear, $semester, $curriculumItemId, $studentId);
@@ -1039,7 +1082,8 @@ function manual_brs_build_student_rows(
                 'points' => null,
                 'grade' => $sem['brs_grade'],
                 'display' => $display,
-                'pa_grade' => $paGrade,
+                'pa_points' => $paPoints,
+                'pa_grade' => $sem['pa_grade'] ?? null,
                 'stage1_quick_grade' => null,
                 'semester_display' => $sem['display'],
                 'semester_grade' => $sem['grade'],
@@ -1086,7 +1130,7 @@ function manual_brs_build_student_rows(
         $sem = manual_brs_semester_total(
             $periodPoints !== null ? (float) $periodPoints : null,
             null,
-            $paGrade,
+            $paPoints,
             $brs
         );
 
@@ -1104,7 +1148,8 @@ function manual_brs_build_student_rows(
             'points' => $periodPoints !== null ? (float) $periodPoints : null,
             'grade' => $periodGrade !== null ? (int) $periodGrade : null,
             'display' => $calc['display'] ?? '',
-            'pa_grade' => $paGrade,
+            'pa_points' => $paPoints,
+            'pa_grade' => $sem['pa_grade'] ?? null,
             'stage1_quick_grade' => $quickGrade,
             'semester_display' => $sem['display'],
             'semester_grade' => $sem['grade'],

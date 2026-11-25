@@ -660,10 +660,12 @@ function activity_log_manual_brs_pa(
     string $semester,
     int $curriculumItemId,
     array $student,
-    ?int $oldGrade,
-    ?int $newGrade
+    $oldPoints,
+    $newPoints
 ): void {
-    if ($oldGrade === $newGrade) {
+    $oldLabel = $oldPoints !== null && $oldPoints !== '' ? (string) $oldPoints : null;
+    $newLabel = $newPoints !== null && $newPoints !== '' ? (string) $newPoints : null;
+    if ($oldLabel === $newLabel) {
         return;
     }
 
@@ -673,10 +675,11 @@ function activity_log_manual_brs_pa(
         'period_label' => $semester === '2' ? '2 семестр' : '1 семестр',
         'academic_year' => $academicYear,
         'student_name' => person_last_first_name((string) ($student['full_name'] ?? '')),
-        'old_pa_grade' => $oldGrade,
-        'pa_grade' => $newGrade,
-        'old_mark' => $oldGrade !== null ? (string) $oldGrade : '—',
-        'mark' => $newGrade !== null ? (string) $newGrade : '—',
+        'old_pa_grade' => $oldLabel,
+        'pa_grade' => $newLabel,
+        'old_mark' => $oldLabel !== null ? $oldLabel : '—',
+        'mark' => $newLabel !== null ? $newLabel : '—',
+        'extra' => 'ПА (баллы)',
     ]);
 
     log_activity(
