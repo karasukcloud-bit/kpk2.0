@@ -45,6 +45,7 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
                         ['tab' => 'group', 'href' => $base . 'group.php' . $groupQuery, 'icon' => 'group', 'label' => 'Список студентов'],
                         ['tab' => 'attendance', 'href' => $base . 'attendance.php' . $groupQuery, 'icon' => 'attendance', 'label' => 'Посещаемость'],
                         ['tab' => 'activities', 'href' => $base . 'activities.php' . $groupQuery, 'icon' => 'activities', 'label' => 'Занятость студентов'],
+                        ['tab' => 'sanctions', 'href' => $base . 'sanctions.php' . $groupQuery, 'icon' => 'sanctions', 'label' => 'Взыскания'],
                     ],
                 ],
                 ['title' => 'Ведомости и документы', 'items' => $docs],
@@ -195,6 +196,7 @@ function build_app_shell(string $role, string $tab, string $appBase, int $curato
                     'items' => [
                         ['tab' => 'all_students', 'href' => $base . 'all_students.php', 'icon' => 'group', 'label' => 'Студенты'],
                         ['tab' => 'activities', 'href' => $base . 'activities.php', 'icon' => 'activities', 'label' => 'Занятость студентов'],
+                        ['tab' => 'sanctions', 'href' => $base . 'sanctions.php', 'icon' => 'sanctions', 'label' => 'Взыскания'],
                         ['tab' => 'curator_reports', 'href' => $base . 'curator_reports.php', 'icon' => 'monthly_report', 'label' => 'Отчёты кураторов'],
                     ],
                 ],

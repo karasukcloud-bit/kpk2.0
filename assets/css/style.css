@@ -1696,6 +1696,24 @@ body {
     text-align: center;
 }
 
+.table-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.35rem;
+    align-items: center;
+    justify-content: flex-end;
+    white-space: nowrap;
+}
+
+.curator-sanctions-page .form__group--full {
+    grid-column: 1 / -1;
+}
+
+.subsection-title--sm {
+    font-size: 1rem;
+    margin-top: 1rem;
+}
+
 .inline-form {
     display: inline-block;
     margin-left: 0.25rem;

@@ -380,7 +380,15 @@ $fieldArea = static function (string $name, string $label, array $data, int $row
                 <h2>Дисциплина и подписи</h2>
                 <div class="form__grid form__grid--2">
                     <?php $fieldSelect('discipline', 'Правила распорядка', characteristic_option_list('discipline'), $data); ?>
-                    <?php $fieldSelect('penalties', 'Взыскания', characteristic_option_list('penalties'), $data); ?>
+                    <?php
+                    $fieldSelect('penalties', 'Взыскания', characteristic_option_list('penalties'), $data);
+                    $autoPenaltiesHint = characteristic_penalties_text_for_student($studentId);
+                    ?>
+                    <p class="form__hint" style="grid-column:1/-1;margin-top:-0.5rem">
+                        По учёту взысканий:
+                        <?= e($autoPenaltiesHint) ?>
+                        · <a href="sanctions.php?group_id=<?= (int) $groupId ?>&student_id=<?= (int) $studentId ?>">открыть вкладку</a>
+                    </p>
                     <?php $fieldSelect(
                         'bad_habits',
                         'Вредные привычки',

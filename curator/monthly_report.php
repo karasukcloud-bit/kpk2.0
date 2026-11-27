@@ -6,6 +6,7 @@ require_once __DIR__ . '/../includes/auth.php';
 require_once __DIR__ . '/../includes/students.php';
 require_once __DIR__ . '/../includes/gradebook.php';
 require_once __DIR__ . '/../includes/attendance.php';
+require_once __DIR__ . '/../includes/student_sanctions.php';
 require_once __DIR__ . '/../includes/curator_monthly_report.php';
 
 require_curator_panel();
@@ -103,8 +104,12 @@ if (!$hasSaved) {
     $mode = 'edit';
 }
 
+$savedPayload = is_array($saved['payload'] ?? null) ? $saved['payload'] : [];
+if (!$hasSaved) {
+    $savedPayload['sanctions'] = student_ids_with_sanctions_in_month($allowedIds, $month);
+}
 $payload = curator_monthly_report_normalize_payload(
-    is_array($saved['payload'] ?? null) ? $saved['payload'] : [],
+    $savedPayload,
     $studentCount,
     $allowedIds,
     $autoMetrics

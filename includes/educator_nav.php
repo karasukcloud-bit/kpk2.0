@@ -32,6 +32,10 @@ if (!empty($useAppShell) || !empty($useCuratorShell)) {
        class="admin-tabs__item<?= $currentEducatorTab === 'activities' ? ' admin-tabs__item--active' : '' ?>">
         Занятость студентов
     </a>
+    <a href="sanctions.php"
+       class="admin-tabs__item<?= $currentEducatorTab === 'sanctions' ? ' admin-tabs__item--active' : '' ?>">
+        Взыскания
+    </a>
     <a href="curator_reports.php"
        class="admin-tabs__item<?= $currentEducatorTab === 'curator_reports' ? ' admin-tabs__item--active' : '' ?>">
         Отчёты кураторов

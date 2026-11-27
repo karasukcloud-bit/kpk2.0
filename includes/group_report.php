@@ -6,6 +6,7 @@ require_once __DIR__ . '/students.php';
 require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/glaz.php';
 require_once __DIR__ . '/student_activities.php';
+require_once __DIR__ . '/student_sanctions.php';
 require_once __DIR__ . '/attendance.php';
 
 /**
@@ -136,7 +137,7 @@ function build_group_report(array $students, ?int $groupId = null): array
         'dormitory' => $dormitory,
         'nonresident_apartment' => $nonresidentApartment,
         'without_parental_care' => $withoutParentalCare,
-        'sanctions' => [],
+        'sanctions' => build_group_sanctions_report($students),
         'activities' => build_group_activities_report($students),
     ];
 

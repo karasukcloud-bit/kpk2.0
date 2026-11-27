@@ -8,6 +8,16 @@ require_once __DIR__ . '/organization.php';
 require_once __DIR__ . '/gradebook.php';
 require_once __DIR__ . '/curriculum.php';
 require_once __DIR__ . '/student_activities.php';
+require_once __DIR__ . '/student_sanctions.php';
+
+function characteristic_penalties_text_for_student(int $studentId): string
+{
+    if ($studentId < 1) {
+        return characteristic_option_list('penalties')[0];
+    }
+
+    return characteristic_penalties_from_sanctions($studentId);
+}
 
 function ensure_student_characteristics_schema(?PDO $pdo = null): void
 {
@@ -148,6 +158,25 @@ function characteristic_apply_saved_payload(array $defaults, ?array $saved): arr
             continue;
         }
         $data[$key] = trim((string) $saved[$key]);
+    }
+
+    // Взыскания из карточки учёта всегда актуальнее шаблонной фразы «не имеет».
+    $autoPenalties = trim((string) ($defaults['penalties'] ?? ''));
+    $savedPenalties = trim((string) ($data['penalties'] ?? ''));
+    $stockNoPenalty = [
+        'дисциплинарных взысканий не имеет',
+        'взысканий не имеет',
+    ];
+    if (
+        $autoPenalties !== ''
+        && $autoPenalties !== $savedPenalties
+        && (
+            $savedPenalties === ''
+            || in_array($savedPenalties, $stockNoPenalty, true)
+            || str_starts_with($savedPenalties, 'имеет дисциплинарное взыскани')
+        )
+    ) {
+        $data['penalties'] = $autoPenalties;
     }
 
     return $data;
@@ -902,7 +931,7 @@ function characteristic_default_data(array $student, array $group, ?array $user 
         'achievements' => '',
         'additional_info' => '',
         'discipline' => characteristic_option_list('discipline')[0],
-        'penalties' => characteristic_option_list('penalties')[0],
+        'penalties' => characteristic_penalties_text_for_student($studentId),
         'bad_habits' => characteristic_option_list('bad_habits')[0],
         'merits' => characteristic_option_list('merits')[0],
         'acquainted_line' => characteristic_gender_words($gender)['acquainted']

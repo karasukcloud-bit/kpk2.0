@@ -481,27 +481,48 @@ $groupCourse = function_exists('get_group_course') ? get_group_course($group) : 
         <h3 class="subsection-title">Взыскания</h3>
         <?php if ($report['sanctions'] === []): ?>
             <p class="text-muted">
-                Данных о взысканиях пока нет. Раздел будет заполняться воспитателем.
+                Данных о взысканиях пока нет. Заполняется во вкладке «Взыскания».
             </p>
         <?php else: ?>
-            <div class="table-wrap">
-                <table class="table">
-                    <thead>
-                        <tr>
-                            <th>Студент</th>
-                            <th>Взыскание</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php foreach ($report['sanctions'] as $item): ?>
-                        <tr>
-                            <td><?= e($item['student_name'] ?? '') ?></td>
-                            <td><?= e($item['label'] ?? '') ?></td>
-                        </tr>
-                        <?php endforeach; ?>
-                    </tbody>
-                </table>
-            </div>
+            <?php
+            $sanctionYears = function_exists('group_sanctions_by_academic_year')
+                ? group_sanctions_by_academic_year($report['sanctions'])
+                : [['academic_year' => '', 'items' => $report['sanctions']]];
+            ?>
+            <?php foreach ($sanctionYears as $yearBlock): ?>
+                <?php if ((string) ($yearBlock['academic_year'] ?? '') !== ''): ?>
+                    <h4 class="subsection-title subsection-title--sm">
+                        Учебный год <?= e((string) $yearBlock['academic_year']) ?>
+                    </h4>
+                <?php endif; ?>
+                <div class="table-wrap">
+                    <table class="table">
+                        <thead>
+                            <tr>
+                                <th>Студент</th>
+                                <th>Тип</th>
+                                <th>Дата</th>
+                                <th>Приказ</th>
+                                <th>Взыскание</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach ($yearBlock['items'] as $item): ?>
+                            <tr>
+                                <td><?= e($item['student_name'] ?? '') ?></td>
+                                <td><?= e($item['sanction_type_label'] ?? '') ?></td>
+                                <td><?= e($item['issued_on_label'] ?? '') ?></td>
+                                <td><?= e(!empty($item['order_number']) ? ('№ ' . $item['order_number']) : '—') ?></td>
+                                <td><?= e($item['label'] ?? '') ?></td>
+                            </tr>
+                            <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                </div>
+            <?php endforeach; ?>
+            <p class="text-muted table-hint">
+                Учёт ведётся во вкладке «Взыскания»; записи сохраняются на весь период обучения.
+            </p>
         <?php endif; ?>
     <?php endif; ?>
 </div>

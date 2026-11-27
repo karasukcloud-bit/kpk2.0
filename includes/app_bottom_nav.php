@@ -57,7 +57,7 @@ if ($role === 'curator') {
     $items = [
         ['tabs' => ['summary'], 'href' => $appBase . 'educator/attendance.php', 'icon' => 'home', 'label' => 'Сводка'],
         ['tabs' => ['group_attendance', 'daily_attendance', 'absence_rating'], 'href' => $appBase . 'educator/group_attendance.php', 'icon' => 'attendance', 'label' => 'Пропуски'],
-        ['tabs' => ['all_students', 'activities'], 'href' => $appBase . 'educator/all_students.php', 'icon' => 'group', 'label' => 'Студенты'],
+        ['tabs' => ['all_students', 'activities', 'sanctions'], 'href' => $appBase . 'educator/all_students.php', 'icon' => 'group', 'label' => 'Студенты'],
         ['tabs' => ['cabinet'], 'href' => $appBase . 'cabinet.php', 'icon' => 'user', 'label' => 'Профиль'],
     ];
 } elseif ($role === 'admin') {
